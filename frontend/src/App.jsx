@@ -1,7 +1,7 @@
 // =====================================================
 // ПОЛНЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
-// Всё в одном файле для удобства переноса между чатами
+// Версия с загрузкой структуры и поддержкой СИРИУС
 // =====================================================
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
@@ -472,6 +472,207 @@ function Reports() {
 }
 
 // =====================================================
+// КОМПОНЕНТ НАСТРОЕК (НОВЫЙ!)
+// =====================================================
+
+function Settings() {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [uploadStats, setUploadStats] = useState(null);
+  const [clearOld, setClearOld] = useState(false);
+  const [structureStats, setStructureStats] = useState(null);
+
+  useEffect(() => {
+    loadStructureStats();
+  }, []);
+
+  const loadStructureStats = async () => {
+    try {
+      const response = await api.get('/api/network/stats');
+      setStructureStats(response.data);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    setFile(e.target.files[0]);
+    setMessage('');
+    setUploadStats(null);
+  };
+
+  const handleUploadStructure = async () => {
+    if (!file) {
+      alert('Выберите файл');
+      return;
+    }
+
+    if (clearOld && !confirm('Вы уверены что хотите удалить ВСЕ существующие данные перед загрузкой?')) {
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('clearOld', clearOld);
+
+    try {
+      const response = await api.post('/api/network/upload-full-structure', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setMessage('Структура сети успешно загружена!');
+      setUploadStats(response.data);
+      setFile(null);
+      loadStructureStats(); // Обновляем статистику
+      
+    } catch (error) {
+      setMessage('Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+      setUploadStats(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="settings">
+      <h2>Настройки системы</h2>
+      
+      {/* Блок текущей статистики */}
+      {structureStats && (
+        <div className="stats-block">
+          <h3>Текущая структура сети</h3>
+          <div className="stats-grid">
+            {Object.entries(structureStats).map(([res, count]) => (
+              <div key={res} className="stat-item">
+                <span className="res-name">{res}:</span>
+                <span className="res-count">{count} записей</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Блок загрузки */}
+      <div className="upload-structure">
+        <h3>Загрузка/обновление структуры сети</h3>
+        <p>Загрузите Excel файл со структурой ТП/ВЛ для всех РЭСов</p>
+        
+        <div className="form-group">
+          <label>Требования к файлу:</label>
+          <ul className="requirements">
+            <li>Формат: Excel (.xlsx)</li>
+            <li>Обязательные колонки: РЭС, ТП, Фидер</li>
+            <li>Опциональные колонки: Начало, Конец, Середина</li>
+            <li>Коды РЭС: КПРЭС, АРЭС, ХРЭС, СРЭС, ДРЭС, ЛРЭС, ТРЭС, СИРИСУС</li>
+          </ul>
+        </div>
+        
+        <div className="file-input-wrapper">
+          <input 
+            type="file" 
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+          />
+          {file && <p className="file-name">Выбран файл: {file.name}</p>}
+        </div>
+        
+        <div className="checkbox-group">
+          <label>
+            <input 
+              type="checkbox" 
+              checked={clearOld}
+              onChange={(e) => setClearOld(e.target.checked)}
+            />
+            Удалить существующие данные перед загрузкой
+          </label>
+          <span className="warning">⚠️ Это удалит ВСЕ текущие данные структуры!</span>
+        </div>
+        
+        <button 
+          onClick={handleUploadStructure} 
+          disabled={uploading || !file}
+          className="upload-btn"
+        >
+          {uploading ? 'Загрузка и обработка...' : 'Загрузить структуру'}
+        </button>
+        
+        {/* Сообщения и результаты */}
+        {message && (
+          <div className={message.includes('успешно') ? 'success-message' : 'error-message'}>
+            {message}
+          </div>
+        )}
+        
+        {uploadStats && (
+          <div className="upload-results">
+            <h4>Результаты загрузки:</h4>
+            <p>✅ Обработано: {uploadStats.processed} из {uploadStats.total} записей</p>
+            {uploadStats.errors && uploadStats.errors.length > 0 && (
+              <div className="errors-list">
+                <p>⚠️ Ошибки при загрузке:</p>
+                <ul>
+                  {uploadStats.errors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Пример структуры */}
+      <div className="structure-example">
+        <h4>Пример структуры файла:</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>РЭС</th>
+              <th>ТП</th>
+              <th>Фидер</th>
+              <th>Начало</th>
+              <th>Конец</th>
+              <th>Середина</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>АРЭС</td>
+              <td>РП-44</td>
+              <td>Совхоз</td>
+              <td>4574313</td>
+              <td>2805654</td>
+              <td>2809779</td>
+            </tr>
+            <tr>
+              <td>СИРИСУС</td>
+              <td>ТП-С1</td>
+              <td>Главный</td>
+              <td></td>
+              <td>123456</td>
+              <td>789012</td>
+            </tr>
+            <tr>
+              <td>ХРЭС</td>
+              <td>РП-305</td>
+              <td>Коттеджи</td>
+              <td></td>
+              <td>1615422</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="note">
+          📌 <strong>Примечание:</strong> СИРИСУС автоматически будет доступен пользователям Адлерского РЭС
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
 // ОСНОВНОЕ ПРИЛОЖЕНИЕ
 // =====================================================
 
@@ -545,10 +746,7 @@ export default function App() {
       case 'reports':
         return <Reports />;
       case 'settings':
-        return <div className="settings">
-          <h2>Настройки</h2>
-          <p>Управление пользователями и структурой сети</p>
-        </div>;
+        return <Settings />;
       default:
         return <NetworkStructure selectedRes={selectedRes} />;
     }
