@@ -27,7 +27,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
-
+// Health check для Render
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'RES Management Backend is running',
+    version: '1.0.0'
+  });
+});
 // Создаем папку uploads если её нет
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
