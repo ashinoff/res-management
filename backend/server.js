@@ -1,607 +1,770 @@
 // =====================================================
-// ПОЛНЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
-// Файл: src/App.jsx
+// ПОЛНЫЙ BACKEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Всё в одном файле для удобства переноса между чатами
 // =====================================================
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import axios from 'axios';
-import './App.css';
+const express = require('express');
+const cors = require('cors');
+const { Sequelize, DataTypes } = require('sequelize');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const nodemailer = require('nodemailer');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 // =====================================================
-// НАСТРОЙКА API КЛИЕНТА
+// КОНФИГУРАЦИЯ И ИНИЦИАЛИЗАЦИЯ
 // =====================================================
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+require('dotenv').config();
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static('uploads'));
+
+// Создаем папку uploads если её нет
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
+
+// =====================================================
+// ПОДКЛЮЧЕНИЕ К БД (PostgreSQL на Render)
+// =====================================================
+
+const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://user:pass@localhost:5432/dbname', {
+  dialect: 'postgres',
+  protocol: 'postgres',
+  dialectOptions: {
+    ssl: process.env.NODE_ENV === 'production' ? {
+      require: true,
+      rejectUnauthorized: false
+    } : false
+  },
+  logging: false
+});
+
+// =====================================================
+// МОДЕЛИ ДАННЫХ
+// =====================================================
+
+// 1. Модель РЭС (районов)
+const ResUnit = sequelize.define('ResUnit', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
   }
 });
 
-// Добавляем токен к каждому запросу
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Обработка ошибок авторизации
-api.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/';
+// 2. Модель пользователей
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  fio: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  login: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  role: {
+    type: DataTypes.ENUM('admin', 'uploader', 'res_responsible'),
+    allowNull: false
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: ResUnit,
+      key: 'id'
     }
-    return Promise.reject(error);
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false
   }
-);
+});
+
+// 3. Модель структуры сети (ТП и ВЛ)
+const NetworkStructure = sequelize.define('NetworkStructure', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: ResUnit,
+      key: 'id'
+    }
+  },
+  tpName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  vlName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  startPu: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  endPu: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  middlePu: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  lastUpdate: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  }
+});
+
+// 4. Модель статусов ПУ (приборов учета)
+const PuStatus = sequelize.define('PuStatus', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  puNumber: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  networkStructureId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: NetworkStructure,
+      key: 'id'
+    }
+  },
+  position: {
+    type: DataTypes.ENUM('start', 'end', 'middle'),
+    allowNull: false
+  },
+  status: {
+    type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'empty'),
+    defaultValue: 'not_checked'
+  },
+  errorDetails: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  lastCheck: {
+    type: DataTypes.DATE,
+    allowNull: true
+  }
+});
+
+// 5. Модель уведомлений
+const Notification = sequelize.define('Notification', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  fromUserId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: User,
+      key: 'id'
+    }
+  },
+  toUserId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: User,
+      key: 'id'
+    }
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: ResUnit,
+      key: 'id'
+    }
+  },
+  networkStructureId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: NetworkStructure,
+      key: 'id'
+    }
+  },
+  type: {
+    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check'),
+    allowNull: false
+  },
+  message: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  isRead: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  }
+});
+
+// 6. Модель истории загрузок
+const UploadHistory = sequelize.define('UploadHistory', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: User,
+      key: 'id'
+    }
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: ResUnit,
+      key: 'id'
+    }
+  },
+  fileName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  fileType: {
+    type: DataTypes.ENUM('rim_single', 'rim_mass', 'nartis', 'energomera'),
+    allowNull: false
+  },
+  processedCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  errorCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  status: {
+    type: DataTypes.ENUM('processing', 'completed', 'failed'),
+    defaultValue: 'processing'
+  }
+});
 
 // =====================================================
-// КОНТЕКСТ АВТОРИЗАЦИИ
+// СВЯЗИ МЕЖДУ МОДЕЛЯМИ
 // =====================================================
 
-const AuthContext = createContext(null);
+User.belongsTo(ResUnit, { foreignKey: 'resId' });
+NetworkStructure.belongsTo(ResUnit, { foreignKey: 'resId' });
+PuStatus.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
+Notification.belongsTo(User, { as: 'fromUser', foreignKey: 'fromUserId' });
+Notification.belongsTo(User, { as: 'toUser', foreignKey: 'toUserId' });
+Notification.belongsTo(ResUnit, { foreignKey: 'resId' });
+Notification.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
+UploadHistory.belongsTo(User, { foreignKey: 'userId' });
+UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 
 // =====================================================
-// КОМПОНЕНТ АВТОРИЗАЦИИ
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // =====================================================
 
-function LoginForm({ onLogin }) {
-  const [credentials, setCredentials] = useState({ login: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+// Хеширование паролей
+User.beforeCreate(async (user) => {
+  user.password = await bcrypt.hash(user.password, 10);
+});
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+// Валидация пароля
+User.prototype.validatePassword = async function(password) {
+  return bcrypt.compare(password, this.password);
+};
+
+// Middleware для проверки JWT токена
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'secret-key', (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Middleware для проверки ролей
+const checkRole = (roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied for your role' });
+    }
+    next();
+  };
+};
+
+// Настройка multer для загрузки файлов
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel and CSV files are allowed'));
+    }
+  }
+});
+
+// Email сервис
+const createEmailTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.MAIL_HOST || 'smtp.mail.ru',
+    port: process.env.MAIL_PORT || 465,
+    secure: true,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS
+    }
+  });
+};
+
+// =====================================================
+// API РОУТЫ
+// =====================================================
+
+// 1. АВТОРИЗАЦИЯ
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { login, password } = req.body;
     
-    try {
-      const response = await api.post('/api/auth/login', credentials);
-      localStorage.setItem('token', response.data.token);
-      onLogin(response.data.user);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка входа');
-    } finally {
-      setLoading(false);
+    const user = await User.findOne({ 
+      where: { login },
+      include: [ResUnit]
+    });
+    
+    if (!user || !(await user.validatePassword(password))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-  };
-
-  return (
-    <div className="login-container">
-      <div className="login-box">
-        <h2>Вход в систему РЭС</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Логин</label>
-            <input
-              type="text"
-              value={credentials.login}
-              onChange={(e) => setCredentials({...credentials, login: e.target.value})}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Пароль</label>
-            <input
-              type="password"
-              value={credentials.password}
-              onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-              required
-            />
-          </div>
-          {error && <div className="error-message">{error}</div>}
-          <button type="submit" disabled={loading}>
-            {loading ? 'Вход...' : 'Войти'}
-          </button>
-        </form>
-        <div className="test-accounts">
-          <p>Тестовые учетные записи:</p>
-          <p>admin / admin123</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// ГЛАВНОЕ МЕНЮ
-// =====================================================
-
-function MainMenu({ activeSection, onSectionChange, userRole }) {
-  const menuItems = [
-    { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
-    { id: 'notifications', label: 'Уведомления', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'pending', label: 'Ожидающие проверки', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'reports', label: 'Отчеты', roles: ['admin'] },
-    { id: 'settings', label: 'Настройки', roles: ['admin'] }
-  ];
-
-  const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
-
-  return (
-    <nav className="main-menu">
-      <h3>Меню РЭС</h3>
-      {visibleItems.map(item => (
-        <button
-          key={item.id}
-          onClick={() => onSectionChange(item.id)}
-          className={activeSection === item.id ? 'active' : ''}
-        >
-          {item.label}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-// =====================================================
-// КОМПОНЕНТ СТРУКТУРЫ СЕТИ
-// =====================================================
-
-function NetworkStructure({ selectedRes }) {
-  const [networkData, setNetworkData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { user } = useContext(AuthContext);
-
-  useEffect(() => {
-    loadNetworkStructure();
-  }, [selectedRes]);
-
-  const loadNetworkStructure = async () => {
-    try {
-      const response = await api.get(`/api/network/structure/${selectedRes || ''}`);
-      setNetworkData(response.data);
-    } catch (error) {
-      console.error('Error loading network structure:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'checked_ok': return 'status-ok';
-      case 'checked_error': return 'status-error';
-      case 'not_checked': return 'status-unchecked';
-      case 'empty': return 'status-empty';
-      default: return 'status-empty';
-    }
-  };
-
-  const handleNotifyCompleted = async (networkStructureId) => {
-    try {
-      await api.post('/api/notifications/work-completed', {
-        networkStructureId,
-        message: 'Мероприятия выполнены'
-      });
-      alert('Уведомление отправлено');
-    } catch (error) {
-      alert('Ошибка отправки уведомления');
-    }
-  };
-
-  if (loading) return <div className="loading">Загрузка...</div>;
-
-  return (
-    <div className="network-structure">
-      <h2>Структура сети</h2>
-      <div className="structure-table">
-        <table>
-          <thead>
-            <tr>
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Начало</th>
-              <th>Конец</th>
-              <th>Середина</th>
-              <th>Дата обновления</th>
-              {user.role === 'res_responsible' && <th>Действия</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {networkData.map(item => (
-              <tr key={item.id}>
-                <td>{item.ResUnit?.name}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>
-                  <div className={`status-box ${getStatusColor(item.startPu ? 'not_checked' : 'empty')}`}>
-                    {!item.startPu && 'X'}
-                  </div>
-                </td>
-                <td>
-                  <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
-                    {!item.endPu && 'X'}
-                  </div>
-                </td>
-                <td>
-                  <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
-                    {!item.middlePu && 'X'}
-                  </div>
-                </td>
-                <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
-                {user.role === 'res_responsible' && (
-                  <td>
-                    <button 
-                      className="notify-btn"
-                      onClick={() => handleNotifyCompleted(item.id)}
-                    >
-                      Уведомить
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="status-legend">
-        <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
-        <div><span className="status-box status-error"></span> Проверен с ошибками</div>
-        <div><span className="status-box status-unchecked"></span> Не проверен</div>
-        <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// КОМПОНЕНТ ЗАГРУЗКИ ФАЙЛОВ
-// =====================================================
-
-function FileUpload({ selectedRes }) {
-  const [selectedType, setSelectedType] = useState('');
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const { user } = useContext(AuthContext);
-
-  const fileTypes = [
-    { id: 'rim_single', label: 'Счетчики РИМ (отдельный файл)' },
-    { id: 'rim_mass', label: 'Счетчики РИМ (массовая выгрузка)' },
-    { id: 'nartis', label: 'Счетчики Нартис' },
-    { id: 'energomera', label: 'Счетчики Энергомера' }
-  ];
-
-  const handleFileSelect = (e) => {
-    setFile(e.target.files[0]);
-  };
-
-  const handleUpload = async () => {
-    if (!file || !selectedType) {
-      alert('Выберите тип файла и файл для загрузки');
-      return;
-    }
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', selectedType);
-    if (user.role === 'admin' && selectedRes) {
-      formData.append('resId', selectedRes);
-    }
-
-    try {
-      const response = await api.post('/api/upload/analyze', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      alert(`Файл обработан. Обработано: ${response.data.processed}, Ошибок: ${response.data.errors}`);
-      setFile(null);
-      setSelectedType('');
-    } catch (error) {
-      alert('Ошибка при загрузке файла');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="file-upload">
-      <h2>Загрузка файлов для анализа</h2>
-      <div className="upload-form">
-        <div className="form-group">
-          <label>Тип файла</label>
-          <select 
-            value={selectedType} 
-            onChange={(e) => setSelectedType(e.target.value)}
-          >
-            <option value="">Выберите тип файла</option>
-            {fileTypes.map(type => (
-              <option key={type.id} value={type.id}>{type.label}</option>
-            ))}
-          </select>
-        </div>
-        
-        {selectedType && (
-          <div className="file-input-wrapper">
-            <input 
-              type="file" 
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileSelect}
-            />
-            {file && <p>Выбран файл: {file.name}</p>}
-          </div>
-        )}
-        
-        <button 
-          onClick={handleUpload} 
-          disabled={uploading || !file || !selectedType}
-        >
-          {uploading ? 'Загрузка...' : 'Загрузить и анализировать'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// КОМПОНЕНТ УВЕДОМЛЕНИЙ
-// =====================================================
-
-function Notifications() {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  const loadNotifications = async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      setNotifications(response.data);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const markAsRead = async (id) => {
-    try {
-      await api.put(`/api/notifications/${id}/read`);
-      setNotifications(notifications.map(n => 
-        n.id === id ? {...n, isRead: true} : n
-      ));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
-  };
-
-  if (loading) return <div className="loading">Загрузка...</div>;
-
-  return (
-    <div className="notifications">
-      <h2>Уведомления</h2>
-      <div className="notifications-list">
-        {notifications.map(notif => (
-          <div 
-            key={notif.id} 
-            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
-            onClick={() => !notif.isRead && markAsRead(notif.id)}
-          >
-            <div className="notification-header">
-              <span className="notification-from">От: {notif.fromUser?.fio || 'Система'}</span>
-              <span className="notification-date">
-                {new Date(notif.createdAt).toLocaleString('ru-RU')}
-              </span>
-            </div>
-            <div className="notification-message">{notif.message}</div>
-            {notif.ResUnit && (
-              <div className="notification-res">РЭС: {notif.ResUnit.name}</div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// КОМПОНЕНТ ОТЧЕТОВ
-// =====================================================
-
-function Reports() {
-  const [reportData, setReportData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  const loadReports = async () => {
-    try {
-      const response = await api.get('/api/reports/summary');
-      setReportData(response.data);
-    } catch (error) {
-      console.error('Error loading reports:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="loading">Загрузка...</div>;
-
-  return (
-    <div className="reports">
-      <h2>Отчеты</h2>
-      <div className="report-summary">
-        <div className="report-card">
-          <h3>Общая статистика</h3>
-          <p>Всего ошибок: {reportData?.totalErrors || 0}</p>
-          <p>Ожидают проверки: {reportData?.pendingChecks || 0}</p>
-        </div>
-        <div className="report-uploads">
-          <h3>История загрузок</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Дата</th>
-                <th>Пользователь</th>
-                <th>РЭС</th>
-                <th>Файл</th>
-                <th>Обработано</th>
-                <th>Ошибок</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportData?.uploads.map(upload => (
-                <tr key={upload.id}>
-                  <td>{new Date(upload.createdAt).toLocaleDateString('ru-RU')}</td>
-                  <td>{upload.User?.fio}</td>
-                  <td>{upload.ResUnit?.name}</td>
-                  <td>{upload.fileName}</td>
-                  <td>{upload.processedCount}</td>
-                  <td>{upload.errorCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// ОСНОВНОЕ ПРИЛОЖЕНИЕ
-// =====================================================
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [activeSection, setActiveSection] = useState('structure');
-  const [selectedRes, setSelectedRes] = useState(null);
-  const [resList, setResList] = useState([]);
-
-  useEffect(() => {
-    // Проверяем токен при загрузке
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Здесь можно добавить проверку токена через API
-      // Пока просто парсим токен
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUser(payload);
-        setSelectedRes(payload.resId);
-      } catch (error) {
-        localStorage.removeItem('token');
+    
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role, 
+        resId: user.resId,
+        fio: user.fio 
+      },
+      process.env.JWT_SECRET || 'secret-key',
+      { expiresIn: '24h' }
+    );
+    
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        fio: user.fio,
+        role: user.role,
+        resId: user.resId,
+        resName: user.ResUnit?.name
       }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user && user.role === 'admin') {
-      loadResList();
-    }
-  }, [user]);
-
-  const loadResList = async () => {
-    try {
-      const response = await api.get('/api/res/list');
-      setResList(response.data);
-    } catch (error) {
-      console.error('Error loading RES list:', error);
-    }
-  };
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    if (userData.resId) {
-      setSelectedRes(userData.resId);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setSelectedRes(null);
-  };
-
-  if (!user) {
-    return <LoginForm onLogin={handleLogin} />;
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: error.message });
   }
+});
 
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'structure':
-        return <NetworkStructure selectedRes={selectedRes} />;
-      case 'upload':
-        return <FileUpload selectedRes={selectedRes} />;
-      case 'notifications':
-        return <Notifications />;
-      case 'pending':
-        return <div className="pending">
-          <h2>Ожидающие проверки</h2>
-          <p>Список фидеров, ожидающих проверки после выполнения мероприятий</p>
-        </div>;
-      case 'reports':
-        return <Reports />;
-      case 'settings':
-        return <div className="settings">
-          <h2>Настройки</h2>
-          <p>Управление пользователями и структурой сети</p>
-        </div>;
-      default:
-        return <NetworkStructure selectedRes={selectedRes} />;
+// 2. ПОЛУЧЕНИЕ СПИСКА РЭС
+app.get('/api/res/list', authenticateToken, async (req, res) => {
+  try {
+    const resList = await ResUnit.findAll();
+    res.json(resList);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. ПОЛУЧЕНИЕ СТРУКТУРЫ СЕТИ
+app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) => {
+  try {
+    const resId = req.params.resId || req.user.resId;
+    
+    // Если не админ, может видеть только свой РЭС
+    if (req.user.role !== 'admin' && resId != req.user.resId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
-  };
+    
+    const whereClause = resId ? { resId } : {};
+    
+    const structures = await NetworkStructure.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: PuStatus,
+          required: false
+        },
+        ResUnit
+      ],
+      order: [['tpName', 'ASC'], ['vlName', 'ASC']]
+    });
+    
+    res.json(structures);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  return (
-    <AuthContext.Provider value={{ user, selectedRes }}>
-      <div className="app">
-        <MainMenu 
-          activeSection={activeSection} 
-          onSectionChange={setActiveSection}
-          userRole={user.role}
-        />
+// 4. ЗАГРУЗКА СТРУКТУРЫ СЕТИ (только админ)
+app.post('/api/network/upload-structure', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  upload.single('file'), 
+  async (req, res) => {
+    try {
+      const workbook = XLSX.readFile(req.file.path);
+      const sheetName = workbook.SheetNames[0];
+      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      
+      // Парсим данные и создаем записи
+      for (const row of data) {
+        const resName = row['РЭС'] || row['RES'];
+        const res = await ResUnit.findOne({ where: { name: resName } });
         
-        <div className="main-content">
-          <header className="app-header">
-            <div className="header-left">
-              <h1>Система управления РЭС</h1>
-              {user.role === 'admin' && (
-                <select 
-                  value={selectedRes || ''}
-                  onChange={(e) => setSelectedRes(e.target.value ? parseInt(e.target.value) : null)}
-                >
-                  <option value="">Все РЭСы</option>
-                  {resList.map(res => (
-                    <option key={res.id} value={res.id}>{res.name}</option>
-                  ))}
-                </select>
-              )}
-              {user.resId && (
-                <span className="res-name">
-                  {resList.find(r => r.id === user.resId)?.name || user.resName}
-                </span>
-              )}
-            </div>
-            
-            <div className="header-right">
-              <span>{user.fio}</span>
-              <span className="user-role">
-                ({user.role === 'admin' ? 'Администратор' : 
-                  user.role === 'uploader' ? 'Загрузчик' : 'Ответственный'})
-              </span>
-              <button onClick={handleLogout} className="logout-btn">
-                Выйти
-              </button>
-            </div>
-          </header>
-          
-          <main className="content">
-            {renderContent()}
-          </main>
-        </div>
-      </div>
-    </AuthContext.Provider>
-  );
+        if (res) {
+          // Создаем или обновляем структуру
+          await NetworkStructure.upsert({
+            resId: res.id,
+            tpName: row['Наименование ТП'] || row['TP'],
+            vlName: row['Наименование ВЛ'] || row['VL'],
+            startPu: row['Начало'] || row['Start'] || null,
+            endPu: row['Конец'] || row['End'] || null,
+            middlePu: row['Середина'] || row['Middle'] || null
+          });
+        }
+      }
+      
+      // Удаляем файл после обработки
+      fs.unlinkSync(req.file.path);
+      
+      res.json({ message: 'Structure uploaded successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// 5. ЗАГРУЗКА ФАЙЛОВ ДЛЯ АНАЛИЗА
+app.post('/api/upload/analyze',
+  authenticateToken,
+  checkRole(['admin', 'uploader']),
+  upload.single('file'),
+  async (req, res) => {
+    try {
+      const { type } = req.body;
+      const userId = req.user.id;
+      const resId = req.user.role === 'admin' ? req.body.resId : req.user.resId;
+      
+      // Создаем запись в истории
+      const uploadRecord = await UploadHistory.create({
+        userId,
+        resId,
+        fileName: req.file.originalname,
+        fileType: type,
+        status: 'processing'
+      });
+      
+      // Запускаем анализ (заглушка - замени на реальный Python скрипт)
+      const analysisResult = await analyzeFile(req.file.path, type);
+      
+      // Обновляем статусы ПУ
+      for (const result of analysisResult.processed) {
+        await updatePuStatus(result.puNumber, result.status, result.error);
+      }
+      
+      // Обновляем историю
+      await uploadRecord.update({
+        processedCount: analysisResult.processed.length,
+        errorCount: analysisResult.errors.length,
+        status: 'completed'
+      });
+      
+      // Отправляем уведомления
+      if (analysisResult.errors.length > 0) {
+        await createNotifications(userId, resId, analysisResult.errors);
+      }
+      
+      res.json({
+        message: 'File processed successfully',
+        processed: analysisResult.processed.length,
+        errors: analysisResult.errors.length
+      });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// 6. ПОЛУЧЕНИЕ УВЕДОМЛЕНИЙ
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const whereClause = req.user.role === 'admin' 
+      ? {} 
+      : { toUserId: req.user.id };
+    
+    const notifications = await Notification.findAll({
+      where: whereClause,
+      include: [
+        { model: User, as: 'fromUser' },
+        { model: User, as: 'toUser' },
+        ResUnit,
+        NetworkStructure
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: 50
+    });
+    
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. ОТМЕТИТЬ УВЕДОМЛЕНИЕ КАК ПРОЧИТАННОЕ
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    await Notification.update(
+      { isRead: true },
+      { where: { id: req.params.id } }
+    );
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. ОТПРАВКА УВЕДОМЛЕНИЯ О ВЫПОЛНЕННЫХ МЕРОПРИЯТИЯХ
+app.post('/api/notifications/work-completed', authenticateToken, checkRole(['res_responsible']), async (req, res) => {
+  try {
+    const { networkStructureId, message } = req.body;
+    
+    // Найти всех загрузчиков этого РЭС
+    const uploaders = await User.findAll({
+      where: {
+        resId: req.user.resId,
+        role: 'uploader'
+      }
+    });
+    
+    // Создать уведомления для каждого загрузчика
+    for (const uploader of uploaders) {
+      await Notification.create({
+        fromUserId: req.user.id,
+        toUserId: uploader.id,
+        resId: req.user.resId,
+        networkStructureId,
+        type: 'info',
+        message: `Мероприятия выполнены: ${message}`
+      });
+    }
+    
+    res.json({ message: 'Notifications sent' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. ПОЛУЧЕНИЕ ОТЧЕТОВ
+app.get('/api/reports/summary', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { startDate, endDate, resId } = req.query;
+    
+    const whereClause = {};
+    if (startDate) whereClause.createdAt = { [Op.gte]: new Date(startDate) };
+    if (endDate) whereClause.createdAt = { ...whereClause.createdAt, [Op.lte]: new Date(endDate) };
+    if (resId) whereClause.resId = resId;
+    
+    const uploadStats = await UploadHistory.findAll({
+      where: whereClause,
+      include: [User, ResUnit],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const errorStats = await PuStatus.count({
+      where: { status: 'checked_error' },
+      include: [{
+        model: NetworkStructure,
+        where: resId ? { resId } : {}
+      }]
+    });
+    
+    const pendingStats = await NetworkStructure.count({
+      where: resId ? { resId } : {},
+      include: [{
+        model: PuStatus,
+        where: { status: 'checked_error' }
+      }]
+    });
+    
+    res.json({
+      uploads: uploadStats,
+      totalErrors: errorStats,
+      pendingChecks: pendingStats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =====================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
+// =====================================================
+
+// Заглушка для анализа файлов (замени на реальный Python)
+async function analyzeFile(filePath, type) {
+  // Здесь будет вызов Python скрипта
+  // const result = await runPythonScript(type, filePath);
+  
+  // Пока возвращаем моковые данные
+  return {
+    processed: [
+      { puNumber: '123', status: 'checked_ok', error: null },
+      { puNumber: '456', status: 'checked_error', error: 'Invalid readings' }
+    ],
+    errors: [
+      { puNumber: '456', error: 'Invalid readings' }
+    ]
+  };
 }
+
+// Обновление статуса ПУ
+async function updatePuStatus(puNumber, status, errorDetails) {
+  const pu = await PuStatus.findOne({ where: { puNumber } });
+  if (pu) {
+    await pu.update({
+      status,
+      errorDetails,
+      lastCheck: new Date()
+    });
+  }
+}
+
+// Создание уведомлений об ошибках
+async function createNotifications(fromUserId, resId, errors) {
+  const responsibles = await User.findAll({
+    where: {
+      resId,
+      role: 'res_responsible'
+    }
+  });
+  
+  for (const responsible of responsibles) {
+    await Notification.create({
+      fromUserId,
+      toUserId: responsible.id,
+      resId,
+      type: 'error',
+      message: `Обнаружено ${errors.length} ошибок при проверке`
+    });
+  }
+}
+
+// =====================================================
+// ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
+// =====================================================
+
+async function initializeDatabase() {
+  try {
+    await sequelize.authenticate();
+    console.log('Database connected successfully');
+    
+    // Синхронизация моделей
+    await sequelize.sync({ alter: true });
+    
+    // Создаем РЭСы если их нет
+    const resCount = await ResUnit.count();
+    if (resCount === 0) {
+      const resList = [
+        'Краснополянский РЭС',
+        'Адлерский РЭС',
+        'Хостинский РЭС',
+        'Сочинский РЭС',
+        'Дагомысский РЭС',
+        'Лазаревский РЭС',
+        'Туапсинский РЭС'
+      ];
+      
+      for (const resName of resList) {
+        await ResUnit.create({ name: resName });
+      }
+      console.log('RES units created');
+    }
+    
+    // Создаем админа если его нет
+    const adminCount = await User.count({ where: { role: 'admin' } });
+    if (adminCount === 0) {
+      await User.create({
+        fio: 'Администратор',
+        login: 'admin',
+        password: 'admin123',
+        role: 'admin',
+        email: 'admin@res.ru'
+      });
+      console.log('Admin user created');
+    }
+    
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    process.exit(1);
+  }
+}
+
+// Запуск сервера
+initializeDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+});
+
+// Обработка ошибок
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+  process.exit(1);
+});
