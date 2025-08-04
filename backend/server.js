@@ -14,6 +14,7 @@ const nodemailer = require('nodemailer');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { Sequelize, DataTypes, Op } = require('sequelize');
 
 // =====================================================
 // КОНФИГУРАЦИЯ И ИНИЦИАЛИЗАЦИЯ
@@ -440,7 +441,16 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    const whereClause = resId ? { resId } : {};
+    // НОВОЕ: Адлерский РЭС (id=2) также видит СИРИСУС (id=8)
+    let whereClause = {};
+    if (resId) {
+      if (resId == 2 || req.user.resId == 2) {
+        // Если смотрим Адлерский РЭС или пользователь из Адлерского - показываем и СИРИСУС
+        whereClause = { resId: { [Op.in]: [2, 8] } };
+      } else {
+        whereClause = { resId };
+      }
+    }
     
     const structures = await NetworkStructure.findAll({
       where: whereClause,
@@ -545,6 +555,102 @@ app.post('/api/upload/analyze',
       });
       
     } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// 4.5 ЗАГРУЗКА ПОЛНОЙ СТРУКТУРЫ СЕТИ С ОБНОВЛЕНИЕМ
+app.post('/api/network/upload-full-structure', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  upload.single('file'), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const workbook = XLSX.readFile(req.file.path);
+      const sheetName = workbook.SheetNames[0];
+      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      
+      // Маппинг РЭСов
+      const resMapping = {
+        'КПРЭС': 1, 'АРЭС': 2, 'ХРЭС': 3, 'СРЭС': 4,
+        'ДРЭС': 5, 'ЛРЭС': 6, 'ТРЭС': 7, 'СИРИСУС': 8
+      };
+      
+      let processed = 0;
+      let errors = [];
+      
+      // Опционально: очищаем старые данные
+      if (req.body.clearOld === 'true') {
+        await NetworkStructure.destroy({ where: {}, transaction });
+      }
+      
+      // Обрабатываем каждую строку
+      for (const row of data) {
+        try {
+          const resId = resMapping[row['РЭС']];
+          
+          if (!resId) {
+            errors.push(`Неизвестный РЭС: ${row['РЭС']}`);
+            continue;
+          }
+          
+          // Создаем или обновляем запись
+          await NetworkStructure.upsert({
+            resId: resId,
+            tpName: row['ТП'] || '',
+            vlName: row['Фидер'] || '',
+            startPu: row['Начало'] || null,
+            endPu: row['Конец'] || null,
+            middlePu: row['Середина'] || null
+          }, {
+            transaction,
+            conflictFields: ['resId', 'tpName', 'vlName']
+          });
+          
+          processed++;
+          
+          // Создаем статусы для новых ПУ
+          const positions = [
+            { pu: row['Начало'], pos: 'start' },
+            { pu: row['Конец'], pos: 'end' },
+            { pu: row['Середина'], pos: 'middle' }
+          ];
+          
+          for (const { pu, pos } of positions) {
+            if (pu) {
+              await PuStatus.findOrCreate({
+                where: { puNumber: String(pu) },
+                defaults: {
+                  position: pos,
+                  status: 'not_checked'
+                },
+                transaction
+              });
+            }
+          }
+          
+        } catch (err) {
+          errors.push(`Ошибка в строке ${row['ТП']}-${row['Фидер']}: ${err.message}`);
+        }
+      }
+      
+      await transaction.commit();
+      
+      // Удаляем файл
+      fs.unlinkSync(req.file.path);
+      
+      res.json({
+        success: true,
+        message: `Загружено ${processed} записей из ${data.length}`,
+        processed,
+        total: data.length,
+        errors: errors.length > 0 ? errors.slice(0, 10) : [] // Первые 10 ошибок
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
       res.status(500).json({ error: error.message });
     }
 });
