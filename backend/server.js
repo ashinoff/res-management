@@ -605,7 +605,7 @@ app.post('/api/network/upload-full-structure',
             middlePu: row['Середина'] || null
           }, {
             transaction,
-            conflictFields: ['resId', 'tpName', 'vlName']
+           // conflictFields: ['resId', 'tpName', 'vlName']
           });
           
           processed++;
