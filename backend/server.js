@@ -3,6 +3,8 @@
 // Всё в одном файле для удобства переноса между чатами
 // =====================================================
 
+process.env.LANG = 'ru_RU.UTF-8';
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
