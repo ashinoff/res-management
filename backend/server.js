@@ -5,6 +5,7 @@
 
 // Устанавливаем кодировку
 process.env.LANG = 'ru_RU.UTF-8';
+process.env.LC_ALL = 'ru_RU.UTF-8';
 
 const express = require('express');
 const cors = require('cors');
@@ -55,6 +56,8 @@ const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://user:pas
       require: true,
       rejectUnauthorized: false
     } : false
+    charset: 'utf8',
+    client_encoding: 'UTF8'
   },
   logging: false
 });
