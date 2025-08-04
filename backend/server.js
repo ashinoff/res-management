@@ -848,6 +848,13 @@ async function initializeDatabase() {
       }
       console.log('RES units created');
     }
+
+    // ДОБАВЬ ЭТО - создаем СИРИСУС отдельно с ID=8
+await ResUnit.findOrCreate({
+  where: { id: 8 },
+  defaults: { id: 8, name: 'СИРИСУС' }
+});
+console.log('SIRIUS added/checked');
     
     // Создаем админа если его нет
     const adminCount = await User.count({ where: { role: 'admin' } });
