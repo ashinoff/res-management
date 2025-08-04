@@ -443,11 +443,11 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    // НОВОЕ: Адлерский РЭС (id=2) также видит СИРИСУС (id=8)
+    // НОВОЕ: Адлерский РЭС (id=2) также видит СИРИУС (id=8)
     let whereClause = {};
     if (resId) {
       if (resId == 2 || req.user.resId == 2) {
-        // Если смотрим Адлерский РЭС или пользователь из Адлерского - показываем и СИРИСУС
+        // Если смотрим Адлерский РЭС или пользователь из Адлерского - показываем и СИРИУС
         whereClause = { resId: { [Op.in]: [2, 8] } };
       } else {
         whereClause = { resId };
@@ -577,7 +577,7 @@ app.post('/api/network/upload-full-structure',
       // Маппинг РЭСов
       const resMapping = {
         'КПРЭС': 1, 'АРЭС': 2, 'ХРЭС': 3, 'СРЭС': 4,
-        'ДРЭС': 5, 'ЛРЭС': 6, 'ТРЭС': 7, 'СИРИСУС': 8
+        'ДРЭС': 5, 'ЛРЭС': 6, 'ТРЭС': 7, 'СИРИУС': 8
       };
       
       let processed = 0;
@@ -851,13 +851,19 @@ async function initializeDatabase() {
       }
       console.log('RES units created');
     }
-
-    // ДОБАВЬ ЭТО - создаем СИРИСУС отдельно с ID=8
-await ResUnit.findOrCreate({
-  where: { id: 8 },
-  defaults: { id: 8, name: 'СИРИСУС' }
-});
-console.log('SIRIUS added/checked');
+    
+    // Создаем СИРИУС <-- ВОТ ТУТ ВСТАВЛЯЕШЬ
+    try {
+      const [sirius, created] = await ResUnit.findOrCreate({
+        where: { name: 'СИРИУС' },
+        defaults: { name: 'СИРИУС' }
+      });
+      console.log('SIRIUS added/checked', created ? 'created' : 'exists');
+    } catch (err) {
+      console.error('Error creating SIRIUS:', err);
+    }
+    
+    console.log('Database initialization complete');
     
     // Создаем админа если его нет
     const adminCount = await User.count({ where: { role: 'admin' } });
@@ -876,7 +882,7 @@ console.log('SIRIUS added/checked');
     console.error('Database initialization error:', error);
     process.exit(1);
   }
-}
+} // <-- Конец функции
 
 // Запуск сервера
 initializeDatabase().then(() => {
