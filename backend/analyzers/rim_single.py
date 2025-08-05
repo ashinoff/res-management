@@ -41,9 +41,15 @@ class RIMAnalyzer:
                     date_str = str(sheet.cell_value(row_idx, 0))
                     time_str = str(sheet.cell_value(row_idx, 1))
                     event = str(sheet.cell_value(row_idx, 2))
-                    voltage = float(sheet.cell_value(row_idx, 3))
-                    percent = float(sheet.cell_value(row_idx, 4))
-                    duration = float(sheet.cell_value(row_idx, 5))
+                    
+                    # Читаем значения и заменяем запятые на точки
+                    voltage_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')
+                    percent_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')
+                    duration_str = str(sheet.cell_value(row_idx, 5)).replace(',', '.')
+                    
+                    voltage = float(voltage_str)
+                    percent = float(percent_str)
+                    duration = float(duration_str)
                     
                     # ОТЛАДКА
                     print(f"Row {row_idx}: event='{event}', voltage={voltage}, duration={duration}", file=sys.stderr)
