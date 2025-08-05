@@ -824,6 +824,19 @@ async function analyzeFile(filePath, type) {
     }
     
     const python = spawn('python3', [scriptPath, filePath]);
+
+    console.log('Running Python script:', scriptPath);
+    console.log('Analyzing file:', filePath);
+
+    // Проверяем существование Python скрипта
+    if (!fs.existsSync(scriptPath)) {
+      console.error('Python script not found:', scriptPath);
+      return resolve({
+        processed: [],
+        errors: [`Python скрипт не найден: ${scriptPath}`]
+      });
+    }
+    
     let output = '';
     let errorOutput = '';
     
