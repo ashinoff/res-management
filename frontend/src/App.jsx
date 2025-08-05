@@ -201,8 +201,8 @@ function NetworkStructure({ selectedRes }) {
               <th>ТП</th>
               <th>ВЛ</th>
               <th>Начало</th>
-              <th>Конец</th>
               <th>Середина</th>
+              <th>Конец</th>
               <th>Дата обновления</th>
               {user.role === 'res_responsible' && <th>Действия</th>}
             </tr>
@@ -220,12 +220,12 @@ function NetworkStructure({ selectedRes }) {
                 </td>
                 <td>
                   <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
-                    {!item.endPu && 'X'}
+                    {!item.middlePu && 'X'}
                   </div>
                 </td>
                 <td>
                   <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
-                    {!item.middlePu && 'X'}
+                    {!item.endPu && 'X'}
                   </div>
                 </td>
                 <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
