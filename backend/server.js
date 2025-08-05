@@ -952,6 +952,8 @@ python.on('close', async (code) => {
     });
   }
 });
+});  // <-- ДОБАВИТЬ: закрываем Promise
+}  // <-- ДОБАВИТЬ: закрываем функцию analyzeFile
     
   
 
