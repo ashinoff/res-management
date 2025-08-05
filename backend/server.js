@@ -896,16 +896,7 @@ async function analyzeFile(filePath, type) {
   });
 }
     
-  // Пока возвращаем моковые данные
-  return {
-    processed: [
-      { puNumber: '123', status: 'checked_ok', error: null },
-      { puNumber: '456', status: 'checked_error', error: 'Invalid readings' }
-    ],
-    errors: [
-      { puNumber: '456', error: 'Invalid readings' }
-    ]
-  };
+  
 
 
 // Обновление статуса ПУ
@@ -939,20 +930,6 @@ async function createNotifications(fromUserId, resId, errors) {
     });
   }
 }
-console.log('Starting database initialization...');
-initializeDatabase().then(() => {
-  console.log('Starting server on port', PORT);
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}).catch(err => {
-  console.error('Failed to start:', err);
-  process.exit(1);
-});
-
-
-
-
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
