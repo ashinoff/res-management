@@ -247,8 +247,27 @@ function NetworkStructure({ selectedRes }) {
                 <td>{item.tpName}</td>
                 <td>{item.vlName}</td>
                 <td onClick={() => handleCellClick(item, 'start')}>
-                  <div className={`status-box ${getStatusColor(item.startPu ? 'not_checked' : 'empty')}`}>
+                  <div className={`status-box ${getStatusColor(
+                    item.PuStatuses?.find(s => s.puNumber === item.startPu && s.position === 'start')?.status || 
+                    (item.startPu ? 'not_checked' : 'empty')
+                  )}`}>
                     {!item.startPu && 'X'}
+                  </div>
+                </td>
+                <td onClick={() => handleCellClick(item, 'middle')}>
+                  <div className={`status-box ${getStatusColor(
+                    item.PuStatuses?.find(s => s.puNumber === item.middlePu && s.position === 'middle')?.status || 
+                    (item.middlePu ? 'not_checked' : 'empty')
+                  )}`}>
+                    {!item.middlePu && 'X'}
+                  </div>
+                </td>
+                <td onClick={() => handleCellClick(item, 'end')}>
+                  <div className={`status-box ${getStatusColor(
+                    item.PuStatuses?.find(s => s.puNumber === item.endPu && s.position === 'end')?.status || 
+                    (item.endPu ? 'not_checked' : 'empty')
+                  )}`}>
+                    {!item.endPu && 'X'}
                   </div>
                 </td>
                 <td onClick={() => handleCellClick(item, 'middle')}>
@@ -411,6 +430,7 @@ function FileUpload({ selectedRes }) {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert(`Файл обработан. Обработано: ${response.data.processed}, Ошибок: ${response.data.errors}`);
+      window.location.reload();
       setFile(null);
       setSelectedType('');
     } catch (error) {
