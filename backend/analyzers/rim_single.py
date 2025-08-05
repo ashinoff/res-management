@@ -5,6 +5,8 @@ import json
 import sys
 from collections import defaultdict
 import re
+import xlrd  # для чтения .xls файлов
+from datetime import datetime
 
 class RIMAnalyzer:
     def __init__(self):
@@ -20,47 +22,45 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Читаем файл
-            with open(filepath, 'r', encoding='utf-8-sig') as f:
-                content = f.read()
+            # Читаем Excel файл
+            workbook = xlrd.open_workbook(filepath)
+            sheet = workbook.sheet_by_index(0)  # Берем первый лист
             
-            # Разбиваем на строки
-            lines = content.strip().split('\n')
+            # Пропускаем заголовки, если есть
+            start_row = 0
+            if sheet.nrows > 0:
+                # Проверяем, есть ли заголовки в первой строке
+                first_cell = str(sheet.cell_value(0, 0))
+                if 'Дата' in first_cell or not re.match(r'\d{2}\.\d{2}\.\d{4}', first_cell):
+                    start_row = 1
             
             # Парсим каждую строку
-            for line in lines:
-                if not line.strip():
-                    continue
-                
+            for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # Используем регулярное выражение для парсинга
-                    # Формат: дата время событие напряжение процент длительность
-                    match = re.match(r'^(\d{2}\.\d{2}\.\d{4})\s+(\d{1,2}:\d{2}:\d{2})\s+(.+?)\s+(\d+[,\.]\d+)\s+(\d+[,\.]\d+)\s+(\d+[,\.]\d+)$', line)
-                    
-                    if not match:
-                        continue
-                    
-                    date_str = match.group(1)
-                    time_str = match.group(2)
-                    event = match.group(3)
-                    voltage_str = match.group(4).replace(',', '.')
-                    percent_str = match.group(5).replace(',', '.')
-                    duration_str = match.group(6).replace(',', '.')
-                    
-                    # Парсим значения
-                    voltage = float(voltage_str)
-                    duration = float(duration_str)
+                    # Читаем ячейки строки
+                    date_str = str(sheet.cell_value(row_idx, 0))
+                    time_str = str(sheet.cell_value(row_idx, 1))
+                    event = str(sheet.cell_value(row_idx, 2))
+                    voltage = float(sheet.cell_value(row_idx, 3))
+                    percent = float(sheet.cell_value(row_idx, 4))
+                    duration = float(sheet.cell_value(row_idx, 5))
                     
                     # Критерий 1: продолжительность > 60
                     if duration <= 60:
                         continue
                     
-                    # Критерий 2: напряжение != 11.50
+                    # Критерий 2: напряжение != 11.50 и != 0
                     if abs(voltage - 11.50) < 0.001 or voltage == 0:
                         continue
                     
                     # Определяем месяц
-                    month = int(date_str.split('.')[1])
+                    # Если дата в Excel формате (число), конвертируем
+                    if isinstance(date_str, float):
+                        date_tuple = xlrd.xldate_as_tuple(date_str, workbook.datemode)
+                        month = date_tuple[1]
+                    else:
+                        # Парсим строку даты
+                        month = int(date_str.split('.')[1])
                     
                     # Определяем тип события и фазу
                     phase = None
@@ -90,11 +90,18 @@ class RIMAnalyzer:
                         })
                     
                 except Exception as e:
+                    # Пропускаем проблемные строки
                     continue
             
             # Формируем результат
             return self._generate_result(events_data)
             
+        except xlrd.biffh.XLRDError as e:
+            return {
+                'success': False,
+                'error': f"Ошибка чтения Excel файла: {str(e)}",
+                'has_errors': False
+            }
         except Exception as e:
             return {
                 'success': False,
