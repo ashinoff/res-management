@@ -26,13 +26,25 @@ class RIMAnalyzer:
             workbook = xlrd.open_workbook(filepath)
             sheet = workbook.sheet_by_index(0)  # Берем первый лист
             
+            print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
+            
             # Пропускаем заголовки, если есть
             start_row = 0
             if sheet.nrows > 0:
                 # Проверяем, есть ли заголовки в первой строке
                 first_cell = str(sheet.cell_value(0, 0))
+                print(f"First cell: '{first_cell}'", file=sys.stderr)
                 if 'Дата' in first_cell or not re.match(r'\d{2}\.\d{2}\.\d{4}', first_cell):
                     start_row = 1
+            
+            print(f"Starting from row: {start_row}", file=sys.stderr)
+            
+            # Выводим первые 3 строки для отладки
+            for i in range(min(3, sheet.nrows)):
+                row_data = []
+                for j in range(min(6, sheet.ncols)):
+                    row_data.append(str(sheet.cell_value(i, j)))
+                print(f"Row {i}: {' | '.join(row_data)}", file=sys.stderr)
             
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
@@ -42,10 +54,19 @@ class RIMAnalyzer:
                     time_str = str(sheet.cell_value(row_idx, 1))
                     event = str(sheet.cell_value(row_idx, 2))
                     
+                    # Проверяем на пустые ячейки
+                    if not date_str or not event:
+                        continue
+                    
                     # Читаем значения и заменяем запятые на точки
                     voltage_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')
                     percent_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')
                     duration_str = str(sheet.cell_value(row_idx, 5)).replace(',', '.')
+                    
+                    # Проверяем на пустые значения
+                    if not voltage_str or not percent_str or not duration_str:
+                        print(f"Row {row_idx}: empty values, skipping", file=sys.stderr)
+                        continue
                     
                     voltage = float(voltage_str)
                     percent = float(percent_str)
