@@ -55,7 +55,7 @@ const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://user:pas
     ssl: process.env.NODE_ENV === 'production' ? {
       require: true,
       rejectUnauthorized: false
-    } : false
+    } : false,
     charset: 'utf8',
     client_encoding: 'UTF8'
   },
