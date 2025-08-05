@@ -1,28 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import pandas as pd
-import sys
 import json
+import sys
+import csv
 from datetime import datetime
 from collections import defaultdict
-import os
 
 class RIMAnalyzer:
     def __init__(self):
-        self.voltage_events = []
         self.ru_months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 
                           'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
     
     def analyze_file(self, filepath):
-        """Анализ файла журнала событий РИМ"""
+        """Анализ XLS файла как CSV (Excel сохраняет как CSV с табуляцией)"""
         try:
-            # Читаем Excel файл, пропускаем первую строку с заголовком
-            df = pd.read_excel(filepath, header=1)
-            
-            # Переименовываем колонки для удобства
-            df.columns = ['datetime', 'event', 'voltage', 'depth', 'duration'] + list(df.columns[5:])
-            
             results = {
                 'processed': True,
                 'errors': [],
@@ -30,70 +22,82 @@ class RIMAnalyzer:
                 'undervoltage': defaultdict(list)
             }
             
-            for idx, row in df.iterrows():
+            # Читаем файл как текст с табуляцией
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Пропускаем первые 2 строки (заголовки)
+            for i, line in enumerate(lines[2:], start=3):
                 try:
-                    event = str(row['event'])
-                    duration = float(row['duration']) if pd.notna(row['duration']) else 0
-                    voltage_str = str(row['voltage']).replace(',', '.')
-                    voltage = float(voltage_str) if voltage_str != 'nan' else 0
+                    # Разбираем строку по табуляции
+                    parts = line.strip().split('\t')
+                    if len(parts) < 5:
+                        continue
+                    
+                    datetime_str = parts[0]
+                    event = parts[1]
+                    voltage_str = parts[2].replace(',', '.')
+                    duration_str = parts[4]
                     
                     # Парсим дату
-                    date_val = pd.to_datetime(row['datetime'], format='%d.%m.%Y', errors='coerce')
-                    if pd.isna(date_val):
+                    try:
+                        date_parts = datetime_str.split()[0].split('.')
+                        if len(date_parts) == 3:
+                            day, month, year = date_parts
+                            month_num = int(month)
+                        else:
+                            continue
+                    except:
                         continue
-                    date_str = date_val.strftime('%d.%m.%Y')
+                    
+                    # Парсим напряжение и длительность
+                    try:
+                        voltage = float(voltage_str)
+                        duration = float(duration_str) if duration_str else 0
+                    except:
+                        voltage = 0
+                        duration = 0
                     
                     # Фильтруем только события длительностью > 60 сек
                     if duration <= 60:
                         continue
                     
-                    # Прерывание напряжения - окончание (это перенапряжение в контексте задачи)
-                    if 'Прерывание напряжения - окончание' in event:
-                        # Определяем фазы по предыдущим строкам
-                        # Это общее событие, нужно смотреть контекст
-                        continue
-                    
-                    # Пропадание = провал (undervoltage)
-                    if 'пропадание напряжения' in event:
-                        if 'Фаза A' in event:
-                            if abs(voltage - 11.5) > 0.001:
-                                results['undervoltage']['A'].append({
-                                    'date': date_str,
-                                    'voltage': voltage,
-                                    'month': date_val.month
-                                })
-                        elif 'Фаза B' in event:
-                            if abs(voltage - 11.5) > 0.001:
-                                results['undervoltage']['B'].append({
-                                    'date': date_str,
-                                    'voltage': voltage,
-                                    'month': date_val.month
-                                })
-                        elif 'Фаза C' in event:
-                            if abs(voltage - 11.5) > 0.001:
-                                results['undervoltage']['C'].append({
-                                    'date': date_str,
-                                    'voltage': voltage,
-                                    'month': date_val.month
-                                })
-                    
-                    # Перенапряжение (overvoltage) - в этом файле не вижу таких событий
-                    # Но оставляем логику на случай если встретятся
-                    if 'перенапряжение' in event and 'окончание' in event:
+                    # Анализируем события
+                    if 'пропадание напряжения' in event.lower():
                         phase = None
-                        if 'Фаза A' in event: phase = 'A'
-                        elif 'Фаза B' in event: phase = 'B'
-                        elif 'Фаза C' in event: phase = 'C'
+                        if 'Фаза A' in event or 'фаза a' in event.lower():
+                            phase = 'A'
+                        elif 'Фаза B' in event or 'фаза b' in event.lower():
+                            phase = 'B'
+                        elif 'Фаза C' in event or 'фаза c' in event.lower():
+                            phase = 'C'
+                        
+                        if phase and abs(voltage - 11.5) > 0.001:
+                            results['undervoltage'][phase].append({
+                                'date': datetime_str.split()[0],
+                                'voltage': voltage,
+                                'month': month_num
+                            })
+                    
+                    # Перенапряжения (если встретятся)
+                    elif 'перенапряжение' in event.lower() and 'окончание' in event.lower():
+                        phase = None
+                        if 'Фаза A' in event or 'фаза a' in event.lower():
+                            phase = 'A'
+                        elif 'Фаза B' in event or 'фаза b' in event.lower():
+                            phase = 'B'
+                        elif 'Фаза C' in event or 'фаза c' in event.lower():
+                            phase = 'C'
                         
                         if phase:
                             results['overvoltage'][phase].append({
-                                'date': date_str,
+                                'date': datetime_str.split()[0],
                                 'voltage': voltage,
-                                'month': date_val.month
+                                'month': month_num
                             })
-                            
+                    
                 except Exception as e:
-                    results['errors'].append(f"Строка {idx+3}: {str(e)}")
+                    results['errors'].append(f"Строка {i}: {str(e)}")
             
             # Формируем итоговую строку
             summary = self._generate_summary(results)
@@ -137,7 +141,7 @@ class RIMAnalyzer:
         for phase, events in results['undervoltage'].items():
             if events:
                 months = [e['month'] for e in events]
-                min_month = min(months) 
+                min_month = min(months)
                 max_month = max(months)
                 period = f"{self.ru_months[min_month-1]}-{self.ru_months[max_month-1]}"
                 min_voltage = min(e['voltage'] for e in events)
@@ -154,6 +158,9 @@ if __name__ == '__main__':
         print(json.dumps({'success': False, 'error': 'No file path provided'}))
         sys.exit(1)
     
-    analyzer = RIMAnalyzer()
-    result = analyzer.analyze_file(sys.argv[1])
-    print(json.dumps(result, ensure_ascii=False))
+    try:
+        analyzer = RIMAnalyzer()
+        result = analyzer.analyze_file(sys.argv[1])
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({'success': False, 'error': str(e)}))
