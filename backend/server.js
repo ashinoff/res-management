@@ -785,8 +785,103 @@ app.get('/api/reports/summary', authenticateToken, checkRole(['admin']), async (
 // =====================================================
 
 // Заглушка для анализа файлов (замени на реальный Python)
+// Анализ файлов через Python скрипты
 async function analyzeFile(filePath, type) {
-  // Здесь будет вызов Python скрипта
+  return new Promise((resolve, reject) => {
+    let scriptPath;
+    
+    switch(type) {
+      case 'rim_single':
+        scriptPath = path.join(__dirname, 'analyzers', 'rim_analyzer.py');
+        break;
+      case 'rim_mass':
+        scriptPath = path.join(__dirname, 'analyzers', 'rim_mass_analyzer.py');
+        break;
+      case 'nartis':
+        scriptPath = path.join(__dirname, 'analyzers', 'nartis_analyzer.py');
+        break;
+      case 'energomera':
+        scriptPath = path.join(__dirname, 'analyzers', 'energomera_analyzer.py');
+        break;
+      default:
+        return resolve({
+          processed: [],
+          errors: ['Неизвестный тип анализатора']
+        });
+    }
+    
+    const python = spawn('python3', [scriptPath, filePath]);
+    let output = '';
+    let errorOutput = '';
+    
+    python.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    python.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
+    python.on('close', async (code) => {
+      if (code !== 0) {
+        return resolve({
+          processed: [],
+          errors: [`Ошибка анализа: ${errorOutput}`]
+        });
+      }
+      
+      try {
+        const result = JSON.parse(output);
+        
+        if (result.success) {
+          // Обновляем статусы в БД
+          const processed = [];
+          const errors = [];
+          
+          // Находим ПУ по имени файла
+          const fileName = path.basename(filePath, path.extname(filePath));
+          const puStatus = await PuStatus.findOne({ 
+            where: { puNumber: fileName } 
+          });
+          
+          if (puStatus) {
+            const status = result.has_errors ? 'checked_error' : 'checked_ok';
+            await puStatus.update({
+              status: status,
+              errorDetails: result.summary,
+              lastCheck: new Date()
+            });
+            
+            processed.push({
+              puNumber: fileName,
+              status: status,
+              error: result.has_errors ? result.summary : null
+            });
+            
+            if (result.has_errors) {
+              errors.push({
+                puNumber: fileName,
+                error: result.summary
+              });
+            }
+          }
+          
+          resolve({ processed, errors });
+        } else {
+          resolve({
+            processed: [],
+            errors: [result.error]
+          });
+        }
+      } catch (e) {
+        resolve({
+          processed: [],
+          errors: [`Ошибка парсинга результата: ${e.message}`]
+        });
+      }
+    });
+  });
+}
   // const result = await runPythonScript(type, filePath);
   
   // Пока возвращаем моковые данные
