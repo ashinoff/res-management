@@ -882,8 +882,7 @@ async function analyzeFile(filePath, type) {
     });
   });
 }
-  // const result = await runPythonScript(type, filePath);
-  
+    
   // Пока возвращаем моковые данные
   return {
     processed: [
@@ -894,7 +893,7 @@ async function analyzeFile(filePath, type) {
       { puNumber: '456', error: 'Invalid readings' }
     ]
   };
-}
+
 
 // Обновление статуса ПУ
 async function updatePuStatus(puNumber, status, errorDetails) {
