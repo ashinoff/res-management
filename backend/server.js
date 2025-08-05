@@ -295,6 +295,7 @@ const UploadHistory = sequelize.define('UploadHistory', {
 
 User.belongsTo(ResUnit, { foreignKey: 'resId' });
 NetworkStructure.belongsTo(ResUnit, { foreignKey: 'resId' });
+NetworkStructure.hasMany(PuStatus, { foreignKey: 'networkStructureId' });
 PuStatus.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 Notification.belongsTo(User, { as: 'fromUser', foreignKey: 'fromUserId' });
 Notification.belongsTo(User, { as: 'toUser', foreignKey: 'toUserId' });
