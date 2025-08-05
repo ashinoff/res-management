@@ -26,6 +26,12 @@ const { Sequelize, DataTypes, Op } = require('sequelize');
 
 require('dotenv').config();
 const app = express();
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
+  next();
+});
 const PORT = process.env.PORT || 3000;
 
 // Middleware
