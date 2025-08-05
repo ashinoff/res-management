@@ -6,6 +6,7 @@
 // Устанавливаем кодировку
 process.env.LANG = 'ru_RU.UTF-8';
 process.env.LC_ALL = 'ru_RU.UTF-8';
+process.env.NODE_OPTIONS = '--encoding=utf-8';
 
 const express = require('express');
 const cors = require('cors');
@@ -578,11 +579,6 @@ app.post('/api/network/upload-full-structure',
       const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
       
       // Маппинг РЭСов
-      const resMapping = {
-        'КПРЭС': 1, 'АРЭС': 2, 'ХРЭС': 3, 'СРЭС': 4,
-        'ДРЭС': 5, 'ЛРЭС': 6, 'ТРЭС': 7, 'СИРИУС': 8
-      };
-      
       let processed = 0;
       let errors = [];
       
@@ -594,24 +590,28 @@ app.post('/api/network/upload-full-structure',
       // Обрабатываем каждую строку
       for (const row of data) {
         try {
-          const resId = resMapping[row['РЭС']];
+          // Ищем РЭС по полному имени из Excel
+          const resName = row['РЭС'];
+          const res = await ResUnit.findOne({ 
+            where: { name: resName },
+            transaction 
+          });
           
-          if (!resId) {
-            errors.push(`Неизвестный РЭС: ${row['РЭС']}`);
+          if (!res) {
+            errors.push(`Неизвестный РЭС: ${resName}`);
             continue;
           }
           
           // Создаем или обновляем запись
           await NetworkStructure.upsert({
-            resId: resId,
+            resId: res.id,  // Используем найденный ID из базы
             tpName: row['ТП'] || '',
             vlName: row['Фидер'] || '',
-            startPu: row['Начало'] || null,
-            endPu: row['Конец'] || null,
-            middlePu: row['Середина'] || null
+            startPu: row['Начало'] ? String(row['Начало']) : null,
+            endPu: row['Конец'] ? String(row['Конец']) : null,
+            middlePu: row['Середина'] ? String(row['Середина']) : null
           }, {
-            transaction,
-           // conflictFields: ['resId', 'tpName', 'vlName']
+            transaction
           });
           
           processed++;
