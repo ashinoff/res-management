@@ -8,6 +8,21 @@ process.env.LANG = 'ru_RU.UTF-8';
 process.env.LC_ALL = 'ru_RU.UTF-8';
 process.env.NODE_OPTIONS = '--encoding=utf-8';
 
+console.log('Server starting...');
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+  process.exit(1);
+});
+
+const express = require('express');
+console.log('Express loaded');
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -926,6 +941,19 @@ async function createNotifications(fromUserId, resId, errors) {
     });
   }
 }
+console.log('Starting database initialization...');
+initializeDatabase().then(() => {
+  console.log('Starting server on port', PORT);
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}).catch(err => {
+  console.error('Failed to start:', err);
+  process.exit(1);
+});
+
+
+
 
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
