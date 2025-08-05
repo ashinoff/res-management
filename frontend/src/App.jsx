@@ -511,6 +511,12 @@ function Settings() {
       setMessage('Структура сети успешно загружена!');
       setUploadStats(response.data);
       setFile(null);
+      loadStructureStats();
+
+      // ДОБАВЬ ЭТО - принудительное обновление страницы
+      setTimeout(() => {
+      window.location.reload();
+      }, 2000);
       
     } catch (error) {
       setMessage('Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
