@@ -875,6 +875,18 @@ async function initializeDatabase() {
       console.error('Error creating SIRIUS:', err);
     }
     
+    // ДОБАВЬТЕ ЭТО - удаляем опечатку СИРИСУС
+    try {
+      const deleted = await ResUnit.destroy({ 
+        where: { name: 'СИРИСУС' } 
+      });
+      if (deleted > 0) {
+        console.log('Removed SIRISUS typo');
+      }
+    } catch (err) {
+      console.error('Error removing SIRISUS:', err);
+    }
+    
     console.log('Database initialization complete');
     
     // Создаем админа если его нет
