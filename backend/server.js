@@ -823,91 +823,139 @@ async function analyzeFile(filePath, type) {
         });
     }
     
-    const python = spawn('python3', [scriptPath, filePath]);
+    Понял! Вот что нужно сделать:
+НАЙДИТЕ эту строку:
+javascriptconst python = spawn('python3', [scriptPath, filePath]);
+И ЗАМЕНИТЕ ВСЁ начиная с неё и до конца функции на это:
+javascript// Пробуем запустить Python
+let python;
+try {
+  python = spawn('python3', [scriptPath, filePath]);
+  console.log('Python3 spawn created successfully');
+} catch (err) {
+  console.error('Failed to spawn python3, trying python:', err);
+  try {
+    python = spawn('python', [scriptPath, filePath]);
+    console.log('Python spawn created successfully');
+  } catch (err2) {
+    console.error('Both python3 and python failed:', err2);
+    return resolve({
+      processed: [],
+      errors: ['Python не установлен на сервере']
+    });
+  }
+}
 
-    console.log('Running Python script:', scriptPath);
-    console.log('Analyzing file:', filePath);
+console.log('Running Python script:', scriptPath);
+console.log('Analyzing file:', filePath);
 
-    // Проверяем существование Python скрипта
-    if (!fs.existsSync(scriptPath)) {
-      console.error('Python script not found:', scriptPath);
-      return resolve({
-        processed: [],
-        errors: [`Python скрипт не найден: ${scriptPath}`]
+// Проверяем существование Python скрипта
+if (!fs.existsSync(scriptPath)) {
+  console.error('Python script not found:', scriptPath);
+  return resolve({
+    processed: [],
+    errors: [`Python скрипт не найден: ${scriptPath}`]
+  });
+}
+
+let output = '';
+let errorOutput = '';
+
+python.stdout.on('data', (data) => {
+  output += data.toString();
+  console.log('Python stdout chunk:', data.toString());
+});
+
+python.stderr.on('data', (data) => {
+  errorOutput += data.toString();
+  console.error('Python stderr:', data.toString());
+});
+
+python.on('error', (error) => {
+  console.error('Python process error:', error);
+  return resolve({
+    processed: [],
+    errors: [`Ошибка запуска Python: ${error.message}`]
+  });
+});
+
+python.on('close', async (code) => {
+  console.log('Python process closed with code:', code);
+  console.log('Final output length:', output.length);
+  console.log('Final output:', output);
+  console.log('Final errors:', errorOutput);
+  
+  if (code !== 0) {
+    return resolve({
+      processed: [],
+      errors: [`Ошибка анализа (код ${code}): ${errorOutput}`]
+    });
+  }
+  
+  try {
+    const result = JSON.parse(output);
+    console.log('Parsed result:', JSON.stringify(result));
+    
+    if (result.success) {
+      const processed = [];
+      const errors = [];
+      
+      const fileName = path.basename(filePath, path.extname(filePath));
+      const puStatus = await PuStatus.findOne({ 
+        where: { puNumber: fileName } 
       });
-    }
-    
-    let output = '';
-    let errorOutput = '';
-    
-    python.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-    
-    python.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-    
-    python.on('close', async (code) => {
-      if (code !== 0) {
-        return resolve({
-          processed: [],
-          errors: [`Ошибка анализа: ${errorOutput}`]
+      
+      if (puStatus) {
+        const status = result.has_errors ? 'checked_error' : 'checked_ok';
+        await puStatus.update({
+          status: status,
+          errorDetails: result.summary,
+          lastCheck: new Date()
+        });
+        
+        processed.push({
+          puNumber: fileName,
+          status: status,
+          error: result.has_errors ? result.summary : null
+        });
+        
+        if (result.has_errors) {
+          errors.push({
+            puNumber: fileName,
+            error: result.summary
+          });
+        }
+      } else {
+        console.log('PU not found in database:', fileName);
+        processed.push({
+          puNumber: fileName,
+          status: result.has_errors ? 'checked_error' : 'checked_ok',
+          error: result.has_errors ? result.summary : null
         });
       }
       
+      // Удаляем файл после обработки
       try {
-        const result = JSON.parse(output);
-        
-        if (result.success) {
-          // Обновляем статусы в БД
-          const processed = [];
-          const errors = [];
-          
-          // Находим ПУ по имени файла
-          const fileName = path.basename(filePath, path.extname(filePath));
-          const puStatus = await PuStatus.findOne({ 
-            where: { puNumber: fileName } 
-          });
-          
-          if (puStatus) {
-            const status = result.has_errors ? 'checked_error' : 'checked_ok';
-            await puStatus.update({
-              status: status,
-              errorDetails: result.summary,
-              lastCheck: new Date()
-            });
-            
-            processed.push({
-              puNumber: fileName,
-              status: status,
-              error: result.has_errors ? result.summary : null
-            });
-            
-            if (result.has_errors) {
-              errors.push({
-                puNumber: fileName,
-                error: result.summary
-              });
-            }
-          }
-          
-          resolve({ processed, errors });
-        } else {
-          resolve({
-            processed: [],
-            errors: [result.error]
-          });
-        }
-      } catch (e) {
-        resolve({
-          processed: [],
-          errors: [`Ошибка парсинга результата: ${e.message}`]
-        });
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Error deleting file:', err);
       }
+      
+      resolve({ processed, errors });
+    } else {
+      resolve({
+        processed: [],
+        errors: [result.error]
+      });
+    }
+  } catch (e) {
+    console.error('Failed to parse Python output:', output);
+    resolve({
+      processed: [],
+      errors: [`Ошибка парсинга результата: ${e.message}`]
     });
-  });
-}
+  }
+});
     
   
 
