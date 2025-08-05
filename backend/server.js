@@ -413,7 +413,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id, 
         role: user.role, 
         resId: user.resId,
-        fio: user.fio 
+        
       },
       process.env.JWT_SECRET || 'secret-key',
       { expiresIn: '24h' }
