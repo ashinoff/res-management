@@ -153,6 +153,8 @@ function NetworkStructure({ selectedRes }) {
   const { user } = useContext(AuthContext);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);    // <-- Добавить
+  const [selectedPosition, setSelectedPosition] = useState(null); // <-- Добавить
   
   useEffect(() => {
     loadNetworkStructure();
@@ -285,22 +287,85 @@ function NetworkStructure({ selectedRes }) {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         details={selectedDetails}
+        tpName={selectedItem?.tpName}  // <-- Добавить
+        vlName={selectedItem?.vlName}  // <-- Добавить
+        position={selectedPosition}     // <-- Добавить
       />
     </div>
   );
 }
     
-function ErrorDetailsModal({ isOpen, onClose, details }) {
+function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position }) {
   if (!isOpen) return null;
+  
+  // Парсим детали если они в формате JSON строки
+  let parsedDetails = null;
+  try {
+    if (details?.errorDetails) {
+      // Пробуем распарсить JSON из errorDetails
+      const match = details.errorDetails.match(/details":\s*({.*})/);
+      if (match) {
+        parsedDetails = JSON.parse(match[1]);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to parse details:', e);
+  }
   
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <h3>Детали проверки</h3>
-        <div className="error-details">
-          {details?.errorDetails || 'Нет данных'}
+      <div className="modal-content error-details-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Детали проверки ПУ #{details?.puNumber}</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <button onClick={onClose}>Закрыть</button>
+        
+        <div className="modal-info">
+          <p><strong>ТП:</strong> {tpName}</p>
+          <p><strong>Фидер:</strong> {vlName}</p>
+          <p><strong>Позиция:</strong> {position === 'start' ? 'Начало' : position === 'middle' ? 'Середина' : 'Конец'}</p>
+        </div>
+        
+        <div className="error-summary">
+          <h4>Обнаруженные отклонения:</h4>
+          <div className="error-text">{details?.errorDetails || 'Нет данных'}</div>
+        </div>
+        
+        {parsedDetails && (
+          <div className="error-details-grid">
+            {parsedDetails.overvoltage && Object.keys(parsedDetails.overvoltage).length > 0 && (
+              <div className="error-section overvoltage">
+                <h4>🔴 Перенапряжения</h4>
+                {Object.entries(parsedDetails.overvoltage).map(([phase, data]) => (
+                  <div key={phase} className="phase-details">
+                    <span className="phase-label">Фаза {phase}:</span>
+                    <span className="count">{data.count} событий</span>
+                    <span className="voltage">Umax = {data.max}В</span>
+                    <span className="period">{data.period}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {parsedDetails.undervoltage && Object.keys(parsedDetails.undervoltage).length > 0 && (
+              <div className="error-section undervoltage">
+                <h4>🔵 Провалы напряжения</h4>
+                {Object.entries(parsedDetails.undervoltage).map(([phase, data]) => (
+                  <div key={phase} className="phase-details">
+                    <span className="phase-label">Фаза {phase}:</span>
+                    <span className="count">{data.count} событий</span>
+                    <span className="voltage">Umin = {data.min}В</span>
+                    <span className="period">{data.period}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <div className="modal-footer">
+          <button className="action-btn" onClick={onClose}>Закрыть</button>
+        </div>
       </div>
     </div>
   );
