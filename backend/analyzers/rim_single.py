@@ -4,6 +4,7 @@
 import json
 import sys
 from collections import defaultdict
+import re
 
 class RIMAnalyzer:
     def __init__(self):
@@ -11,38 +12,44 @@ class RIMAnalyzer:
                           'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
     
     def analyze_file(self, filepath):
-        """Анализ XLS файла журнала событий"""
+        """Анализ файла журнала событий"""
         try:
             # Структура для хранения событий
             events_data = {
-                'overvoltage': {'A': [], 'B': [], 'C': []},  # перенапряжения
-                'undervoltage': {'A': [], 'B': [], 'C': []}  # провалы
+                'overvoltage': {'A': [], 'B': [], 'C': []},
+                'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Читаем файл как текст
+            # Читаем файл
             with open(filepath, 'r', encoding='utf-8-sig') as f:
-                lines = f.readlines()
+                content = f.read()
             
-            # Начинаем с 3-й строки (индекс 2)
-            for i, line in enumerate(lines[2:], start=3):
+            # Разбиваем на строки
+            lines = content.strip().split('\n')
+            
+            # Парсим каждую строку
+            for line in lines:
+                if not line.strip():
+                    continue
+                
                 try:
-                    # Разбираем строку по табуляции
-                    parts = line.strip().split('\t')
-                    if len(parts) < 5:
+                    # Используем регулярное выражение для парсинга
+                    # Формат: дата время событие напряжение процент длительность
+                    match = re.match(r'^(\d{2}\.\d{2}\.\d{4})\s+(\d{1,2}:\d{2}:\d{2})\s+(.+?)\s+(\d+[,\.]\d+)\s+(\d+[,\.]\d+)\s+(\d+[,\.]\d+)$', line)
+                    
+                    if not match:
                         continue
                     
-                    # Колонки: A=время, B=событие, C=напряжение, D=глубина, E=продолжительность
-                    datetime_str = parts[0]
-                    event = parts[1]
-                    voltage_str = parts[2].replace(',', '.')
-                    duration_str = parts[4].replace(',', '.')
+                    date_str = match.group(1)
+                    time_str = match.group(2)
+                    event = match.group(3)
+                    voltage_str = match.group(4).replace(',', '.')
+                    percent_str = match.group(5).replace(',', '.')
+                    duration_str = match.group(6).replace(',', '.')
                     
                     # Парсим значения
-                    try:
-                        voltage = float(voltage_str)
-                        duration = float(duration_str)
-                    except:
-                        continue
+                    voltage = float(voltage_str)
+                    duration = float(duration_str)
                     
                     # Критерий 1: продолжительность > 60
                     if duration <= 60:
@@ -52,31 +59,29 @@ class RIMAnalyzer:
                     if abs(voltage - 11.50) < 0.001:
                         continue
                     
-                    # Определяем месяц из даты
-                    try:
-                        date_parts = datetime_str.split()[0].split('.')
-                        month = int(date_parts[1])
-                    except:
-                        continue
+                    # Определяем месяц
+                    month = int(date_str.split('.')[1])
                     
                     # Определяем тип события и фазу
                     phase = None
                     event_type = None
                     
-                    if 'Фаза A' in event:
+                    # Проверяем фазу
+                    if 'Фаза A' in event or 'фаза A' in event:
                         phase = 'A'
-                    elif 'Фаза B' in event:
+                    elif 'Фаза B' in event or 'фаза B' in event:
                         phase = 'B'
-                    elif 'Фаза C' in event:
+                    elif 'Фаза C' in event or 'фаза C' in event:
                         phase = 'C'
                     
                     if phase:
-                        if 'провал окончание' in event:
+                        # Проверяем тип события
+                        if 'провал окончание' in event or 'пропадание напряжения' in event:
                             event_type = 'undervoltage'
                         elif 'перенапряжение окончание' in event:
                             event_type = 'overvoltage'
                     
-                    # Добавляем событие если определили тип и фазу
+                    # Добавляем событие
                     if phase and event_type:
                         events_data[event_type][phase].append({
                             'voltage': voltage,
@@ -85,7 +90,7 @@ class RIMAnalyzer:
                         })
                     
                 except Exception as e:
-                    pass  # Пропускаем ошибочные строки
+                    continue
             
             # Формируем результат
             return self._generate_result(events_data)
@@ -160,7 +165,17 @@ class RIMAnalyzer:
                     'period': period
                 }
         
-        summary = '; '.join(summary_parts) if summary_parts else "Напряжение в пределах ГОСТ"
+        # Если событий меньше 10, но есть события - для отладки
+        if not has_errors:
+            total_events = sum(len(events) for events in events_data['overvoltage'].values())
+            total_events += sum(len(events) for events in events_data['undervoltage'].values())
+            
+            if total_events > 0:
+                summary = f"Обнаружено событий: {total_events}, но все менее 10 по каждому типу"
+            else:
+                summary = "Напряжение в пределах ГОСТ"
+        else:
+            summary = '; '.join(summary_parts)
         
         return {
             'success': True,
