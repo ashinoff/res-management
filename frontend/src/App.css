@@ -538,3 +538,227 @@ button:disabled {
     overflow-x: auto;
   }
 }
+/* Модальное окно */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h3 {
+  margin-bottom: 16px;
+}
+
+.error-details {
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+
+/* Делаем ячейки с ошибками кликабельными */
+.status-box.status-error {
+  cursor: pointer;
+}
+
+.status-box.status-error:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.4);
+}
+
+/* Улучшенное модальное окно для деталей ошибок */
+.error-details-modal {
+  max-width: 700px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6c757d;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f8f9fa;
+}
+
+.modal-info {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.modal-info p {
+  margin: 5px 0;
+  color: #495057;
+}
+
+.error-summary {
+  padding: 20px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.error-summary h4 {
+  margin-bottom: 10px;
+  color: #2c3e50;
+}
+
+.error-text {
+  padding: 15px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  color: #856404;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.error-details-grid {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.error-section {
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+}
+
+.error-section.overvoltage {
+  border-left: 4px solid #dc3545;
+}
+
+.error-section.undervoltage {
+  border-left: 4px solid #0066cc;
+}
+
+.error-section h4 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 16px;
+}
+
+.phase-details {
+  display: grid;
+  grid-template-columns: 80px 120px 120px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: white;
+  border-radius: 4px;
+}
+
+.phase-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.count {
+  color: #e74c3c;
+  font-weight: 500;
+}
+
+.voltage {
+  color: #27ae60;
+  font-weight: 500;
+}
+
+.period {
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  padding: 10px 20px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-btn:hover {
+  background-color: #2980b9;
+}
+
+/* Добавляем анимацию для статус боксов с ошибками */
+.status-box.status-error {
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.status-box.status-error:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+.status-box.status-error::after {
+  content: '!';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  background-color: #ffc107;
+  color: #333;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
