@@ -557,7 +557,7 @@ app.post('/api/upload/analyze',
       });
       
       // Запускаем анализ (заглушка - замени на реальный Python скрипт)
-      const analysisResult = await analyzeFile(req.file.path, type);
+      const analysisResult = await analyzeFile(req.file.path, type, req.file.originalname);
       
       // Обновляем статусы ПУ
       for (const result of analysisResult.processed) {
@@ -896,7 +896,9 @@ python.on('close', async (code) => {
       const processed = [];
       const errors = [];
       
-      const fileName = path.basename(filePath, path.extname(filePath));
+      const fileName = originalFileName 
+        ? path.basename(originalFileName, path.extname(originalFileName))
+        : path.basename(filePath, path.extname(filePath));
       const puStatus = await PuStatus.findOne({ 
         where: { puNumber: fileName } 
       });
