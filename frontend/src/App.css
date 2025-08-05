@@ -317,7 +317,23 @@ button:disabled {
 .notify-btn:hover {
   background-color: #2980b9;
 }
+/* Поиск */
+.search-box {
+  margin: 20px 0;
+}
 
+.search-input {
+  width: 300px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
 /* ===================================================== 
    ЗАГРУЗКА ФАЙЛОВ
    ===================================================== */
