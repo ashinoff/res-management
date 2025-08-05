@@ -180,6 +180,7 @@ const PuStatus = sequelize.define('PuStatus', {
   },
   networkStructureId: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     references: {
       model: NetworkStructure,
       key: 'id'
@@ -471,6 +472,7 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
         {
           model: PuStatus,
           required: false
+          attributes: ['id', 'puNumber', 'position', 'status', 'errorDetails', 'lastCheck'] // явно указываем поля
         },
         ResUnit
       ],
