@@ -149,6 +149,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
 function NetworkStructure({ selectedRes }) {
   const [networkData, setNetworkData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTp, setSearchTp] = useState('');
   const { user } = useContext(AuthContext);
 
   useEffect(() => {
@@ -189,10 +190,21 @@ function NetworkStructure({ selectedRes }) {
   };
 
   if (loading) return <div className="loading">Загрузка...</div>;
-
+  const filteredData = networkData.filter(item => 
+    !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
+  );
   return (
     <div className="network-structure">
       <h2>Структура сети</h2>
+      <div className="search-box">
+        <input 
+          type="text"
+          placeholder="Поиск по ТП..."
+          value={searchTp}
+          onChange={(e) => setSearchTp(e.target.value)}
+          className="search-input"
+        />
+      </div>
       <div className="structure-table">
         <table>
           <thead>
@@ -208,7 +220,7 @@ function NetworkStructure({ selectedRes }) {
             </tr>
           </thead>
           <tbody>
-            {networkData.map(item => (
+            {filteredData.map(item => (
               <tr key={item.id}>
                 <td>{item.ResUnit?.name}</td>
                 <td>{item.tpName}</td>
@@ -519,6 +531,7 @@ function Settings() {
       }, 2000);
       
     } catch (error) {
+      console.error('Upload error:', error);
       setMessage('Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
       setUploadStats(null);
     } finally {
