@@ -471,7 +471,7 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
       include: [
         {
           model: PuStatus,
-          required: false
+          required: false,
           attributes: ['id', 'puNumber', 'position', 'status', 'errorDetails', 'lastCheck'] // явно указываем поля
         },
         ResUnit
