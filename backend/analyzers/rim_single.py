@@ -56,7 +56,7 @@ class RIMAnalyzer:
                         continue
                     
                     # Критерий 2: напряжение != 11.50
-                    if abs(voltage - 11.50) < 0.001:
+                    if abs(voltage - 11.50) < 0.001 or voltage == 0:
                         continue
                     
                     # Определяем месяц
