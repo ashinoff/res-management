@@ -22,8 +22,6 @@ process.on('unhandledRejection', (err) => {
 
 const express = require('express');
 console.log('Express loaded');
-
-const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
