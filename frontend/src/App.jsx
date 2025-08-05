@@ -205,6 +205,8 @@ function NetworkStructure({ selectedRes }) {
       
       if (status && status.status === 'checked_error') {
         setSelectedDetails(status);
+        setSelectedItem(item);  // <-- ДОБАВИЛ!
+        setSelectedPosition(position);  // <-- ДОБАВИЛ!
         setModalOpen(true);
       }
     }
@@ -425,7 +427,7 @@ function FileUpload({ selectedRes }) {
       const response = await api.post('/api/upload/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      alert(`Файл обработан. Обработано: ${response.data.processed}, Ошибок: ${response.data.errors}`);
+      alert(`Файл обработан успешно! Проверено ПУ: ${response.data.processed}, Найдено проблем: ${response.data.errors}`);
       window.location.reload();
       setFile(null);
       setSelectedType('');
