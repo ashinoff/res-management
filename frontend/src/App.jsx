@@ -523,7 +523,7 @@ function Settings() {
       setMessage('Структура сети успешно загружена!');
       setUploadStats(response.data);
       setFile(null);
-      loadStructureStats();
+      
 
       // ДОБАВЬ ЭТО - принудительное обновление страницы
       setTimeout(() => {
