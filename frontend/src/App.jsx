@@ -151,7 +151,9 @@ function NetworkStructure({ selectedRes }) {
   const [loading, setLoading] = useState(true);
   const [searchTp, setSearchTp] = useState('');
   const { user } = useContext(AuthContext);
-
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedDetails, setSelectedDetails] = useState(null);
+  
   useEffect(() => {
     loadNetworkStructure();
   }, [selectedRes]);
@@ -189,6 +191,23 @@ function NetworkStructure({ selectedRes }) {
     }
   };
 
+   const handleCellClick = (item, position) => {
+    const puNumber = position === 'start' ? item.startPu : 
+                     position === 'middle' ? item.middlePu : 
+                     item.endPu;
+    
+    if (puNumber && item.PuStatuses) {
+      const status = item.PuStatuses.find(s => 
+        s.puNumber === puNumber && s.position === position
+      );
+      
+      if (status && status.status === 'checked_error') {
+        setSelectedDetails(status);
+        setModalOpen(true);
+      }
+    }
+  };
+  
   if (loading) return <div className="loading">Загрузка...</div>;
   const filteredData = networkData.filter(item => 
     !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
@@ -225,17 +244,17 @@ function NetworkStructure({ selectedRes }) {
                 <td>{item.ResUnit?.name}</td>
                 <td>{item.tpName}</td>
                 <td>{item.vlName}</td>
-                <td>
+                <td onClick={() => handleCellClick(item, 'start')}>
                   <div className={`status-box ${getStatusColor(item.startPu ? 'not_checked' : 'empty')}`}>
                     {!item.startPu && 'X'}
                   </div>
                 </td>
-                <td>
+                <td onClick={() => handleCellClick(item, 'middle')}>
                   <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
                     {!item.middlePu && 'X'}
                   </div>
                 </td>
-                <td>
+                <td onClick={() => handleCellClick(item, 'end')}>
                   <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
                     {!item.endPu && 'X'}
                   </div>
@@ -261,6 +280,27 @@ function NetworkStructure({ selectedRes }) {
         <div><span className="status-box status-error"></span> Проверен с ошибками</div>
         <div><span className="status-box status-unchecked"></span> Не проверен</div>
         <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
+      </div>
+       <ErrorDetailsModal 
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        details={selectedDetails}
+      />
+    </div>
+  );
+}
+    
+function ErrorDetailsModal({ isOpen, onClose, details }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <h3>Детали проверки</h3>
+        <div className="error-details">
+          {details?.errorDetails || 'Нет данных'}
+        </div>
+        <button onClick={onClose}>Закрыть</button>
       </div>
     </div>
   );
