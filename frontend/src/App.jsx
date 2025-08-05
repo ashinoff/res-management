@@ -231,12 +231,12 @@ function NetworkStructure({ selectedRes }) {
                   </div>
                 </td>
                 <td>
-                  <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
+                  <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
                     {!item.middlePu && 'X'}
                   </div>
                 </td>
                 <td>
-                  <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
+                  <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
                     {!item.endPu && 'X'}
                   </div>
                 </td>
