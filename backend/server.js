@@ -823,11 +823,7 @@ async function analyzeFile(filePath, type) {
         });
     }
     
-    Понял! Вот что нужно сделать:
-НАЙДИТЕ эту строку:
-javascriptconst python = spawn('python3', [scriptPath, filePath]);
-И ЗАМЕНИТЕ ВСЁ начиная с неё и до конца функции на это:
-javascript// Пробуем запустить Python
+    // Пробуем запустить Python
 let python;
 try {
   python = spawn('python3', [scriptPath, filePath]);
