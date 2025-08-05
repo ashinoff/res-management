@@ -799,7 +799,7 @@ app.get('/api/reports/summary', authenticateToken, checkRole(['admin']), async (
 
 // Заглушка для анализа файлов (замени на реальный Python)
 // Анализ файлов через Python скрипты
-async function analyzeFile(filePath, type) {
+async function analyzeFile(filePath, type, originalFileName = null) {
   return new Promise((resolve, reject) => {
     let scriptPath;
     
@@ -893,54 +893,67 @@ python.on('close', async (code) => {
     console.log('Parsed result:', JSON.stringify(result));
     
     if (result.success) {
-      const processed = [];
-      const errors = [];
-      
-      const fileName = originalFileName 
-        ? path.basename(originalFileName, path.extname(originalFileName))
-        : path.basename(filePath, path.extname(filePath));
-      const puStatus = await PuStatus.findOne({ 
-        where: { puNumber: fileName } 
-      });
-      
-      if (puStatus) {
-        const status = result.has_errors ? 'checked_error' : 'checked_ok';
-        await puStatus.update({
-          status: status,
-          errorDetails: result.summary,
-          lastCheck: new Date()
-        });
-        
-        processed.push({
-          puNumber: fileName,
-          status: status,
-          error: result.has_errors ? result.summary : null
-        });
-        
-        if (result.has_errors) {
-          errors.push({
-            puNumber: fileName,
-            error: result.summary
-          });
-        }
-      } else {
-        console.log('PU not found in database:', fileName);
-        processed.push({
-          puNumber: fileName,
-          status: result.has_errors ? 'checked_error' : 'checked_ok',
-          error: result.has_errors ? result.summary : null
-        });
-      }
-      
-      // Удаляем файл после обработки
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error('Error deleting file:', err);
-      }
-      
-      resolve({ processed, errors });
-    } else {
+  const processed = [];
+  const errors = [];
+  
+  const fileName = originalFileName 
+    ? path.basename(originalFileName, path.extname(originalFileName))
+    : path.basename(filePath, path.extname(filePath));
+  
+  // Ищем ПУ в структуре сети
+  const networkStructure = await NetworkStructure.findOne({
+    where: {
+      [Op.or]: [
+        { startPu: fileName },
+        { endPu: fileName },
+        { middlePu: fileName }
+      ]
+    }
+  });
+  
+  if (networkStructure) {
+    // Определяем позицию
+    let position = 'start';
+    if (networkStructure.endPu === fileName) position = 'end';
+    else if (networkStructure.middlePu === fileName) position = 'middle';
+    
+    // Создаем или обновляем статус ПУ
+    const [puStatus, created] = await PuStatus.upsert({
+      puNumber: fileName,
+      networkStructureId: networkStructure.id,
+      position: position,
+      status: result.has_errors ? 'checked_error' : 'checked_ok',
+      errorDetails: result.summary,
+      lastCheck: new Date()
+    });
+    
+    console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
+  } else {
+    console.log('NetworkStructure not found for PU:', fileName);
+  }
+  
+  processed.push({
+    puNumber: fileName,
+    status: result.has_errors ? 'checked_error' : 'checked_ok',
+    error: result.has_errors ? result.summary : null
+  });
+  
+  if (result.has_errors) {
+    errors.push({
+      puNumber: fileName,
+      error: result.summary
+    });
+  }
+  
+  // Удаляем файл после обработки
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error('Error deleting file:', err);
+  }
+  
+  resolve({ processed, errors });
+} else {
       resolve({
         processed: [],
         errors: [result.error]
