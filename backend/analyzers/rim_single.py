@@ -28,40 +28,24 @@ class RIMAnalyzer:
             
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
             
-            # Пропускаем заголовки, если есть
-            start_row = 0
-            if sheet.nrows > 0:
-                # Проверяем, есть ли заголовки в первой строке
-                first_cell = str(sheet.cell_value(0, 0))
-                print(f"First cell: '{first_cell}'", file=sys.stderr)
-                if 'Дата' in first_cell or not re.match(r'\d{2}\.\d{2}\.\d{4}', first_cell):
-                    start_row = 1
-            
-            print(f"Starting from row: {start_row}", file=sys.stderr)
-            
-            # Выводим первые 3 строки для отладки
-            for i in range(min(3, sheet.nrows)):
-                row_data = []
-                for j in range(min(6, sheet.ncols)):
-                    row_data.append(str(sheet.cell_value(i, j)))
-                print(f"Row {i}: {' | '.join(row_data)}", file=sys.stderr)
+            # Начинаем со 2-й строки (индекс 1), пропуская заголовок
+            start_row = 1
             
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # Читаем ячейки строки
-                    date_str = str(sheet.cell_value(row_idx, 0))
-                    time_str = str(sheet.cell_value(row_idx, 1))
-                    event = str(sheet.cell_value(row_idx, 2))
+                    # Читаем ячейки строки по правильным колонкам
+                    datetime_str = str(sheet.cell_value(row_idx, 0))  # Колонка A - дата и время
+                    event = str(sheet.cell_value(row_idx, 1))  # Колонка B - событие
                     
-                    # Проверяем на пустые ячейки
-                    if not date_str or not event:
+                    # Пропускаем пустые строки
+                    if not datetime_str or not event or datetime_str == '0':
                         continue
                     
-                    # Читаем значения и заменяем запятые на точки
-                    voltage_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')
-                    percent_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')
-                    duration_str = str(sheet.cell_value(row_idx, 5)).replace(',', '.')
+                    # Колонка C - напряжение, D - процент, E - продолжительность
+                    voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.')  # Колонка C
+                    percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')  # Колонка D
+                    duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')  # Колонка E
                     
                     # Проверяем на пустые значения
                     if not voltage_str or not percent_str or not duration_str:
@@ -85,12 +69,13 @@ class RIMAnalyzer:
                         print(f"Skipped: voltage {voltage} is 11.50 or 0", file=sys.stderr)
                         continue
                     
-                    # Определяем месяц
-                    if isinstance(date_str, float):
-                        date_tuple = xlrd.xldate_as_tuple(date_str, workbook.datemode)
-                        month = date_tuple[1]
+                    # Определяем месяц из даты
+                    date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
+                    if date_match:
+                        month = int(date_match.group(2))
                     else:
-                        month = int(date_str.split('.')[1])
+                        print(f"Could not parse date from: {datetime_str}", file=sys.stderr)
+                        continue
                     
                     # Определяем тип события и фазу
                     phase = None
@@ -108,9 +93,9 @@ class RIMAnalyzer:
                     
                     if phase:
                         # Проверяем тип события
-                        if 'провал окончание' in event or 'пропадание напряжения' in event:
+                        if 'провал' in event.lower():
                             event_type = 'undervoltage'
-                        elif 'перенапряжение окончание' in event:
+                        elif 'перенапряжение' in event.lower():
                             event_type = 'overvoltage'
                     
                     print(f"Event type: {event_type}", file=sys.stderr)
@@ -128,7 +113,6 @@ class RIMAnalyzer:
                         
                 except Exception as e:
                     print(f"Error in row {row_idx}: {str(e)}", file=sys.stderr)
-                    # Пропускаем проблемные строки
                     continue
             
             # Формируем результат
