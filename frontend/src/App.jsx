@@ -247,38 +247,34 @@ function NetworkStructure({ selectedRes }) {
                 <td>{item.tpName}</td>
                 <td>{item.vlName}</td>
                 <td onClick={() => handleCellClick(item, 'start')}>
-                  <div className={`status-box ${getStatusColor(
-                    item.PuStatuses?.find(s => s.puNumber === item.startPu && s.position === 'start')?.status || 
-                    (item.startPu ? 'not_checked' : 'empty')
-                  )}`}>
-                    {!item.startPu && 'X'}
-                  </div>
+                  {item.startPu ? (
+                    <div className={`status-box ${getStatusColor(
+                      item.PuStatuses?.find(s => s.puNumber === item.startPu && s.position === 'start')?.status || 'not_checked'
+                    )}`}>
+                    </div>
+                  ) : (
+                    <div className="status-box status-empty">X</div>
+                  )}
                 </td>
                 <td onClick={() => handleCellClick(item, 'middle')}>
-                  <div className={`status-box ${getStatusColor(
-                    item.PuStatuses?.find(s => s.puNumber === item.middlePu && s.position === 'middle')?.status || 
-                    (item.middlePu ? 'not_checked' : 'empty')
-                  )}`}>
-                    {!item.middlePu && 'X'}
-                  </div>
+                  {item.middlePu ? (
+                    <div className={`status-box ${getStatusColor(
+                      item.PuStatuses?.find(s => s.puNumber === item.middlePu && s.position === 'middle')?.status || 'not_checked'
+                    )}`}>
+                    </div>
+                  ) : (
+                    <div className="status-box status-empty">X</div>
+                  )}
                 </td>
                 <td onClick={() => handleCellClick(item, 'end')}>
-                  <div className={`status-box ${getStatusColor(
-                    item.PuStatuses?.find(s => s.puNumber === item.endPu && s.position === 'end')?.status || 
-                    (item.endPu ? 'not_checked' : 'empty')
-                  )}`}>
-                    {!item.endPu && 'X'}
-                  </div>
-                </td>
-                <td onClick={() => handleCellClick(item, 'middle')}>
-                  <div className={`status-box ${getStatusColor(item.middlePu ? 'not_checked' : 'empty')}`}>
-                    {!item.middlePu && 'X'}
-                  </div>
-                </td>
-                <td onClick={() => handleCellClick(item, 'end')}>
-                  <div className={`status-box ${getStatusColor(item.endPu ? 'not_checked' : 'empty')}`}>
-                    {!item.endPu && 'X'}
-                  </div>
+                  {item.endPu ? (
+                    <div className={`status-box ${getStatusColor(
+                      item.PuStatuses?.find(s => s.puNumber === item.endPu && s.position === 'end')?.status || 'not_checked'
+                    )}`}>
+                    </div>
+                  ) : (
+                    <div className="status-box status-empty">X</div>
+                  )}
                 </td>
                 <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
                 {user.role === 'res_responsible' && (
