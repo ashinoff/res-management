@@ -805,7 +805,7 @@ async function analyzeFile(filePath, type) {
     
     switch(type) {
       case 'rim_single':
-        scriptPath = path.join(__dirname, 'analyzers', 'rim_analyzer.py');
+        scriptPath = path.join(__dirname, 'analyzers', 'rim_single.py');
         break;
       case 'rim_mass':
         scriptPath = path.join(__dirname, 'analyzers', 'rim_mass_analyzer.py');
