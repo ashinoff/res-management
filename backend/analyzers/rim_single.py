@@ -45,21 +45,24 @@ class RIMAnalyzer:
                     percent = float(sheet.cell_value(row_idx, 4))
                     duration = float(sheet.cell_value(row_idx, 5))
                     
+                    # ОТЛАДКА
+                    print(f"Row {row_idx}: event='{event}', voltage={voltage}, duration={duration}", file=sys.stderr)
+                    
                     # Критерий 1: продолжительность > 60
                     if duration <= 60:
+                        print(f"Skipped: duration {duration} <= 60", file=sys.stderr)
                         continue
                     
                     # Критерий 2: напряжение != 11.50 и != 0
                     if abs(voltage - 11.50) < 0.001 or voltage == 0:
+                        print(f"Skipped: voltage {voltage} is 11.50 or 0", file=sys.stderr)
                         continue
                     
                     # Определяем месяц
-                    # Если дата в Excel формате (число), конвертируем
                     if isinstance(date_str, float):
                         date_tuple = xlrd.xldate_as_tuple(date_str, workbook.datemode)
                         month = date_tuple[1]
                     else:
-                        # Парсим строку даты
                         month = int(date_str.split('.')[1])
                     
                     # Определяем тип события и фазу
@@ -74,12 +77,16 @@ class RIMAnalyzer:
                     elif 'Фаза C' in event or 'фаза C' in event:
                         phase = 'C'
                     
+                    print(f"Detected phase: {phase}", file=sys.stderr)
+                    
                     if phase:
                         # Проверяем тип события
                         if 'провал окончание' in event or 'пропадание напряжения' in event:
                             event_type = 'undervoltage'
                         elif 'перенапряжение окончание' in event:
                             event_type = 'overvoltage'
+                    
+                    print(f"Event type: {event_type}", file=sys.stderr)
                     
                     # Добавляем событие
                     if phase and event_type:
@@ -88,8 +95,12 @@ class RIMAnalyzer:
                             'month': month,
                             'duration': duration
                         })
-                    
+                        print(f"Added event: {event_type} phase {phase}", file=sys.stderr)
+                    else:
+                        print(f"Event not added: phase={phase}, type={event_type}", file=sys.stderr)
+                        
                 except Exception as e:
+                    print(f"Error in row {row_idx}: {str(e)}", file=sys.stderr)
                     # Пропускаем проблемные строки
                     continue
             
@@ -118,8 +129,15 @@ class RIMAnalyzer:
             'undervoltage': {}
         }
         
+        # ОТЛАДКА - выводим количество событий
+        total_overvoltage = sum(len(events) for events in events_data['overvoltage'].values())
+        total_undervoltage = sum(len(events) for events in events_data['undervoltage'].values())
+        print(f"Total overvoltage events: {total_overvoltage}", file=sys.stderr)
+        print(f"Total undervoltage events: {total_undervoltage}", file=sys.stderr)
+        
         # Обработка перенапряжений
         for phase, events in events_data['overvoltage'].items():
+            print(f"Overvoltage phase {phase}: {len(events)} events", file=sys.stderr)
             # Критерий 3: количество > 10
             if len(events) > 10:
                 has_errors = True
@@ -147,6 +165,7 @@ class RIMAnalyzer:
         
         # Обработка провалов
         for phase, events in events_data['undervoltage'].items():
+            print(f"Undervoltage phase {phase}: {len(events)} events", file=sys.stderr)
             # Критерий 3: количество > 10
             if len(events) > 10:
                 has_errors = True
