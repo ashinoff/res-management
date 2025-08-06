@@ -1081,18 +1081,18 @@ python.on('close', async (code) => {
   
   resolve({ processed, errors });
 } else {
-      resolve({
-        processed: [],
-        errors: [result.error]
-      });
-    }
-  } catch (e) {
-    console.error('Failed to parse Python output:', output);
-    resolve({
-      processed: [],
-      errors: [`Ошибка парсинга результата: ${e.message}`]
-    });
-  }
+  resolve({
+    processed: [],
+    errors: [result.error]
+  });
+}
+} catch (e) {
+  console.error('Failed to parse Python output:', output);
+  resolve({
+    processed: [],
+    errors: [`Ошибка парсинга результата: ${e.message}`]
+  });
+}
 });
 });  // <-- ДОБАВИТЬ: закрываем Promise
 }  // <-- ДОБАВИТЬ: закрываем функцию analyzeFile
