@@ -819,7 +819,7 @@ css/* Стили для ячейки с ПУ */
   justify-content: center;
   gap: 4px;
   cursor: pointer;
-  min-width: 80px;
+  text-align: center;  /* <-- ДОБАВЬ */
 }
 
 .pu-cell .status-box {
@@ -831,8 +831,9 @@ css/* Стили для ячейки с ПУ */
   color: #555;
   font-weight: 500;
   text-align: center;
-  width: 100%;
   display: block;
+  margin: 0 auto;  /* <-- ДОБАВЬ */
+  width: auto;     /* <-- ИЗМЕНИЛ с width: 100% */
 }
 
 /* При наведении на номер */
