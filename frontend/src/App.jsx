@@ -116,12 +116,12 @@ function LoginForm({ onLogin }) {
 
 function MainMenu({ activeSection, onSectionChange, userRole }) {
   const menuItems = [
-  { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
-  { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
-  { id: 'notifications', label: user.role === 'res_responsible' ? 'Ожидающие мероприятий' : user.role === 'uploader' ? 'Ожидающие проверки АСКУЭ' : 'Уведомления', roles: ['admin', 'uploader', 'res_responsible'] },
-  { id: 'reports', label: 'Отчеты', roles: ['admin'] },
-  { id: 'settings', label: 'Настройки', roles: ['admin'] }
-];
+    { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
+    { id: 'notifications', label: userRole === 'res_responsible' ? 'Ожидающие мероприятий' : userRole === 'uploader' ? 'Ожидающие проверки АСКУЭ' : 'Уведомления', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'reports', label: 'Отчеты', roles: ['admin'] },
+    { id: 'settings', label: 'Настройки', roles: ['admin'] }
+  ];
 
   const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
 
