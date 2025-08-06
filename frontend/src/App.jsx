@@ -556,7 +556,7 @@ function FileUpload({ selectedRes }) {
 // КОМПОНЕНТ УВЕДОМЛЕНИЙ
 // =====================================================
 
-function Notifications() {
+function Notifications({ filterType }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -570,21 +570,23 @@ function Notifications() {
   }, []);
 
   const loadNotifications = async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      // Фильтруем по типу в зависимости от роли
-      const filtered = response.data.filter(n => {
-        if (user.role === 'res_responsible') return n.type === 'error';
-        if (user.role === 'uploader') return n.type === 'pending_askue';
-        return true; // admin видит все
-      });
-      setNotifications(filtered);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const response = await api.get('/api/notifications');
+    // Фильтруем по переданному типу или по роли
+    const filtered = response.data.filter(n => {
+      if (filterType) return n.type === filterType;
+      // Старая логика для обратной совместимости
+      if (user.role === 'res_responsible') return n.type === 'error';
+      if (user.role === 'uploader') return n.type === 'pending_askue';
+      return true;
+    });
+    setNotifications(filtered);
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleNotificationClick = (notif) => {
     if (notif.type === 'error' && user.role === 'res_responsible') {
@@ -763,24 +765,7 @@ function Notifications() {
       )}
     </div>
   );
-  const loadNotifications = async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      // Фильтруем по переданному типу
-      const filtered = response.data.filter(n => {
-        if (filterType) return n.type === filterType;
-        // Старая логика для обратной совместимости
-        if (user.role === 'res_responsible') return n.type === 'error';
-        if (user.role === 'uploader') return n.type === 'pending_askue';
-        return true;
-      });
-      setNotifications(filtered);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  
 }
 
 // =====================================================
