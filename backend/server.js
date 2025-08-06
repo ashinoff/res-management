@@ -618,6 +618,14 @@ app.post('/api/upload/analyze',
       if (analysisResult.errors.length > 0) {
         await createNotifications(userId, resId, analysisResult.errors);
       }
+
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (err) {
+        console.error('Error deleting uploaded file:', err);
+      }
       
       res.json({
         message: 'File processed successfully',
@@ -1060,6 +1068,8 @@ python.on('close', async (code) => {
       error: result.summary,
       details: result.details  // <-- ДОБАВЬ ЭТО
     });
+    console.log('Added error for notification:', fileName); // <-- добавь для отладки
+}
   }
   
   // Удаляем файл после обработки
@@ -1104,6 +1114,7 @@ async function updatePuStatus(puNumber, status, errorDetails) {
 
 // Создание уведомлений об ошибках с деталями
 async function createNotifications(fromUserId, resId, errors) {
+  console.log('Creating notifications for errors:', errors);
   const responsibles = await User.findAll({
     where: {
       resId,
