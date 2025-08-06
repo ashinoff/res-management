@@ -176,14 +176,15 @@ function NetworkStructure({ selectedRes }) {
   };
 
   const getStatusColor = (status) => {
-    switch(status) {
-      case 'checked_ok': return 'status-ok';
-      case 'checked_error': return 'status-error';
-      case 'not_checked': return 'status-unchecked';
-      case 'empty': return 'status-empty';
-      default: return 'status-empty';
-    }
-  };
+  switch(status) {
+    case 'checked_ok': return 'status-ok';
+    case 'checked_error': return 'status-error';
+    case 'not_checked': return 'status-unchecked';
+    case 'pending_recheck': return 'status-pending';  // <-- ДОБАВЬ
+    case 'empty': return 'status-empty';
+    default: return 'status-empty';
+  }
+};
 
   const handleNotifyCompleted = async (networkStructureId) => {
     try {
@@ -558,6 +559,11 @@ function FileUpload({ selectedRes }) {
 function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [comment, setComment] = useState('');
+  const [checkFromDate, setCheckFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     loadNotifications();
@@ -566,7 +572,13 @@ function Notifications() {
   const loadNotifications = async () => {
     try {
       const response = await api.get('/api/notifications');
-      setNotifications(response.data);
+      // Фильтруем по типу в зависимости от роли
+      const filtered = response.data.filter(n => {
+        if (user.role === 'res_responsible') return n.type === 'error';
+        if (user.role === 'uploader') return n.type === 'pending_askue';
+        return true; // admin видит все
+      });
+      setNotifications(filtered);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {
@@ -574,28 +586,120 @@ function Notifications() {
     }
   };
 
-  const markAsRead = async (id) => {
+  const handleNotificationClick = (notif) => {
+    if (notif.type === 'error' && user.role === 'res_responsible') {
+      setSelectedNotification(notif);
+      setShowCompleteModal(true);
+    }
+  };
+
+  const handleCompleteWork = async () => {
+    if (!comment.trim() || comment.trim().length < 10) {
+      alert('Введите комментарий не менее 10 символов о выполненных работах');
+      return;
+    }
+
     try {
-      await api.put(`/api/notifications/${id}/read`);
-      setNotifications(notifications.map(n => 
-        n.id === id ? {...n, isRead: true} : n
-      ));
+      await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, {
+        comment,
+        checkFromDate
+      });
+      
+      alert('Мероприятия отмечены как выполненные');
+      setShowCompleteModal(false);
+      setComment('');
+      setSelectedNotification(null);
+      loadNotifications();
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+    }
+  };
+
+  const renderErrorDetails = (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      // Парсим детали ошибок если есть
+      let phases = { A: false, B: false, C: false };
+      if (data.errorDetails) {
+        // Ищем упоминания фаз в тексте ошибки
+        if (data.errorDetails.includes('Ua') || data.errorDetails.includes('фаза A')) phases.A = true;
+        if (data.errorDetails.includes('Ub') || data.errorDetails.includes('фаза B')) phases.B = true;
+        if (data.errorDetails.includes('Uc') || data.errorDetails.includes('фаза C')) phases.C = true;
+        
+        // Если явно не указаны фазы, но есть ошибка - помечаем все
+        if (!phases.A && !phases.B && !phases.C) {
+          phases = { A: true, B: true, C: true };
+        }
+      }
+      
+      return (
+        <div className="error-notification-content">
+          <div className="error-location">
+            <span className="label">РЭС:</span> {data.resName} | 
+            <span className="label"> ТП:</span> {data.tpName} | 
+            <span className="label"> ВЛ:</span> {data.vlName} | 
+            <span className="label"> Позиция:</span> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}
+          </div>
+          <div className="error-pu">
+            <span className="label">ПУ №:</span> {data.puNumber}
+          </div>
+          <div className="error-phases">
+            <span className="label">Фазы:</span>
+            <div className="phase-indicators">
+              <div className={`phase-box ${phases.A ? 'phase-error' : 'phase-ok'}`}>A</div>
+              <div className={`phase-box ${phases.B ? 'phase-error' : 'phase-ok'}`}>B</div>
+              <div className={`phase-box ${phases.C ? 'phase-error' : 'phase-ok'}`}>C</div>
+            </div>
+          </div>
+          <div className="error-text">
+            <span className="label">Ошибка:</span> {data.errorDetails}
+          </div>
+        </div>
+      );
+    } catch (e) {
+      return <div>{message}</div>;
+    }
+  };
+
+  const renderAskueDetails = (message) => {
+    try {
+      const data = JSON.parse(message);
+      return (
+        <div className="askue-notification-content">
+          <div className="askue-header">⚡ Требуется снять журнал событий</div>
+          <div className="askue-details">
+            <p><strong>ПУ №:</strong> {data.puNumber}</p>
+            <p><strong>ТП:</strong> {data.tpName} | <strong>ВЛ:</strong> {data.vlName}</p>
+            <p><strong>Позиция:</strong> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}</p>
+            <p className="date-from"><strong>Журнал с даты:</strong> {new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</p>
+            <div className="completed-info">
+              <p><strong>Выполненные работы:</strong> {data.completedComment}</p>
+              <p><strong>Дата выполнения:</strong> {new Date(data.completedAt).toLocaleString('ru-RU')}</p>
+            </div>
+          </div>
+        </div>
+      );
+    } catch (e) {
+      return <div>{message}</div>;
     }
   };
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
+  const title = user.role === 'res_responsible' ? 'Ожидающие мероприятий' : 
+                user.role === 'uploader' ? 'Ожидающие проверки АСКУЭ' : 
+                'Все уведомления';
+
   return (
     <div className="notifications">
-      <h2>Уведомления</h2>
+      <h2>{title}</h2>
       <div className="notifications-list">
         {notifications.map(notif => (
           <div 
             key={notif.id} 
-            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
-            onClick={() => !notif.isRead && markAsRead(notif.id)}
+            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''} ${notif.type === 'error' ? 'clickable' : ''}`}
+            onClick={() => handleNotificationClick(notif)}
           >
             <div className="notification-header">
               <span className="notification-from">От: {notif.fromUser?.fio || 'Система'}</span>
@@ -603,13 +707,60 @@ function Notifications() {
                 {new Date(notif.createdAt).toLocaleString('ru-RU')}
               </span>
             </div>
-            <div className="notification-message">{notif.message}</div>
-            {notif.ResUnit && (
-              <div className="notification-res">РЭС: {notif.ResUnit.name}</div>
-            )}
+            <div className="notification-body">
+              {notif.type === 'error' && renderErrorDetails(notif.message)}
+              {notif.type === 'pending_askue' && renderAskueDetails(notif.message)}
+              {notif.type !== 'error' && notif.type !== 'pending_askue' && notif.message}
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Модальное окно для выполнения мероприятий */}
+      {showCompleteModal && selectedNotification && (
+        <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
+          <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Отметить выполнение мероприятий</h3>
+              <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Что было выполнено? (минимум 10 символов)</label>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Опишите выполненные работы..."
+                  rows={4}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Журнал событий требуется с даты:</label>
+                <input
+                  type="date"
+                  value={checkFromDate}
+                  onChange={(e) => setCheckFromDate(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="confirm-btn" 
+                onClick={handleCompleteWork}
+                disabled={!comment.trim() || comment.trim().length < 10}
+              >
+                Мероприятия выполнены
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
