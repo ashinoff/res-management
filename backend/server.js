@@ -617,8 +617,15 @@ app.post('/api/upload/analyze',
       // Отправляем уведомления
       if (analysisResult.errors.length > 0) {
         console.log(`Creating notifications for ${analysisResult.errors.length} errors`);
-        await createNotifications(userId, resId, analysisResult.errors);
-      }
+        try {
+          await createNotifications(userId, resId, analysisResult.errors);
+          console.log('Notifications created successfully');
+        } catch (notifError) {
+          console.error('Error creating notifications:', notifError);
+          // НЕ падаем, продолжаем работу!
+        }
+}
+console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
       console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
 
       res.json({
@@ -1108,11 +1115,12 @@ async function updatePuStatus(puNumber, status, errorDetails) {
 // Создание уведомлений об ошибках с деталями
 async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
-  // Админы получают ВСЕ уведомления, остальные - только своего РЭС
+  console.log(`Looking for users with res_responsible or admin role for RES ${resId}`);
+  
   const responsibles = await User.findAll({
     where: {
       [Op.or]: [
-        { role: 'admin' },  // Админы без привязки к РЭС
+        { role: 'admin' },
         { 
           resId,
           role: 'res_responsible'
@@ -1122,8 +1130,14 @@ async function createNotifications(fromUserId, resId, errors) {
   });
   
   console.log(`Found ${responsibles.length} users to notify`);
+  if (responsibles.length === 0) {
+    console.log('WARNING: No users found to notify!');
+    return;
+  }
   
   for (const errorInfo of errors) {
+    console.log(`Processing error for PU: ${errorInfo.puNumber}`);
+    
     // Находим структуру сети для этого ПУ
     const networkStructure = await NetworkStructure.findOne({
       where: {
@@ -1136,34 +1150,12 @@ async function createNotifications(fromUserId, resId, errors) {
       include: [ResUnit]
     });
     
-    if (networkStructure) {
-      let position = 'start';
-      if (networkStructure.middlePu === errorInfo.puNumber) position = 'middle';
-      else if (networkStructure.endPu === errorInfo.puNumber) position = 'end';
-      
-      const errorData = {
-        puNumber: errorInfo.puNumber,
-        position: position,
-        tpName: networkStructure.tpName,
-        vlName: networkStructure.vlName,
-        resName: networkStructure.ResUnit.name,
-        errorDetails: errorInfo.error
-      };
-      
-      for (const responsible of responsibles) {
-        await Notification.create({
-          fromUserId,
-          toUserId: responsible.id,
-          resId,
-          networkStructureId: networkStructure.id,
-          type: 'error',
-          message: JSON.stringify(errorData),
-          isRead: false
-        });
-      }
+    console.log(`NetworkStructure found: ${networkStructure ? 'YES' : 'NO'}`);
+    
+    if (!networkStructure) {
+      console.log(`WARNING: No network structure found for PU ${errorInfo.puNumber}`);
+      continue;
     }
-  }
-}
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
