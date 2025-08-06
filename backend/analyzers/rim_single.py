@@ -49,9 +49,8 @@ class RIMAnalyzer:
                     # Пропускаем пустые строки
                     if not datetime_str or not event or datetime_str == '0':
                         continue
-# ДОБАВЬ ЭТУ ПРОВЕРКУ - пропускаем строки с текстовыми заголовками
-                    if 'Дата' in datetime_str or 'Напряжение' in event or 'напряжение' in event.lower():
-                        print(f"Row {row_idx}: skipping header row", file=sys.stderr)
+                    # Пропускаем только если это точно заголовок
+                    if datetime_str == 'Время' or event == 'Событие журнала напряжений':
                         continue
                     
                     # Колонка C - напряжение, D - процент, E - продолжительность
