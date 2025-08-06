@@ -27,6 +27,14 @@ class RIMAnalyzer:
             sheet = workbook.sheet_by_index(0)  # Берем первый лист
             
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
+
+            # Выведем первые 5 строк для проверки структуры
+            print("First 5 rows:", file=sys.stderr)
+            for i in range(min(5, sheet.nrows)):
+                row = []
+                for j in range(sheet.ncols):
+                    row.append(str(sheet.cell_value(i, j))[:30])  # первые 30 символов
+                print(f"Row {i}: {row}", file=sys.stderr)
             
             # Начинаем со 2-й строки (индекс 1), пропуская заголовок
             start_row = 1
