@@ -118,7 +118,8 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
   const menuItems = [
     { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
-    { id: 'notifications', label: userRole === 'res_responsible' ? 'Ожидающие мероприятий' : userRole === 'uploader' ? 'Ожидающие проверки АСКУЭ' : 'Уведомления', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
+    { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
@@ -762,6 +763,24 @@ function Notifications() {
       )}
     </div>
   );
+  const loadNotifications = async () => {
+    try {
+      const response = await api.get('/api/notifications');
+      // Фильтруем по переданному типу
+      const filtered = response.data.filter(n => {
+        if (filterType) return n.type === filterType;
+        // Старая логика для обратной совместимости
+        if (user.role === 'res_responsible') return n.type === 'error';
+        if (user.role === 'uploader') return n.type === 'pending_askue';
+        return true;
+      });
+      setNotifications(filtered);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 }
 
 // =====================================================
@@ -1011,20 +1030,17 @@ export default function App() {
         return <NetworkStructure selectedRes={selectedRes} />;
       case 'upload':
         return <FileUpload selectedRes={selectedRes} />;
-      case 'notifications':
-        return <Notifications />;
-      case 'pending':
-        return <div className="pending">
-          <h2>Ожидающие проверки</h2>
-          <p>Список фидеров, ожидающих проверки после выполнения мероприятий</p>
-        </div>;
+      case 'tech_pending':
+        return <Notifications filterType="error" />;
+      case 'askue_pending':
+        return <Notifications filterType="pending_askue" />;
       case 'reports':
         return <Reports />;
       case 'settings':
         return <Settings />;
       default:
         return <NetworkStructure selectedRes={selectedRes} />;
-    }
+     }
   };
 
   return (
