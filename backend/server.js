@@ -1117,7 +1117,7 @@ async function createNotifications(fromUserId, resId, errors) {
   const responsibles = await User.findAll({
     where: {
       resId,
-      role: 'res_responsible'
+      role: { [Op.in]: ['res_responsible', 'admin'] }
     }
   });
   
