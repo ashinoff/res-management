@@ -204,9 +204,9 @@ const PuStatus = sequelize.define('PuStatus', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'empty'),
-    defaultValue: 'not_checked'
-  },
+    type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'pending_recheck', 'empty'),
+  defaultValue: 'not_checked'
+},
   errorDetails: {
     type: DataTypes.TEXT,
     allowNull: true
@@ -252,13 +252,32 @@ const Notification = sequelize.define('Notification', {
       key: 'id'
     }
   },
+  puStatusId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: PuStatus,
+      key: 'id'
+    }
+  },
   type: {
-    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check'),
+    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'tech_issue', 'askue_check'),
     allowNull: false
   },
   message: {
     type: DataTypes.TEXT,
     allowNull: false
+  },
+  errorData: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  comment: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  checkFromDate: {
+    type: DataTypes.DATE,
+    allowNull: true
   },
   isRead: {
     type: DataTypes.BOOLEAN,
@@ -321,6 +340,7 @@ Notification.belongsTo(User, { as: 'fromUser', foreignKey: 'fromUserId' });
 Notification.belongsTo(User, { as: 'toUser', foreignKey: 'toUserId' });
 Notification.belongsTo(ResUnit, { foreignKey: 'resId' });
 Notification.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
+Notification.belongsTo(PuStatus, { foreignKey: 'puStatusId' });
 UploadHistory.belongsTo(User, { foreignKey: 'userId' });
 UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 
@@ -815,6 +835,79 @@ app.get('/api/reports/summary', authenticateToken, checkRole(['admin']), async (
     res.status(500).json({ error: error.message });
   }
 });
+// Отметить мероприятия как выполненные
+app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['res_responsible']), async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { comment, checkFromDate } = req.body;
+    
+    if (!comment || comment.trim().length < 10) {
+      return res.status(400).json({ error: 'Комментарий должен быть не менее 10 символов' });
+    }
+    
+    // Находим уведомление
+    const notification = await Notification.findByPk(req.params.id);
+    if (!notification) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Уведомление не найдено' });
+    }
+    
+    // Парсим данные об ошибке
+    const errorData = JSON.parse(notification.message);
+    
+    // Обновляем статус ПУ на pending_recheck
+    await PuStatus.update(
+      { status: 'pending_recheck' },
+      { 
+        where: { puNumber: errorData.puNumber },
+        transaction
+      }
+    );
+    
+    // Помечаем старое уведомление как прочитанное
+    await notification.update({ isRead: true }, { transaction });
+    
+    // Создаем новое уведомление для АСКУЭ
+    const askueUsers = await User.findAll({
+      where: {
+        resId: notification.resId,
+        role: 'uploader'
+      }
+    });
+    
+    const askueMessage = {
+      puNumber: errorData.puNumber,
+      position: errorData.position,
+      tpName: errorData.tpName,
+      vlName: errorData.vlName,
+      resName: errorData.resName,
+      checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
+      completedComment: comment,
+      completedBy: req.user.id,
+      completedAt: new Date()
+    };
+    
+    for (const askueUser of askueUsers) {
+      await Notification.create({
+        fromUserId: req.user.id,
+        toUserId: askueUser.id,
+        resId: notification.resId,
+        networkStructureId: notification.networkStructureId,
+        type: 'pending_askue',
+        message: JSON.stringify(askueMessage),
+        isRead: false
+      }, { transaction });
+    }
+    
+    await transaction.commit();
+    res.json({ success: true, message: 'Мероприятия отмечены как выполненные' });
+    
+  } catch (error) {
+    await transaction.rollback();
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
@@ -965,6 +1058,7 @@ python.on('close', async (code) => {
     errors.push({
       puNumber: fileName,
       error: result.summary
+      details: result.details  // <-- ДОБАВЬ ЭТО
     });
   }
   
@@ -1008,7 +1102,7 @@ async function updatePuStatus(puNumber, status, errorDetails) {
   }
 }
 
-// Создание уведомлений об ошибках
+// Создание уведомлений об ошибках с деталями
 async function createNotifications(fromUserId, resId, errors) {
   const responsibles = await User.findAll({
     where: {
@@ -1017,14 +1111,45 @@ async function createNotifications(fromUserId, resId, errors) {
     }
   });
   
-  for (const responsible of responsibles) {
-    await Notification.create({
-      fromUserId,
-      toUserId: responsible.id,
-      resId,
-      type: 'error',
-      message: `Обнаружено ${errors.length} ошибок при проверке`
+  for (const errorInfo of errors) {
+    // Находим структуру сети для этого ПУ
+    const networkStructure = await NetworkStructure.findOne({
+      where: {
+        [Op.or]: [
+          { startPu: errorInfo.puNumber },
+          { middlePu: errorInfo.puNumber },
+          { endPu: errorInfo.puNumber }
+        ]
+      },
+      include: [ResUnit]
     });
+    
+    if (networkStructure) {
+      let position = 'start';
+      if (networkStructure.middlePu === errorInfo.puNumber) position = 'middle';
+      else if (networkStructure.endPu === errorInfo.puNumber) position = 'end';
+      
+      const errorData = {
+        puNumber: errorInfo.puNumber,
+        position: position,
+        tpName: networkStructure.tpName,
+        vlName: networkStructure.vlName,
+        resName: networkStructure.ResUnit.name,
+        errorDetails: errorInfo.error
+      };
+      
+      for (const responsible of responsibles) {
+        await Notification.create({
+          fromUserId,
+          toUserId: responsible.id,
+          resId,
+          networkStructureId: networkStructure.id,
+          type: 'error',
+          message: JSON.stringify(errorData),
+          isRead: false
+        });
+      }
+    }
   }
 }
 // =====================================================
