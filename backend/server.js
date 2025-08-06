@@ -1017,81 +1017,81 @@ python.on('close', async (code) => {
     console.log('Parsed result:', JSON.stringify(result));
     
     if (result.success) {
-  const processed = [];
-  const errors = [];
-  
-  const fileName = originalFileName 
-    ? path.basename(originalFileName, path.extname(originalFileName))
-    : path.basename(filePath, path.extname(filePath));
-  
-  // Ищем ПУ в структуре сети
-  const networkStructure = await NetworkStructure.findOne({
-    where: {
-      [Op.or]: [
-        { startPu: fileName },
-        { endPu: fileName },
-        { middlePu: fileName }
-      ]
+      const processed = [];
+      const errors = [];
+      
+      const fileName = originalFileName 
+        ? path.basename(originalFileName, path.extname(originalFileName))
+        : path.basename(filePath, path.extname(filePath));
+      
+      // Ищем ПУ в структуре сети
+      const networkStructure = await NetworkStructure.findOne({
+        where: {
+          [Op.or]: [
+            { startPu: fileName },
+            { endPu: fileName },
+            { middlePu: fileName }
+          ]
+        }
+      });
+      
+      if (networkStructure) {
+        // Определяем позицию
+        let position = 'start';
+        if (networkStructure.endPu === fileName) position = 'end';
+        else if (networkStructure.middlePu === fileName) position = 'middle';
+        
+        // Создаем или обновляем статус ПУ
+        const [puStatus, created] = await PuStatus.upsert({
+          puNumber: fileName,
+          networkStructureId: networkStructure.id,
+          position: position,
+          status: result.has_errors ? 'checked_error' : 'checked_ok',
+          errorDetails: result.summary,
+          lastCheck: new Date()
+        });
+        
+        console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
+      } else {
+        console.log('NetworkStructure not found for PU:', fileName);
+      }
+      
+      processed.push({
+        puNumber: fileName,
+        status: result.has_errors ? 'checked_error' : 'checked_ok',
+        error: result.has_errors ? result.summary : null
+      });
+      
+      if (result.has_errors) {
+        errors.push({
+          puNumber: fileName,
+          error: result.summary,
+          details: result.details
+        });
+        console.log('Added error for notification:', fileName);
+      }
+      
+      // Удаляем файл после обработки
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Error deleting file:', err);
+      }
+      
+      resolve({ processed, errors });
+    } else {
+      resolve({
+        processed: [],
+        errors: [result.error]
+      });
     }
-  });
-  
-  if (networkStructure) {
-    // Определяем позицию
-    let position = 'start';
-    if (networkStructure.endPu === fileName) position = 'end';
-    else if (networkStructure.middlePu === fileName) position = 'middle';
-    
-    // Создаем или обновляем статус ПУ
-    const [puStatus, created] = await PuStatus.upsert({
-      puNumber: fileName,
-      networkStructureId: networkStructure.id,
-      position: position,
-      status: result.has_errors ? 'checked_error' : 'checked_ok',
-      errorDetails: result.summary,
-      lastCheck: new Date()
+  } catch (e) {
+    console.error('Failed to parse Python output:', output);
+    resolve({
+      processed: [],
+      errors: [`Ошибка парсинга результата: ${e.message}`]
     });
-    
-    console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
-  } else {
-    console.log('NetworkStructure not found for PU:', fileName);
   }
-  
-  processed.push({
-    puNumber: fileName,
-    status: result.has_errors ? 'checked_error' : 'checked_ok',
-    error: result.has_errors ? result.summary : null
-  });
-  
-  if (result.has_errors) {
-    errors.push({
-      puNumber: fileName,
-      error: result.summary,
-      details: result.details
-    });
-    console.log('Added error for notification:', fileName);
-  }
-  
-  // Удаляем файл после обработки
-  try {
-    fs.unlinkSync(filePath);
-  } catch (err) {
-    console.error('Error deleting file:', err);
-  }
-  
-  resolve({ processed, errors });
-} else {
-  resolve({
-    processed: [],
-    errors: [result.error]
-  });
-}
- catch (e) {
-  console.error('Failed to parse Python output:', output);
-  resolve({
-    processed: [],
-    errors: [`Ошибка парсинга результата: ${e.message}`]
-  });
-}
 });
 });  // <-- ДОБАВИТЬ: закрываем Promise
 }  // <-- ДОБАВИТЬ: закрываем функцию analyzeFile
