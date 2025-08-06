@@ -588,7 +588,15 @@ app.post('/api/upload/analyze',
     try {
       const { type } = req.body;
       const userId = req.user.id;
-      const resId = req.user.role === 'admin' ? req.body.resId : req.user.resId;
+      // Берем resId из body (если есть) или из токена пользователя
+      const resId = req.body.resId || req.user.resId;
+
+      if (!resId) {
+        return res.status(400).json({ error: 'Не выбран РЭС для загрузки' });
+      }
+      console.log('DEBUG: req.body =', req.body);
+      console.log('DEBUG: req.user =', req.user);
+      console.log('DEBUG: final resId =', resId);
       
       // Создаем запись в истории
       const uploadRecord = await UploadHistory.create({
