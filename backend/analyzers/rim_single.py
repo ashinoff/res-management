@@ -41,9 +41,20 @@ class RIMAnalyzer:
                     # Пропускаем пустые строки
                     if not datetime_str or not event or datetime_str == '0':
                         continue
+# ДОБАВЬ ЭТУ ПРОВЕРКУ - пропускаем строки с текстовыми заголовками
+                    if 'Дата' in datetime_str or 'Напряжение' in event or 'напряжение' in event.lower():
+                        print(f"Row {row_idx}: skipping header row", file=sys.stderr)
+                        continue
                     
                     # Колонка C - напряжение, D - процент, E - продолжительность
                     voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.')  # Колонка C
+                    
+                    try:
+                        voltage = float(voltage_str)
+                    except ValueError:
+                        print(f"Row {row_idx}: cannot parse voltage '{voltage_str}', skipping", file=sys.stderr)
+                        continue
+            
                     percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')  # Колонка D
                     duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')  # Колонка E
                     
