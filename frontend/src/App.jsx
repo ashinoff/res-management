@@ -261,49 +261,52 @@ function NetworkStructure({ selectedRes }) {
   
   // НОВОЕ - рендер ячейки
   const renderPuCell = (item, position) => {
-    const puNumber = position === 'start' ? item.startPu : 
-                     position === 'middle' ? item.middlePu : 
-                     item.endPu;
-    const isEditing = editingCell === `${item.id}-${position}`;
-    
-    if (isEditing) {
-      return (
-        <div className="edit-cell">
-          <input
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') saveEdit(item);
-              if (e.key === 'Escape') cancelEdit();
-            }}
-            autoFocus
-          />
-          <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
-          <button onClick={cancelEdit} className="cancel-btn">✗</button>
-        </div>
-      );
-    }
-    
+  const puNumber = position === 'start' ? item.startPu : 
+                   position === 'middle' ? item.middlePu : 
+                   item.endPu;
+  const isEditing = editingCell === `${item.id}-${position}`;
+  
+  if (isEditing) {
     return (
-      <div 
-        onClick={() => handleCellClick(item, position)}
-        onDoubleClick={() => startEdit(item, position)}
-        style={{ cursor: user.role === 'admin' ? 'pointer' : 'default' }}
-        title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
-      >
-        {puNumber ? (
-          <div className={`status-box ${getStatusColor(
-            item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
-          )}`}>
-            <span className="pu-number">{puNumber}</span>
-          </div>
-        ) : (
-          <div className="status-box status-empty">X</div>
-        )}
+      <div className="edit-cell">
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') saveEdit(item);
+            if (e.key === 'Escape') cancelEdit();
+          }}
+          autoFocus
+        />
+        <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
+        <button onClick={cancelEdit} className="cancel-btn">✗</button>
       </div>
     );
-  };
+  }
+  
+  return (
+    <div 
+      className="pu-cell"
+      onDoubleClick={() => startEdit(item, position)}
+      title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
+    >
+      {puNumber ? (
+        <>
+          <div 
+            className={`status-box ${getStatusColor(
+              item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
+            )}`}
+            onClick={() => handleCellClick(item, position)}
+          />
+          <span className="pu-number">{puNumber}</span>
+        </>
+      ) : (
+        <div className="status-box status-empty">X</div>
+      )}
+    </div>
+  );
+};
   
   if (loading) return <div className="loading">Загрузка...</div>;
   
