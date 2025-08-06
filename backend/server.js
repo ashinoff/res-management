@@ -1156,6 +1156,33 @@ async function createNotifications(fromUserId, resId, errors) {
       console.log(`WARNING: No network structure found for PU ${errorInfo.puNumber}`);
       continue;
     }
+    
+    let position = 'start';
+    if (networkStructure.middlePu === errorInfo.puNumber) position = 'middle';
+    else if (networkStructure.endPu === errorInfo.puNumber) position = 'end';
+    
+    const errorData = {
+      puNumber: errorInfo.puNumber,
+      position: position,
+      tpName: networkStructure.tpName,
+      vlName: networkStructure.vlName,
+      resName: networkStructure.ResUnit.name,
+      errorDetails: errorInfo.error
+    };
+    
+    for (const responsible of responsibles) {
+      await Notification.create({
+        fromUserId,
+        toUserId: responsible.id,
+        resId,
+        networkStructureId: networkStructure.id,
+        type: 'error',
+        message: JSON.stringify(errorData),
+        isRead: false
+      });
+    }
+  }
+}
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
