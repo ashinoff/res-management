@@ -1066,10 +1066,9 @@ python.on('close', async (code) => {
     errors.push({
       puNumber: fileName,
       error: result.summary,
-      details: result.details  // <-- ДОБАВЬ ЭТО
+      details: result.details
     });
-    console.log('Added error for notification:', fileName); // <-- добавь для отладки
-}
+    console.log('Added error for notification:', fileName);
   }
   
   // Удаляем файл после обработки
