@@ -616,16 +616,14 @@ app.post('/api/upload/analyze',
       
       // Отправляем уведомления
       if (analysisResult.errors.length > 0) {
+        console.log(`Creating notifications for ${analysisResult.errors.length} errors`);
         await createNotifications(userId, resId, analysisResult.errors);
       }
 
-      try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-      } catch (err) {
-        console.error('Error deleting uploaded file:', err);
-      }
+      console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
+      
+      
+      
       
       res.json({
         message: 'File processed successfully',
