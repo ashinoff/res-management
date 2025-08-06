@@ -847,3 +847,157 @@ css/* Стили для ячейки с ПУ */
   padding: 8px 4px;
   vertical-align: middle;
 }
+/* Оранжевый статус для ожидающих повторной проверки */
+.status-pending {
+  background-color: #ff9800;
+  border: 2px solid #f57c00;
+}
+
+/* Стили для уведомлений об ошибках */
+.notification.error {
+  border-left: 4px solid #f44336;
+  background-color: #ffebee;
+}
+
+.notification.error.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notification.error.clickable:hover {
+  background-color: #ffcdd2;
+  transform: translateX(2px);
+}
+
+.error-notification-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.error-location {
+  color: #666;
+}
+
+.error-pu {
+  font-weight: bold;
+  color: #333;
+}
+
+.error-phases {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.phase-indicators {
+  display: flex;
+  gap: 5px;
+}
+
+.phase-box {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.phase-ok {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.phase-error {
+  background-color: #f44336;
+  color: white;
+}
+
+.error-text {
+  margin-top: 4px;
+  color: #d32f2f;
+  font-style: italic;
+}
+
+.label {
+  font-weight: 600;
+  color: #555;
+}
+
+/* Стили для уведомлений АСКУЭ */
+.notification.pending_askue {
+  border-left: 4px solid #ff9800;
+  background-color: #fff3e0;
+}
+
+.askue-notification-content {
+  font-size: 14px;
+}
+
+.askue-header {
+  font-weight: bold;
+  color: #f57c00;
+  margin-bottom: 8px;
+}
+
+.askue-details p {
+  margin: 4px 0;
+}
+
+.date-from {
+  background-color: #ffe0b2;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.completed-info {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ffcc80;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Модальное окно выполнения работ */
+.complete-work-modal {
+  width: 500px;
+  max-width: 90%;
+}
+
+.complete-work-modal textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.complete-work-modal input[type="date"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.confirm-btn {
+  background-color: #4CAF50;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.confirm-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.confirm-btn:not(:disabled):hover {
+  background-color: #45a049;
+}
