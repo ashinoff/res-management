@@ -1001,3 +1001,32 @@ css/* Стили для ячейки с ПУ */
 .confirm-btn:not(:disabled):hover {
   background-color: #45a049;
 }
+/* Центрирование заголовков и содержимого колонок */
+.structure-table th,
+.structure-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Центрирование ячеек с ПУ */
+.pu-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.status-box {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #333;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.pu-number {
+  font-size: 12px;
+  text-align: center;
+  word-break: break-all;
+}
