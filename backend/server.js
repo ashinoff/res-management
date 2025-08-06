@@ -1086,7 +1086,7 @@ python.on('close', async (code) => {
     errors: [result.error]
   });
 }
-} catch (e) {
+ catch (e) {
   console.error('Failed to parse Python output:', output);
   resolve({
     processed: [],
