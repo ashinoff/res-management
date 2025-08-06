@@ -619,12 +619,8 @@ app.post('/api/upload/analyze',
         console.log(`Creating notifications for ${analysisResult.errors.length} errors`);
         await createNotifications(userId, resId, analysisResult.errors);
       }
-
       console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
-      
-      
-      
-      
+
       res.json({
         message: 'File processed successfully',
         processed: analysisResult.processed.length,
@@ -735,8 +731,8 @@ app.post('/api/network/upload-full-structure',
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
     const whereClause = req.user.role === 'admin' 
-      ? {} 
-      : { toUserId: req.user.id };
+      ? {}  // Админ видит ВСЕ
+      : { toUserId: req.user.id };  // Остальные только свои
     
     const notifications = await Notification.findAll({
       where: whereClause,
@@ -1112,12 +1108,20 @@ async function updatePuStatus(puNumber, status, errorDetails) {
 // Создание уведомлений об ошибках с деталями
 async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
+  // Админы получают ВСЕ уведомления, остальные - только своего РЭС
   const responsibles = await User.findAll({
     where: {
-      resId,
-      role: { [Op.in]: ['res_responsible', 'admin'] }
+      [Op.or]: [
+        { role: 'admin' },  // Админы без привязки к РЭС
+        { 
+          resId,
+          role: 'res_responsible'
+        }
+      ]
     }
   });
+  
+  console.log(`Found ${responsibles.length} users to notify`);
   
   for (const errorInfo of errors) {
     // Находим структуру сети для этого ПУ
