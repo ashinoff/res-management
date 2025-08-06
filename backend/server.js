@@ -260,8 +260,8 @@ const Notification = sequelize.define('Notification', {
     }
   },
   type: {
-    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'tech_issue', 'askue_check'),
-    allowNull: false
+  type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'pending_askue'),
+  allowNull: false
   },
   message: {
     type: DataTypes.TEXT,
