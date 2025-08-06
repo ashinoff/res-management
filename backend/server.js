@@ -536,6 +536,29 @@ app.post('/api/network/upload-structure',
     }
 });
 
+// ОБНОВЛЕНИЕ структуры сети (только админ)
+app.put('/api/network/structure/:id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { startPu, middlePu, endPu } = req.body;
+      
+      await NetworkStructure.update({
+        startPu: startPu || null,
+        middlePu: middlePu || null,
+        endPu: endPu || null,
+        lastUpdate: new Date()
+      }, {
+        where: { id: req.params.id }
+      });
+      
+      res.json({ success: true, message: 'Структура обновлена' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // 5. ЗАГРУЗКА ФАЙЛОВ ДЛЯ АНАЛИЗА
 app.post('/api/upload/analyze',
   authenticateToken,
