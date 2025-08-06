@@ -153,8 +153,12 @@ function NetworkStructure({ selectedRes }) {
   const { user } = useContext(AuthContext);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);    // <-- Добавить
-  const [selectedPosition, setSelectedPosition] = useState(null); // <-- Добавить
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedPosition, setSelectedPosition] = useState(null);
+  
+  // НОВОЕ - для редактирования
+  const [editingCell, setEditingCell] = useState(null);
+  const [editValue, setEditValue] = useState('');
   
   useEffect(() => {
     loadNetworkStructure();
@@ -193,7 +197,7 @@ function NetworkStructure({ selectedRes }) {
     }
   };
 
-   const handleCellClick = (item, position) => {
+  const handleCellClick = (item, position) => {
     const puNumber = position === 'start' ? item.startPu : 
                      position === 'middle' ? item.middlePu : 
                      item.endPu;
@@ -205,20 +209,114 @@ function NetworkStructure({ selectedRes }) {
       
       if (status && status.status === 'checked_error') {
         setSelectedDetails(status);
-        setSelectedItem(item);  // <-- ДОБАВИЛ!
-        setSelectedPosition(position);  // <-- ДОБАВИЛ!
+        setSelectedItem(item);
+        setSelectedPosition(position);
         setModalOpen(true);
       }
     }
   };
   
+  // НОВОЕ - начать редактирование
+  const startEdit = (item, position) => {
+    if (user.role !== 'admin') return;
+    
+    setEditingCell(`${item.id}-${position}`);
+    const currentValue = position === 'start' ? item.startPu : 
+                        position === 'middle' ? item.middlePu : 
+                        item.endPu;
+    setEditValue(currentValue || '');
+  };
+  
+  // НОВОЕ - сохранить изменения
+  const saveEdit = async (item) => {
+    try {
+      const updateData = {
+        startPu: item.startPu,
+        middlePu: item.middlePu,
+        endPu: item.endPu
+      };
+      
+      // Обновляем поле которое редактировали
+      const position = editingCell.split('-')[1];
+      if (position === 'start') updateData.startPu = editValue || null;
+      if (position === 'middle') updateData.middlePu = editValue || null;
+      if (position === 'end') updateData.endPu = editValue || null;
+      
+      await api.put(`/api/network/structure/${item.id}`, updateData);
+      
+      // Перезагружаем данные
+      await loadNetworkStructure();
+      setEditingCell(null);
+      setEditValue('');
+    } catch (error) {
+      alert('Ошибка при сохранении');
+    }
+  };
+  
+  // НОВОЕ - отмена редактирования
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+  
+  // НОВОЕ - рендер ячейки
+  const renderPuCell = (item, position) => {
+    const puNumber = position === 'start' ? item.startPu : 
+                     position === 'middle' ? item.middlePu : 
+                     item.endPu;
+    const isEditing = editingCell === `${item.id}-${position}`;
+    
+    if (isEditing) {
+      return (
+        <div className="edit-cell">
+          <input
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') saveEdit(item);
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            autoFocus
+          />
+          <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
+          <button onClick={cancelEdit} className="cancel-btn">✗</button>
+        </div>
+      );
+    }
+    
+    return (
+      <div 
+        onClick={() => handleCellClick(item, position)}
+        onDoubleClick={() => startEdit(item, position)}
+        style={{ cursor: user.role === 'admin' ? 'pointer' : 'default' }}
+        title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
+      >
+        {puNumber ? (
+          <div className={`status-box ${getStatusColor(
+            item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
+          )}`}>
+            <span className="pu-number">{puNumber}</span>
+          </div>
+        ) : (
+          <div className="status-box status-empty">X</div>
+        )}
+      </div>
+    );
+  };
+  
   if (loading) return <div className="loading">Загрузка...</div>;
+  
   const filteredData = networkData.filter(item => 
     !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
   );
+  
   return (
     <div className="network-structure">
       <h2>Структура сети</h2>
+      {user.role === 'admin' && (
+        <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
+      )}
       <div className="search-box">
         <input 
           type="text"
@@ -248,36 +346,9 @@ function NetworkStructure({ selectedRes }) {
                 <td>{item.ResUnit?.name}</td>
                 <td>{item.tpName}</td>
                 <td>{item.vlName}</td>
-                <td onClick={() => handleCellClick(item, 'start')}>
-                  {item.startPu ? (
-                    <div className={`status-box ${getStatusColor(
-                      item.PuStatuses?.find(s => s.puNumber === item.startPu && s.position === 'start')?.status || 'not_checked'
-                    )}`}>
-                    </div>
-                  ) : (
-                    <div className="status-box status-empty">X</div>
-                  )}
-                </td>
-                <td onClick={() => handleCellClick(item, 'middle')}>
-                  {item.middlePu ? (
-                    <div className={`status-box ${getStatusColor(
-                      item.PuStatuses?.find(s => s.puNumber === item.middlePu && s.position === 'middle')?.status || 'not_checked'
-                    )}`}>
-                    </div>
-                  ) : (
-                    <div className="status-box status-empty">X</div>
-                  )}
-                </td>
-                <td onClick={() => handleCellClick(item, 'end')}>
-                  {item.endPu ? (
-                    <div className={`status-box ${getStatusColor(
-                      item.PuStatuses?.find(s => s.puNumber === item.endPu && s.position === 'end')?.status || 'not_checked'
-                    )}`}>
-                    </div>
-                  ) : (
-                    <div className="status-box status-empty">X</div>
-                  )}
-                </td>
+                <td>{renderPuCell(item, 'start')}</td>
+                <td>{renderPuCell(item, 'middle')}</td>
+                <td>{renderPuCell(item, 'end')}</td>
                 <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
                 {user.role === 'res_responsible' && (
                   <td>
@@ -304,9 +375,9 @@ function NetworkStructure({ selectedRes }) {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         details={selectedDetails}
-        tpName={selectedItem?.tpName}  // <-- Добавить
-        vlName={selectedItem?.vlName}  // <-- Добавить
-        position={selectedPosition}     // <-- Добавить
+        tpName={selectedItem?.tpName}
+        vlName={selectedItem?.vlName}
+        position={selectedPosition}
       />
     </div>
   );
