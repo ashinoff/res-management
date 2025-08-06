@@ -1057,7 +1057,7 @@ python.on('close', async (code) => {
   if (result.has_errors) {
     errors.push({
       puNumber: fileName,
-      error: result.summary
+      error: result.summary,
       details: result.details  // <-- ДОБАВЬ ЭТО
     });
   }
