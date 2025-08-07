@@ -651,8 +651,9 @@ button:disabled {
   border: 1px solid #ffeaa7;
   border-radius: 6px;
   color: #856404;
-  font-family: monospace;
-  font-size: 14px;
+  font-size: 16px;          /* Увеличил размер */
+  font-weight: 500;         /* Сделал жирнее */
+  line-height: 1.5;         /* Добавил высоту строки */
 }
 
 .error-details-grid {
@@ -1029,4 +1030,221 @@ css/* Стили для ячейки с ПУ */
   font-size: 12px;
   text-align: center;
   word-break: break-all;
+}
+/* ===================================================== 
+   ДОПОЛНИТЕЛЬНЫЕ СТИЛИ ДЛЯ ЗАГРУЗКИ ФАЙЛОВ
+   ===================================================== */
+
+/* Информация о загрузке */
+.upload-info {
+  background: #f0f4f8;
+  border: 1px solid #d0d8e0;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.upload-info p {
+  margin: 5px 0;
+}
+
+.upload-info .hint {
+  color: #666;
+  font-size: 14px;
+  font-style: italic;
+}
+
+/* Информация о выбранном файле */
+.file-info {
+  background: #e8f4fd;
+  border: 1px solid #b3d9f2;
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.file-info .pu-number {
+  color: #0066cc;
+  font-size: 16px;
+  margin-top: 5px;
+}
+
+/* Результаты загрузки */
+.upload-result {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 8px;
+  border: 2px solid;
+}
+
+.upload-result.success {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.upload-result.error {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.upload-result h3 {
+  margin: 0 0 10px 0;
+}
+
+.upload-result details {
+  margin-top: 10px;
+}
+
+.upload-result pre {
+  background: rgba(0,0,0,0.05);
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+/* Анимация для кнопки загрузки */
+.upload-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.upload-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* ===================================================== 
+   СТИЛИ ДЛЯ НАСТРОЕК И ОЧИСТКИ ДАННЫХ
+   ===================================================== */
+
+/* Секция очистки данных */
+.clear-data-section {
+  background: #fef2f2;
+  border: 2px solid #fca5a5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.clear-data-section h3 {
+  color: #dc2626;
+  margin-top: 0;
+}
+
+/* Опасная кнопка */
+.danger-btn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: auto;
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Результаты загрузки структуры */
+.upload-results {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.upload-results h4 {
+  margin-top: 0;
+  color: #2c3e50;
+}
+
+.errors-list {
+  margin-top: 10px;
+}
+
+.errors-list ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.errors-list li {
+  background: #ffebee;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  color: #c62828;
+  font-size: 14px;
+}
+
+/* Сообщения об успехе/ошибке */
+.success-message {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.error-message {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+/* Имя файла в настройках */
+.file-name {
+  color: #666;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+/* Группа чекбоксов */
+.checkbox-group {
+  margin: 15px 0;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+/* Раздел загрузки структуры */
+.upload-structure h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+/* Кнопка загрузки в настройках */
+.settings .upload-btn {
+  background-color: #3498db;
+  margin-top: 10px;
+}
+
+.settings .upload-btn:hover:not(:disabled) {
+  background-color: #2980b9;
 }
