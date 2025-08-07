@@ -588,15 +588,19 @@ app.post('/api/upload/analyze',
     try {
       const { type } = req.body;
       const userId = req.user.id;
-      // Берем resId из body (если есть) или из токена пользователя
+      
+      // ВАЖНО: Берем resId из body (если есть) или из токена пользователя
       const resId = req.body.resId || req.user.resId;
+
+      console.log('=== UPLOAD ANALYZE START ===');
+      console.log('User:', req.user);
+      console.log('Request body:', req.body);
+      console.log('Final resId:', resId);
+      console.log('File:', req.file?.originalname);
 
       if (!resId) {
         return res.status(400).json({ error: 'Не выбран РЭС для загрузки' });
       }
-      console.log('DEBUG: req.body =', req.body);
-      console.log('DEBUG: req.user =', req.user);
-      console.log('DEBUG: final resId =', resId);
       
       // Создаем запись в истории
       const uploadRecord = await UploadHistory.create({
@@ -607,13 +611,20 @@ app.post('/api/upload/analyze',
         status: 'processing'
       });
       
-      // Запускаем анализ (заглушка - замени на реальный Python скрипт)
-      const analysisResult = await analyzeFile(req.file.path, type, req.file.originalname);
+      console.log('Upload record created:', uploadRecord.id);
       
-      // Обновляем статусы ПУ
-      for (const result of analysisResult.processed) {
-        await updatePuStatus(result.puNumber, result.status, result.error);
-      }
+      // Запускаем анализ с передачей оригинального имени файла
+      console.log('Starting analysis...');
+      const analysisResult = await analyzeFile(
+        req.file.path, 
+        type, 
+        req.file.originalname  // ВАЖНО: передаем оригинальное имя
+      );
+      
+      console.log('Analysis result:', {
+        processed: analysisResult.processed.length,
+        errors: analysisResult.errors.length
+      });
       
       // Обновляем историю
       await uploadRecord.update({
@@ -622,7 +633,7 @@ app.post('/api/upload/analyze',
         status: 'completed'
       });
       
-      // Отправляем уведомления
+      // Отправляем уведомления если есть ошибки
       if (analysisResult.errors.length > 0) {
         console.log(`Creating notifications for ${analysisResult.errors.length} errors`);
         try {
@@ -632,21 +643,33 @@ app.post('/api/upload/analyze',
           console.error('Error creating notifications:', notifError);
           // НЕ падаем, продолжаем работу!
         }
-}
-console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
-      console.log(`Analysis complete: processed=${analysisResult.processed.length}, errors=${analysisResult.errors.length}`);
-
+      }
+      
+      console.log('=== UPLOAD ANALYZE COMPLETE ===');
+      
+      // Возвращаем результат
       res.json({
-        message: 'File processed successfully',
+        success: true,
+        message: 'Файл обработан успешно',
         processed: analysisResult.processed.length,
-        errors: analysisResult.errors.length
+        errors: analysisResult.errors.length,
+        details: analysisResult.processed  // Добавляем детали для отладки
       });
       
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error('Upload analyze error:', error);
+      
+      // Обновляем статус в истории
+      if (uploadRecord) {
+        await uploadRecord.update({ status: 'failed' });
+      }
+      
+      res.status(500).json({ 
+        success: false,
+        error: error.message 
+      });
     }
 });
-
 // 4.5 ЗАГРУЗКА ПОЛНОЙ СТРУКТУРЫ СЕТИ С ОБНОВЛЕНИЕМ
 app.post('/api/network/upload-full-structure', 
   authenticateToken, 
@@ -957,152 +980,181 @@ async function analyzeFile(filePath, type, originalFileName = null) {
     }
     
     // Пробуем запустить Python
-let python;
-try {
-  python = spawn('python3', [scriptPath, filePath]);
-  console.log('Python3 spawn created successfully');
-} catch (err) {
-  console.error('Failed to spawn python3, trying python:', err);
-  try {
-    python = spawn('python', [scriptPath, filePath]);
-    console.log('Python spawn created successfully');
-  } catch (err2) {
-    console.error('Both python3 and python failed:', err2);
-    return resolve({
-      processed: [],
-      errors: ['Python не установлен на сервере']
-    });
-  }
-}
-
-console.log('Running Python script:', scriptPath);
-console.log('Analyzing file:', filePath);
-
-// Проверяем существование Python скрипта
-if (!fs.existsSync(scriptPath)) {
-  console.error('Python script not found:', scriptPath);
-  return resolve({
-    processed: [],
-    errors: [`Python скрипт не найден: ${scriptPath}`]
-  });
-}
-
-let output = '';
-let errorOutput = '';
-
-python.stdout.on('data', (data) => {
-  output += data.toString();
-  console.log('Python stdout chunk:', data.toString());
-});
-
-python.stderr.on('data', (data) => {
-  errorOutput += data.toString();
-  console.error('Python stderr:', data.toString());
-});
-
-python.on('error', (error) => {
-  console.error('Python process error:', error);
-  return resolve({
-    processed: [],
-    errors: [`Ошибка запуска Python: ${error.message}`]
-  });
-});
-
-python.on('close', async (code) => {
-  console.log('Python process closed with code:', code);
-  console.log('Final output length:', output.length);
-  console.log('Final output:', output);
-  console.log('Final errors:', errorOutput);
-  
-  if (code !== 0) {
-    return resolve({
-      processed: [],
-      errors: [`Ошибка анализа (код ${code}): ${errorOutput}`]
-    });
-  }
-  
-  try {
-    const result = JSON.parse(output);
-    console.log('Parsed result:', JSON.stringify(result));
-    
-    if (result.success) {
-      const processed = [];
-      const errors = [];
-      
-      const fileName = originalFileName 
-        ? path.basename(originalFileName, path.extname(originalFileName))
-        : path.basename(filePath, path.extname(filePath));
-      
-      // Ищем ПУ в структуре сети
-      const networkStructure = await NetworkStructure.findOne({
-        where: {
-          [Op.or]: [
-            { startPu: fileName },
-            { endPu: fileName },
-            { middlePu: fileName }
-          ]
-        }
-      });
-      
-      if (networkStructure) {
-        // Определяем позицию
-        let position = 'start';
-        if (networkStructure.endPu === fileName) position = 'end';
-        else if (networkStructure.middlePu === fileName) position = 'middle';
-        
-        // Создаем или обновляем статус ПУ
-        const [puStatus, created] = await PuStatus.upsert({
-          puNumber: fileName,
-          networkStructureId: networkStructure.id,
-          position: position,
-          status: result.has_errors ? 'checked_error' : 'checked_ok',
-          errorDetails: result.summary,
-          lastCheck: new Date()
-        });
-        
-        console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
-      } else {
-        console.log('NetworkStructure not found for PU:', fileName);
-      }
-      
-      processed.push({
-        puNumber: fileName,
-        status: result.has_errors ? 'checked_error' : 'checked_ok',
-        error: result.has_errors ? result.summary : null
-      });
-      
-      if (result.has_errors) {
-        errors.push({
-          puNumber: fileName,
-          error: result.summary,
-          details: result.details
-        });
-        console.log('Added error for notification:', fileName);
-      }
-      
-      // Удаляем файл после обработки
+    let python;
+    try {
+      python = spawn('python3', [scriptPath, filePath]);
+      console.log('Python3 spawn created successfully');
+    } catch (err) {
+      console.error('Failed to spawn python3, trying python:', err);
       try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error('Error deleting file:', err);
+        python = spawn('python', [scriptPath, filePath]);
+        console.log('Python spawn created successfully');
+      } catch (err2) {
+        console.error('Both python3 and python failed:', err2);
+        return resolve({
+          processed: [],
+          errors: ['Python не установлен на сервере']
+        });
       }
-      
-      resolve({ processed, errors });
-    } else {
-      resolve({
+    }
+
+    console.log('Running Python script:', scriptPath);
+    console.log('Analyzing file:', filePath);
+
+    // Проверяем существование Python скрипта
+    if (!fs.existsSync(scriptPath)) {
+      console.error('Python script not found:', scriptPath);
+      return resolve({
         processed: [],
-        errors: [result.error]
+        errors: [`Python скрипт не найден: ${scriptPath}`]
       });
     }
-  } catch (e) {
-    console.error('Failed to parse Python output:', output);
-    resolve({
-      processed: [],
-      errors: [`Ошибка парсинга результата: ${e.message}`]
+
+    let output = '';
+    let errorOutput = '';
+
+    python.stdout.on('data', (data) => {
+      output += data.toString();
+      console.log('Python stdout chunk:', data.toString());
     });
-  }
-});
-});  // <-- ДОБАВИТЬ: закрываем Promise
+
+    python.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+      console.error('Python stderr:', data.toString());
+    });
+
+    python.on('error', (error) => {
+      console.error('Python process error:', error);
+      return resolve({
+        processed: [],
+        errors: [`Ошибка запуска Python: ${error.message}`]
+      });
+    });
+
+    python.on('close', async (code) => {
+      console.log('Python process closed with code:', code);
+      console.log('Final output length:', output.length);
+      console.log('Final output:', output);
+      console.log('Final errors:', errorOutput);
+      
+      if (code !== 0) {
+        return resolve({
+          processed: [],
+          errors: [`Ошибка анализа (код ${code}): ${errorOutput}`]
+        });
+      }
+      
+      try {
+        // Парсим результат от Python
+        const result = JSON.parse(output);
+        console.log('Parsed result:', JSON.stringify(result));
+        
+        if (result.success) {
+          const processed = [];
+          const errors = [];
+          
+          // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: извлекаем номер ПУ из имени файла
+          const fileName = originalFileName 
+            ? path.basename(originalFileName, path.extname(originalFileName))
+            : path.basename(filePath, path.extname(filePath));
+          
+          console.log('Extracted PU number from filename:', fileName);
+          
+          // Ищем ПУ в структуре сети - ищем ТОЧНОЕ совпадение
+          const networkStructure = await NetworkStructure.findOne({
+            where: {
+              [Op.or]: [
+                { startPu: fileName },
+                { endPu: fileName },
+                { middlePu: fileName }
+              ]
+            },
+            include: [ResUnit]
+          });
+          
+          if (networkStructure) {
+            console.log(`Found network structure for PU ${fileName}: TP=${networkStructure.tpName}, VL=${networkStructure.vlName}`);
+            
+            // Определяем позицию
+            let position = 'start';
+            if (networkStructure.endPu === fileName) position = 'end';
+            else if (networkStructure.middlePu === fileName) position = 'middle';
+            
+            console.log(`PU position determined: ${position}`);
+            
+            // Создаем или обновляем статус ПУ
+            const [puStatus, created] = await PuStatus.upsert({
+              puNumber: fileName,
+              networkStructureId: networkStructure.id,
+              position: position,
+              status: result.has_errors ? 'checked_error' : 'checked_ok',
+              errorDetails: result.has_errors ? JSON.stringify({
+                summary: result.summary,
+                details: result.details
+              }) : null,
+              lastCheck: new Date()
+            });
+            
+            console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
+            
+            // Добавляем в processed
+            processed.push({
+              puNumber: fileName,
+              status: result.has_errors ? 'checked_error' : 'checked_ok',
+              error: result.has_errors ? result.summary : null
+            });
+            
+            // Если есть ошибки - добавляем для уведомлений
+            if (result.has_errors) {
+              errors.push({
+                puNumber: fileName,
+                error: result.summary,
+                details: result.details,
+                networkStructureId: networkStructure.id,
+                resId: networkStructure.resId
+              });
+              console.log('Added error for notification:', fileName);
+            }
+          } else {
+            console.log(`WARNING: NetworkStructure not found for PU: ${fileName}`);
+            console.log('This PU will not be processed and no notifications will be created!');
+            
+            // Все равно добавляем в processed чтобы показать что файл обработан
+            processed.push({
+              puNumber: fileName,
+              status: 'not_in_structure',
+              error: 'ПУ не найден в структуре сети'
+            });
+          }
+          
+          // Удаляем файл после обработки
+          try {
+            fs.unlinkSync(filePath);
+            console.log('Temporary file deleted');
+          } catch (err) {
+            console.error('Error deleting file:', err);
+          }
+          
+          console.log(`Analysis complete: processed=${processed.length}, errors=${errors.length}`);
+          resolve({ processed, errors });
+          
+        } else {
+          console.error('Python script returned success=false:', result.error);
+          resolve({
+            processed: [],
+            errors: [result.error || 'Неизвестная ошибка Python скрипта']
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse Python output:', e);
+        console.error('Raw output was:', output);
+        resolve({
+          processed: [],
+          errors: [`Ошибка парсинга результата: ${e.message}`]
+        });
+      }
+    });
+  });
 }  // <-- ДОБАВИТЬ: закрываем функцию analyzeFile
     
   
@@ -1125,13 +1177,14 @@ async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
   console.log(`Looking for users with res_responsible or admin role for RES ${resId}`);
   
+  // Находим всех кто должен получить уведомления
   const responsibles = await User.findAll({
     where: {
       [Op.or]: [
-        { role: 'admin' },
+        { role: 'admin' },  // Админы видят все
         { 
           resId,
-          role: 'res_responsible'
+          role: 'res_responsible'  // Ответственные только своего РЭС
         }
       ]
     }
@@ -1158,38 +1211,51 @@ async function createNotifications(fromUserId, resId, errors) {
       include: [ResUnit]
     });
     
-    console.log(`NetworkStructure found: ${networkStructure ? 'YES' : 'NO'}`);
-    
     if (!networkStructure) {
       console.log(`WARNING: No network structure found for PU ${errorInfo.puNumber}`);
       continue;
     }
     
+    console.log(`NetworkStructure found: TP=${networkStructure.tpName}, VL=${networkStructure.vlName}`);
+    
+    // Определяем позицию ПУ
     let position = 'start';
     if (networkStructure.middlePu === errorInfo.puNumber) position = 'middle';
     else if (networkStructure.endPu === errorInfo.puNumber) position = 'end';
     
+    // Формируем данные для уведомления
     const errorData = {
       puNumber: errorInfo.puNumber,
       position: position,
       tpName: networkStructure.tpName,
       vlName: networkStructure.vlName,
       resName: networkStructure.ResUnit.name,
-      errorDetails: errorInfo.error
+      errorDetails: errorInfo.error,
+      details: errorInfo.details  // Добавляем детальную информацию
     };
     
+    console.log('Creating notifications with data:', errorData);
+    
+    // Создаем уведомления для каждого ответственного
     for (const responsible of responsibles) {
-      await Notification.create({
-        fromUserId,
-        toUserId: responsible.id,
-        resId,
-        networkStructureId: networkStructure.id,
-        type: 'error',
-        message: JSON.stringify(errorData),
-        isRead: false
-      });
+      try {
+        const notification = await Notification.create({
+          fromUserId,
+          toUserId: responsible.id,
+          resId,
+          networkStructureId: networkStructure.id,
+          type: 'error',
+          message: JSON.stringify(errorData),
+          isRead: false
+        });
+        console.log(`Notification created for user ${responsible.fio} (id: ${responsible.id})`);
+      } catch (err) {
+        console.error(`Failed to create notification for user ${responsible.id}:`, err);
+      }
     }
   }
+  
+  console.log('All notifications created');
 }
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
