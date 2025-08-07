@@ -388,20 +388,22 @@ function NetworkStructure({ selectedRes }) {
 }
     
 function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position }) {
-  if (!isOpen) return null;
+  if (!isOpen || !details) return null;
   
   // Парсим детали если они в формате JSON строки
+  let errorSummary = '';
   let parsedDetails = null;
+  
   try {
+    // Если errorDetails это JSON строка
     if (details?.errorDetails) {
-      // Пробуем распарсить JSON из errorDetails
-      const match = details.errorDetails.match(/details":\s*({.*})/);
-      if (match) {
-        parsedDetails = JSON.parse(match[1]);
-      }
+      const parsed = JSON.parse(details.errorDetails);
+      errorSummary = parsed.summary || details.errorDetails;
+      parsedDetails = parsed.details;
     }
   } catch (e) {
-    console.error('Failed to parse details:', e);
+    // Если не удалось распарсить - используем как есть
+    errorSummary = details?.errorDetails || 'Нет данных';
   }
   
   return (
@@ -420,40 +422,8 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
         
         <div className="error-summary">
           <h4>Обнаруженные отклонения:</h4>
-          <div className="error-text">{details?.errorDetails || 'Нет данных'}</div>
+          <div className="error-text">{errorSummary}</div>
         </div>
-        
-        {parsedDetails && (
-          <div className="error-details-grid">
-            {parsedDetails.overvoltage && Object.keys(parsedDetails.overvoltage).length > 0 && (
-              <div className="error-section overvoltage">
-                <h4>🔴 Перенапряжения</h4>
-                {Object.entries(parsedDetails.overvoltage).map(([phase, data]) => (
-                  <div key={phase} className="phase-details">
-                    <span className="phase-label">Фаза {phase}:</span>
-                    <span className="count">{data.count} событий</span>
-                    <span className="voltage">Umax = {data.max}В</span>
-                    <span className="period">{data.period}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {parsedDetails.undervoltage && Object.keys(parsedDetails.undervoltage).length > 0 && (
-              <div className="error-section undervoltage">
-                <h4>🔵 Провалы напряжения</h4>
-                {Object.entries(parsedDetails.undervoltage).map(([phase, data]) => (
-                  <div key={phase} className="phase-details">
-                    <span className="phase-label">Фаза {phase}:</span>
-                    <span className="count">{data.count} событий</span>
-                    <span className="voltage">Umin = {data.min}В</span>
-                    <span className="period">{data.period}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         
         <div className="modal-footer">
           <button className="action-btn" onClick={onClose}>Закрыть</button>
@@ -941,11 +911,36 @@ function Settings() {
   const [message, setMessage] = useState('');
   const [uploadStats, setUploadStats] = useState(null);
   const [clearOld, setClearOld] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
     setMessage('');
     setUploadStats(null);
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('⚠️ Вы уверены что хотите удалить ВСЕ данные?\n\nБудут удалены:\n- Вся структура сети\n- Все статусы проверок\n- Все уведомления\n- Вся история загрузок\n\nЭто действие НЕЛЬЗЯ отменить!')) {
+      return;
+    }
+
+    setClearing(true);
+    try {
+      const response = await api.delete('/api/network/clear-all');
+      
+      setMessage('✅ Все данные успешно удалены!');
+      console.log('Cleared:', response.data.deleted);
+      
+      // Обновляем страницу через 2 секунды
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (error) {
+      setMessage('❌ Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+    } finally {
+      setClearing(false);
+    }
   };
 
   const handleUploadStructure = async () => {
@@ -954,7 +949,7 @@ function Settings() {
       return;
     }
 
-    if (clearOld && !confirm('Вы уверены что хотите удалить ВСЕ существующие данные перед загрузкой?')) {
+    if (clearOld && !confirm('Вы уверены что хотите удалить существующие данные перед загрузкой?')) {
       return;
     }
 
@@ -968,19 +963,18 @@ function Settings() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      setMessage('Структура сети успешно загружена!');
+      setMessage('✅ Структура сети успешно загружена!');
       setUploadStats(response.data);
       setFile(null);
       
-
-      // ДОБАВЬ ЭТО - принудительное обновление страницы
+      // Обновляем страницу
       setTimeout(() => {
-      window.location.reload();
+        window.location.reload();
       }, 2000);
       
     } catch (error) {
       console.error('Upload error:', error);
-      setMessage('Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+      setMessage('❌ Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
       setUploadStats(null);
     } finally {
       setUploading(false);
@@ -991,8 +985,24 @@ function Settings() {
     <div className="settings">
       <h2>Настройки системы</h2>
       
+      {/* Секция очистки данных */}
+      <div className="clear-data-section">
+        <h3>⚠️ Очистка данных</h3>
+        <p>Используйте эту опцию если хотите полностью перезагрузить структуру сети.</p>
+        <button 
+          onClick={handleClearAll}
+          disabled={clearing}
+          className="danger-btn"
+        >
+          {clearing ? 'Удаление...' : '🗑️ Удалить ВСЕ данные'}
+        </button>
+      </div>
+      
+      <hr style={{margin: '30px 0', border: '1px solid #e5e5e5'}} />
+      
+      {/* Секция загрузки структуры */}
       <div className="upload-structure">
-        <h3>Загрузка структуры сети</h3>
+        <h3>📂 Загрузка структуры сети</h3>
         
         <div className="file-input-wrapper">
           <input 
@@ -1019,11 +1029,11 @@ function Settings() {
           disabled={uploading || !file}
           className="upload-btn"
         >
-          {uploading ? 'Загрузка...' : 'Загрузить структуру'}
+          {uploading ? 'Загрузка...' : '📤 Загрузить структуру'}
         </button>
         
         {message && (
-          <div className={message.includes('успешно') ? 'success-message' : 'error-message'}>
+          <div className={message.includes('✅') ? 'success-message' : 'error-message'}>
             {message}
           </div>
         )}
