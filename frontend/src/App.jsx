@@ -495,7 +495,7 @@ function FileUpload({ selectedRes }) {
     formData.append('file', file);
     formData.append('type', selectedType);
     if (user.role === 'admin' && selectedRes) {
-      formData.append('resId', selectedRes);
+      formData.append('resId', selectedRes || user.resId);
     }
 
     try {
