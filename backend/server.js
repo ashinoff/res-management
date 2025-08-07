@@ -1074,6 +1074,68 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
         details: 'Возможно нужно сначала удалить связанные данные'
       });
     }
+// НОВЫЙ РОУТ ДЛЯ ОЧИСТКИ ВСЕХ ДАННЫХ
+// Добавь это в server.js после других роутов
+
+app.delete('/api/network/clear-all', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      console.log('Starting complete data cleanup...');
+      
+      // Порядок важен! Сначала удаляем зависимые данные
+      
+      // 1. Удаляем историю загрузок
+      const uploadsDeleted = await UploadHistory.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${uploadsDeleted} upload records`);
+      
+      // 2. Удаляем уведомления
+      const notificationsDeleted = await Notification.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${notificationsDeleted} notifications`);
+      
+      // 3. Удаляем статусы ПУ
+      const puStatusesDeleted = await PuStatus.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${puStatusesDeleted} PU statuses`);
+      
+      // 4. Теперь можем удалить структуру сети
+      const structuresDeleted = await NetworkStructure.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${structuresDeleted} network structures`);
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: 'Все данные успешно удалены',
+        deleted: {
+          uploads: uploadsDeleted,
+          notifications: notificationsDeleted,
+          puStatuses: puStatusesDeleted,
+          structures: structuresDeleted
+        }
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Clear all error:', error);
+      res.status(500).json({ 
+        error: 'Ошибка при удалении данных: ' + error.message 
+      });
+    }
 
 });
 
