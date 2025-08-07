@@ -471,6 +471,7 @@ function FileUpload({ selectedRes }) {
   const [selectedType, setSelectedType] = useState('');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
   const { user } = useContext(AuthContext);
 
   const fileTypes = [
@@ -482,6 +483,7 @@ function FileUpload({ selectedRes }) {
 
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
+    setUploadResult(null);
   };
 
   const handleUpload = async () => {
@@ -490,24 +492,74 @@ function FileUpload({ selectedRes }) {
       return;
     }
 
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: определяем resId
+    let resIdToUse;
+    if (user.role === 'admin') {
+      // Админ может выбирать РЭС или использовать дефолтный
+      resIdToUse = selectedRes || user.resId || 1;
+    } else {
+      // Остальные только свой РЭС
+      resIdToUse = user.resId;
+    }
+
+    if (!resIdToUse) {
+      alert('Ошибка: не определен РЭС для загрузки');
+      return;
+    }
+
+    console.log('Upload params:', {
+      file: file.name,
+      type: selectedType,
+      resId: resIdToUse,
+      userRole: user.role
+    });
+
     setUploading(true);
+    setUploadResult(null);
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', selectedType);
-    if (user.role === 'admin' && selectedRes) {
-      formData.append('resId', selectedRes || user.resId);
-    }
+    formData.append('resId', resIdToUse); // ВАЖНО: всегда передаем resId
 
     try {
       const response = await api.post('/api/upload/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      alert(`Файл обработан успешно! Проверено ПУ: ${response.data.processed}, Найдено проблем: ${response.data.errors}`);
-      window.location.reload();
+      
+      console.log('Upload response:', response.data);
+      
+      // Показываем результат
+      setUploadResult({
+        success: true,
+        processed: response.data.processed,
+        errors: response.data.errors,
+        details: response.data.details
+      });
+      
+      // Если были ошибки - покажем
+      if (response.data.errors > 0) {
+        alert(`Файл обработан! Найдено проблем: ${response.data.errors}`);
+      } else {
+        alert('Файл обработан успешно! Ошибок не найдено.');
+      }
+      
+      // Сбрасываем форму
       setFile(null);
       setSelectedType('');
+      
+      // Обновляем страницу через 2 секунды чтобы показать новые статусы
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
     } catch (error) {
-      alert('Ошибка при загрузке файла');
+      console.error('Upload error:', error);
+      setUploadResult({
+        success: false,
+        error: error.response?.data?.error || 'Ошибка при загрузке файла'
+      });
+      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
     } finally {
       setUploading(false);
     }
@@ -516,6 +568,21 @@ function FileUpload({ selectedRes }) {
   return (
     <div className="file-upload">
       <h2>Загрузка файлов для анализа</h2>
+      
+      {/* Показываем для какого РЭС загружаем */}
+      <div className="upload-info">
+        <p>
+          <strong>Загрузка для РЭС:</strong> {
+            user.role === 'admin' && selectedRes 
+              ? `Выбранный РЭС (ID: ${selectedRes})`
+              : user.resName || 'Ваш РЭС'
+          }
+        </p>
+        <p className="hint">
+          💡 Имя файла должно совпадать с номером ПУ в структуре сети!
+        </p>
+      </div>
+      
       <div className="upload-form">
         <div className="form-group">
           <label>Тип файла</label>
@@ -537,17 +604,47 @@ function FileUpload({ selectedRes }) {
               accept=".xlsx,.xls,.csv"
               onChange={handleFileSelect}
             />
-            {file && <p>Выбран файл: {file.name}</p>}
+            {file && (
+              <div className="file-info">
+                <p>Выбран файл: <strong>{file.name}</strong></p>
+                <p className="pu-number">Номер ПУ: <strong>{file.name.split('.')[0]}</strong></p>
+              </div>
+            )}
           </div>
         )}
         
         <button 
           onClick={handleUpload} 
           disabled={uploading || !file || !selectedType}
+          className="upload-btn"
         >
-          {uploading ? 'Загрузка...' : 'Загрузить и анализировать'}
+          {uploading ? 'Загрузка и анализ...' : 'Загрузить и анализировать'}
         </button>
       </div>
+      
+      {/* Результаты загрузки */}
+      {uploadResult && (
+        <div className={`upload-result ${uploadResult.success ? 'success' : 'error'}`}>
+          {uploadResult.success ? (
+            <>
+              <h3>✅ Анализ завершен</h3>
+              <p>Обработано записей: {uploadResult.processed}</p>
+              <p>Найдено ошибок: {uploadResult.errors}</p>
+              {uploadResult.details && uploadResult.details.length > 0 && (
+                <details>
+                  <summary>Подробности</summary>
+                  <pre>{JSON.stringify(uploadResult.details, null, 2)}</pre>
+                </details>
+              )}
+            </>
+          ) : (
+            <>
+              <h3>❌ Ошибка</h3>
+              <p>{uploadResult.error}</p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
