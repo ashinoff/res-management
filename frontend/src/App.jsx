@@ -160,6 +160,11 @@ function NetworkStructure({ selectedRes }) {
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   
+  // НОВОЕ - для выбора и удаления
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  
   useEffect(() => {
     loadNetworkStructure();
   }, [selectedRes]);
@@ -176,15 +181,15 @@ function NetworkStructure({ selectedRes }) {
   };
 
   const getStatusColor = (status) => {
-  switch(status) {
-    case 'checked_ok': return 'status-ok';
-    case 'checked_error': return 'status-error';
-    case 'not_checked': return 'status-unchecked';
-    case 'pending_recheck': return 'status-pending';  // <-- ДОБАВЬ
-    case 'empty': return 'status-empty';
-    default: return 'status-empty';
-  }
-};
+    switch(status) {
+      case 'checked_ok': return 'status-ok';
+      case 'checked_error': return 'status-error';
+      case 'not_checked': return 'status-unchecked';
+      case 'pending_recheck': return 'status-pending';
+      case 'empty': return 'status-empty';
+      default: return 'status-empty';
+    }
+  };
 
   const handleNotifyCompleted = async (networkStructureId) => {
     try {
@@ -237,7 +242,6 @@ function NetworkStructure({ selectedRes }) {
         endPu: item.endPu
       };
       
-      // Обновляем поле которое редактировали
       const position = editingCell.split('-')[1];
       if (position === 'start') updateData.startPu = editValue || null;
       if (position === 'middle') updateData.middlePu = editValue || null;
@@ -245,7 +249,6 @@ function NetworkStructure({ selectedRes }) {
       
       await api.put(`/api/network/structure/${item.id}`, updateData);
       
-      // Перезагружаем данные
       await loadNetworkStructure();
       setEditingCell(null);
       setEditValue('');
@@ -254,60 +257,100 @@ function NetworkStructure({ selectedRes }) {
     }
   };
   
-  // НОВОЕ - отмена редактирования
   const cancelEdit = () => {
     setEditingCell(null);
     setEditValue('');
   };
   
-  // НОВОЕ - рендер ячейки
-  const renderPuCell = (item, position) => {
-  const puNumber = position === 'start' ? item.startPu : 
-                   position === 'middle' ? item.middlePu : 
-                   item.endPu;
-  const isEditing = editingCell === `${item.id}-${position}`;
+  // НОВОЕ - обработка выбора строк
+  const handleSelectRow = (id) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
   
-  if (isEditing) {
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredData.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredData.map(item => item.id));
+    }
+  };
+  
+  // НОВОЕ - удаление выбранных
+  const handleDeleteSelected = async () => {
+    if (deletePassword !== '1191') {
+      alert('Неверный пароль');
+      return;
+    }
+    
+    try {
+      const response = await api.post('/api/network/delete-selected', {
+        ids: selectedIds,
+        password: deletePassword
+      });
+      
+      alert(response.data.message);
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setSelectedIds([]);
+      await loadNetworkStructure();
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const renderPuCell = (item, position) => {
+    const puNumber = position === 'start' ? item.startPu : 
+                     position === 'middle' ? item.middlePu : 
+                     item.endPu;
+    const isEditing = editingCell === `${item.id}-${position}`;
+    
+    if (isEditing) {
+      return (
+        <div className="edit-cell">
+          <input
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') saveEdit(item);
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            autoFocus
+          />
+          <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
+          <button onClick={cancelEdit} className="cancel-btn">✗</button>
+        </div>
+      );
+    }
+    
     return (
-      <div className="edit-cell">
-        <input
-          type="text"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') saveEdit(item);
-            if (e.key === 'Escape') cancelEdit();
-          }}
-          autoFocus
-        />
-        <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
-        <button onClick={cancelEdit} className="cancel-btn">✗</button>
+      <div 
+        className="pu-cell"
+        onDoubleClick={() => startEdit(item, position)}
+        title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
+      >
+        {puNumber ? (
+          <>
+            <div 
+              className={`status-box ${getStatusColor(
+                item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
+              )}`}
+              onClick={() => handleCellClick(item, position)}
+            />
+            <span className="pu-number">{puNumber}</span>
+          </>
+        ) : (
+          <div className="status-box status-empty">X</div>
+        )}
       </div>
     );
-  }
-  
-  return (
-    <div 
-      className="pu-cell"
-      onDoubleClick={() => startEdit(item, position)}
-      title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
-    >
-      {puNumber ? (
-        <>
-          <div 
-            className={`status-box ${getStatusColor(
-              item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
-            )}`}
-            onClick={() => handleCellClick(item, position)}
-          />
-          <span className="pu-number">{puNumber}</span>
-        </>
-      ) : (
-        <div className="status-box status-empty">X</div>
-      )}
-    </div>
-  );
-};
+  };
   
   if (loading) return <div className="loading">Загрузка...</div>;
   
@@ -321,19 +364,41 @@ function NetworkStructure({ selectedRes }) {
       {user.role === 'admin' && (
         <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
       )}
-      <div className="search-box">
-        <input 
-          type="text"
-          placeholder="Поиск по ТП..."
-          value={searchTp}
-          onChange={(e) => setSearchTp(e.target.value)}
-          className="search-input"
-        />
+      
+      <div className="structure-controls">
+        <div className="search-box">
+          <input 
+            type="text"
+            placeholder="Поиск по ТП..."
+            value={searchTp}
+            onChange={(e) => setSearchTp(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        
+        {user.role === 'admin' && selectedIds.length > 0 && (
+          <button 
+            className="delete-selected-btn"
+            onClick={() => setShowDeleteModal(true)}
+          >
+            🗑️ Удалить выбранные ({selectedIds.length})
+          </button>
+        )}
       </div>
+      
       <div className="structure-table">
         <table>
           <thead>
             <tr>
+              {user.role === 'admin' && (
+                <th className="checkbox-column">
+                  <input 
+                    type="checkbox"
+                    checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+              )}
               <th>РЭС</th>
               <th>ТП</th>
               <th>ВЛ</th>
@@ -346,7 +411,16 @@ function NetworkStructure({ selectedRes }) {
           </thead>
           <tbody>
             {filteredData.map(item => (
-              <tr key={item.id}>
+              <tr key={item.id} className={selectedIds.includes(item.id) ? 'selected' : ''}>
+                {user.role === 'admin' && (
+                  <td className="checkbox-column">
+                    <input 
+                      type="checkbox"
+                      checked={selectedIds.includes(item.id)}
+                      onChange={() => handleSelectRow(item.id)}
+                    />
+                  </td>
+                )}
                 <td>{item.ResUnit?.name}</td>
                 <td>{item.tpName}</td>
                 <td>{item.vlName}</td>
@@ -369,13 +443,16 @@ function NetworkStructure({ selectedRes }) {
           </tbody>
         </table>
       </div>
+      
       <div className="status-legend">
         <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
         <div><span className="status-box status-error"></span> Проверен с ошибками</div>
         <div><span className="status-box status-unchecked"></span> Не проверен</div>
+        <div><span className="status-box status-pending"></span> Ожидает перепроверки</div>
         <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
       </div>
-       <ErrorDetailsModal 
+      
+      <ErrorDetailsModal 
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         details={selectedDetails}
@@ -383,6 +460,44 @@ function NetworkStructure({ selectedRes }) {
         vlName={selectedItem?.vlName}
         position={selectedPosition}
       />
+      
+      {/* Модальное окно для удаления */}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить {selectedIds.length} записей.</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDeleteSelected}
+                disabled={!deletePassword}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -630,41 +745,37 @@ function Notifications({ filterType }) {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [comment, setComment] = useState('');
   const [checkFromDate, setCheckFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [searchTp, setSearchTp] = useState('');
   const { user } = useContext(AuthContext);
-
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteNotificationId, setDeleteNotificationId] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [filterType]);
 
   const loadNotifications = async () => {
-  try {
-    const response = await api.get('/api/notifications');
-    // Фильтруем по переданному типу или по роли
-    const filtered = response.data.filter(n => {
-      if (filterType) return n.type === filterType;
-      // Старая логика для обратной совместимости
-      if (user.role === 'res_responsible') return n.type === 'error';
-      if (user.role === 'uploader') return n.type === 'pending_askue';
-      return true;
-    });
-    setNotifications(filtered);
-  } catch (error) {
-    console.error('Error loading notifications:', error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const handleNotificationClick = (notif) => {
-    if (notif.type === 'error' && user.role === 'res_responsible') {
-      setSelectedNotification(notif);
-      setShowCompleteModal(true);
+    try {
+      const response = await api.get('/api/notifications');
+      // Фильтруем по переданному типу
+      const filtered = response.data.filter(n => {
+        if (filterType) return n.type === filterType;
+        return true;
+      });
+      setNotifications(filtered);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCompleteWork = async () => {
-    if (!comment.trim() || comment.trim().length < 10) {
-      alert('Введите комментарий не менее 10 символов о выполненных работах');
+    // Проверка на количество слов (минимум 5)
+    const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
+    if (wordCount < 5) {
+      alert('Комментарий должен содержать не менее 5 слов');
       return;
     }
 
@@ -683,7 +794,26 @@ function Notifications({ filterType }) {
       alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
     }
   };
-
+  const handleDeleteNotification = async () => {
+   if (deletePassword !== '1191') {
+     alert('Неверный пароль');
+     return;
+   }
+  
+   try {
+     await api.delete(`/api/notifications/${deleteNotificationId}`, {
+       data: { password: deletePassword }
+     });
+    
+     alert('Уведомление удалено');
+     setShowDeleteModal(false);
+     setDeletePassword('');
+     setDeleteNotificationId(null);
+     loadNotifications();
+   } catch (error) {
+     alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+   }
+ };
   const renderErrorDetails = (message) => {
     try {
       const data = JSON.parse(message);
@@ -724,6 +854,20 @@ function Notifications({ filterType }) {
           <div className="error-text">
             <span className="label">Ошибка:</span> {data.errorDetails}
           </div>
+          
+          {/* Кнопка для выполнения мероприятий */}
+          {user.role === 'res_responsible' && filterType === 'error' && (
+            <button 
+              className="complete-work-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedNotification({ id: notif.id, data });
+                setShowCompleteModal(true);
+              }}
+            >
+              ✅ Мероприятия выполнены
+            </button>
+          )}
         </div>
       );
     } catch (e) {
@@ -741,10 +885,20 @@ function Notifications({ filterType }) {
             <p><strong>ПУ №:</strong> {data.puNumber}</p>
             <p><strong>ТП:</strong> {data.tpName} | <strong>ВЛ:</strong> {data.vlName}</p>
             <p><strong>Позиция:</strong> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}</p>
-            <p className="date-from"><strong>Журнал с даты:</strong> {new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</p>
+            
+            <div className="highlight-box comment-box">
+              <p className="highlight-label">💬 Комментарий РЭС:</p>
+              <p className="highlight-text">{data.completedComment}</p>
+            </div>
+            
+            <div className="highlight-box date-box">
+              <p className="highlight-label">📅 Журнал с даты:</p>
+              <p className="highlight-text">{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</p>
+            </div>
+            
             <div className="completed-info">
-              <p><strong>Выполненные работы:</strong> {data.completedComment}</p>
-              <p><strong>Дата выполнения:</strong> {new Date(data.completedAt).toLocaleString('ru-RU')}</p>
+              <p><strong>Дата выполнения мероприятий:</strong> {new Date(data.completedAt).toLocaleString('ru-RU')}</p>
+              <p><strong>Выполнил:</strong> Ответственный РЭС</p>
             </div>
           </div>
         </div>
@@ -756,28 +910,102 @@ function Notifications({ filterType }) {
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
-  const title = user.role === 'res_responsible' ? 'Ожидающие мероприятий' : 
-                user.role === 'uploader' ? 'Ожидающие проверки АСКУЭ' : 
+  const title = filterType === 'error' ? 'Ожидающие мероприятий' : 
+                filterType === 'pending_askue' ? 'Ожидающие проверки АСКУЭ' : 
                 'Все уведомления';
+
+  // Фильтрация по ТП
+  const filteredNotifications = notifications.filter(notif => {
+    if (!searchTp) return true;
+    try {
+      const data = JSON.parse(notif.message);
+      return data.tpName?.toLowerCase().includes(searchTp.toLowerCase());
+    } catch {
+      return true;
+    }
+  });
 
   return (
     <div className="notifications">
       <h2>{title}</h2>
+      
+      <div className="notifications-controls">
+        <div className="search-box">
+          <input
+            type="text"
+            placeholder="Поиск по ТП..."
+            value={searchTp}
+            onChange={(e) => setSearchTp(e.target.value)}
+            className="search-input"
+          />
+        </div>
+      </div>
+      
       <div className="notifications-list">
-        {notifications.map(notif => (
+        {filteredNotifications.map(notif => (
           <div 
             key={notif.id} 
-            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''} ${notif.type === 'error' ? 'clickable' : ''}`}
-            onClick={() => handleNotificationClick(notif)}
+            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
           >
             <div className="notification-header">
               <span className="notification-from">От: {notif.fromUser?.fio || 'Система'}</span>
-              <span className="notification-date">
-                {new Date(notif.createdAt).toLocaleString('ru-RU')}
-              </span>
+              <div className="notification-actions">
+                <span className="notification-date">
+                  {new Date(notif.createdAt).toLocaleString('ru-RU')}
+                </span>
+                {user.role === 'admin' && (
+                  <button
+                    className="delete-notification-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteNotificationId(notif.id);
+                      setShowDeleteModal(true);
+                    }}
+                    title="Удалить уведомление"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
             </div>
             <div className="notification-body">
-              {notif.type === 'error' && renderErrorDetails(notif.message)}
+              {notif.type === 'error' && (
+                <div>
+                  {(() => {
+                    const data = JSON.parse(notif.message);
+                    return (
+                      <div className="error-notification-content">
+                        <div className="error-location">
+                          <span className="label">РЭС:</span> {data.resName} | 
+                          <span className="label"> ТП:</span> {data.tpName} | 
+                          <span className="label"> ВЛ:</span> {data.vlName} | 
+                          <span className="label"> Позиция:</span> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}
+                        </div>
+                        <div className="error-pu">
+                          <span className="label">ПУ №:</span> {data.puNumber}
+                        </div>
+                        <div className="error-text">
+                          <span className="label">Ошибка:</span> {data.errorDetails}
+                        </div>
+                        
+                        {/* Кнопка для выполнения мероприятий */}
+                        {user.role === 'res_responsible' && (
+                          <button 
+                            className="complete-work-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedNotification({ id: notif.id, data });
+                              setShowCompleteModal(true);
+                            }}
+                          >
+                            ✅ Мероприятия выполнены
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               {notif.type === 'pending_askue' && renderAskueDetails(notif.message)}
               {notif.type !== 'error' && notif.type !== 'pending_askue' && notif.message}
             </div>
@@ -795,14 +1023,23 @@ function Notifications({ filterType }) {
             </div>
             
             <div className="modal-body">
+              <div className="work-info">
+                <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
+                <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
+                <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
+              </div>
+              
               <div className="form-group">
-                <label>Что было выполнено? (минимум 10 символов)</label>
+                <label>Что было выполнено? (минимум 5 слов)</label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Опишите выполненные работы..."
                   rows={4}
                 />
+                <small className="word-count">
+                  Слов: {comment.trim().split(/\s+/).filter(w => w.length > 0).length} из 5
+                </small>
               </div>
               
               <div className="form-group">
@@ -822,9 +1059,45 @@ function Notifications({ filterType }) {
               <button 
                 className="confirm-btn" 
                 onClick={handleCompleteWork}
-                disabled={!comment.trim() || comment.trim().length < 10}
+                disabled={comment.trim().split(/\s+/).filter(w => w.length > 0).length < 5}
               >
-                Мероприятия выполнены
+                Подтвердить выполнение
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить это уведомление.</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDeleteNotification}
+                disabled={!deletePassword}
+              >
+                Удалить
               </button>
             </div>
           </div>
@@ -832,7 +1105,6 @@ function Notifications({ filterType }) {
       )}
     </div>
   );
-  
 }
 
 // =====================================================
@@ -840,62 +1112,201 @@ function Notifications({ filterType }) {
 // =====================================================
 
 function Reports() {
-  const [reportData, setReportData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [reportType, setReportType] = useState('pending_work'); // pending_work, pending_askue, completed
+  const [reportData, setReportData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [searchTp, setSearchTp] = useState('');
 
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [reportType, dateFrom, dateTo]);
 
   const loadReports = async () => {
+    setLoading(true);
     try {
-      const response = await api.get('/api/reports/summary');
+      const response = await api.get('/api/reports/detailed', {
+        params: {
+          type: reportType,
+          dateFrom,
+          dateTo
+        }
+      });
       setReportData(response.data);
     } catch (error) {
       console.error('Error loading reports:', error);
+      setReportData([]);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div className="loading">Загрузка...</div>;
+  const exportToExcel = () => {
+    // Создаем данные для экспорта
+    const exportData = reportData.map(item => {
+      const base = {
+        'РЭС': item.resName,
+        'ТП': item.tpName,
+        'ВЛ': item.vlName,
+        'Позиция': item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец',
+        'Номер ПУ': item.puNumber,
+        'Ошибка': item.errorDetails,
+        'Дата обнаружения': new Date(item.errorDate).toLocaleDateString('ru-RU')
+      };
+
+      if (reportType === 'pending_askue' || reportType === 'completed') {
+        base['Комментарий РЭС'] = item.resComment;
+        base['Дата завершения мероприятий'] = new Date(item.workCompletedDate).toLocaleDateString('ru-RU');
+      }
+
+      if (reportType === 'completed') {
+        base['Дата перепроверки'] = new Date(item.recheckDate).toLocaleDateString('ru-RU');
+        base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
+      }
+
+      return base;
+    });
+
+    // Здесь бы использовать библиотеку для экспорта в Excel
+    // Пока просто выведем в консоль
+    console.log('Export data:', exportData);
+    alert('Функция экспорта будет реализована позже');
+  };
+
+  const getReportTitle = () => {
+    switch (reportType) {
+      case 'pending_work':
+        return 'Ожидающие мероприятий';
+      case 'pending_askue':
+        return 'Ожидающие проверки АСКУЭ';
+      case 'completed':
+        return 'Завершенные проверки';
+      default:
+        return 'Отчет';
+    }
+  };
+
+  // Фильтрация по ТП
+  const filteredData = reportData.filter(item => 
+    !searchTp || item.tpName?.toLowerCase().includes(searchTp.toLowerCase())
+  );
+
+  if (loading) return <div className="loading">Загрузка отчета...</div>;
 
   return (
     <div className="reports">
-      <h2>Отчеты</h2>
+      <h2>Отчеты по проверкам</h2>
+      
+      <div className="report-controls">
+        <div className="control-group">
+          <label>Тип отчета:</label>
+          <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
+            <option value="pending_work">Ожидающие мероприятий</option>
+            <option value="pending_askue">Ожидающие проверки АСКУЭ</option>
+            <option value="completed">Завершенные проверки</option>
+          </select>
+        </div>
+        
+        <div className="control-group">
+          <label>Период с:</label>
+          <input 
+            type="date" 
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+        </div>
+        
+        <div className="control-group">
+          <label>по:</label>
+          <input 
+            type="date" 
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </div>
+        
+        <div className="control-group">
+          <input 
+            type="text"
+            placeholder="Поиск по ТП..."
+            value={searchTp}
+            onChange={(e) => setSearchTp(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        
+        <button className="export-btn" onClick={exportToExcel}>
+          📊 Экспорт в Excel
+        </button>
+      </div>
+      
       <div className="report-summary">
-        <div className="report-card">
-          <h3>Общая статистика</h3>
-          <p>Всего ошибок: {reportData?.totalErrors || 0}</p>
-          <p>Ожидают проверки: {reportData?.pendingChecks || 0}</p>
-        </div>
-        <div className="report-uploads">
-          <h3>История загрузок</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Дата</th>
-                <th>Пользователь</th>
-                <th>РЭС</th>
-                <th>Файл</th>
-                <th>Обработано</th>
-                <th>Ошибок</th>
+        <h3>{getReportTitle()}</h3>
+        <p>Найдено записей: {filteredData.length}</p>
+      </div>
+      
+      <div className="report-table">
+        <table>
+          <thead>
+            <tr>
+              <th>РЭС</th>
+              <th>ТП</th>
+              <th>ВЛ</th>
+              <th>Позиция</th>
+              <th>Номер ПУ</th>
+              <th>Ошибка</th>
+              <th>Дата обнаружения</th>
+              {(reportType === 'pending_askue' || reportType === 'completed') && (
+                <>
+                  <th>Комментарий РЭС</th>
+                  <th>Дата завершения мероприятий</th>
+                </>
+              )}
+              {reportType === 'completed' && (
+                <>
+                  <th>Дата перепроверки</th>
+                  <th>Результат</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((item, idx) => (
+              <tr key={idx}>
+                <td>{item.resName}</td>
+                <td>{item.tpName}</td>
+                <td>{item.vlName}</td>
+                <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
+                <td>{item.puNumber}</td>
+                <td className="error-cell">{item.errorDetails}</td>
+                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                {(reportType === 'pending_askue' || reportType === 'completed') && (
+                  <>
+                    <td>{item.resComment}</td>
+                    <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                  </>
+                )}
+                {reportType === 'completed' && (
+                  <>
+                    <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
+                    <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
+                      {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+                    </td>
+                  </>
+                )}
               </tr>
-            </thead>
-            <tbody>
-              {reportData?.uploads.map(upload => (
-                <tr key={upload.id}>
-                  <td>{new Date(upload.createdAt).toLocaleDateString('ru-RU')}</td>
-                  <td>{upload.User?.fio}</td>
-                  <td>{upload.ResUnit?.name}</td>
-                  <td>{upload.fileName}</td>
-                  <td>{upload.processedCount}</td>
-                  <td>{upload.errorCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
+        
+        {filteredData.length === 0 && (
+          <div className="no-data">
+            <p>Нет данных для отображения за выбранный период</p>
+          </div>
+        )}
       </div>
     </div>
   );
