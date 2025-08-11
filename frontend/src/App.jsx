@@ -1007,7 +1007,20 @@ function Notifications({ filterType }) {
                 </div>
               )}
               {notif.type === 'pending_askue' && renderAskueDetails(notif.message)}
-              {notif.type !== 'error' && notif.type !== 'pending_askue' && notif.message}
+              {notif.type === 'success' && (
+                <div className="success-notification-content">
+                  <div className="success-icon">✅</div>
+                  <div className="success-text">{notif.message}</div>
+                </div>
+              )}
+
+              {notif.type === 'info' && (
+                <div className="info-notification-content">
+                  <div className="info-icon">ℹ️</div>
+                  <div className="info-text">{notif.message}</div>
+                </div>
+              )}
+            </div>
             </div>
           </div>
         ))}
