@@ -205,7 +205,7 @@ const PuStatus = sequelize.define('PuStatus', {
   },
   status: {
     type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'pending_recheck', 'empty'),
-    defaultValue: 'not_checked'
+      defaultValue: 'not_checked'
 },
   errorDetails: {
     type: DataTypes.TEXT,
@@ -327,6 +327,72 @@ const UploadHistory = sequelize.define('UploadHistory', {
     defaultValue: 'processing'
   }
 });
+// 7. Модель истории проверок
+const CheckHistory = sequelize.define('CheckHistory', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: ResUnit,
+      key: 'id'
+    }
+  },
+  networkStructureId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: NetworkStructure,
+      key: 'id'
+    }
+  },
+  puNumber: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  tpName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  vlName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  position: {
+    type: DataTypes.ENUM('start', 'end', 'middle'),
+    allowNull: false
+  },
+  initialError: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  initialCheckDate: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  resComment: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  workCompletedDate: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  recheckDate: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  recheckResult: {
+    type: DataTypes.ENUM('pending', 'ok', 'error'),
+    defaultValue: 'pending'
+  },
+  status: {
+    type: DataTypes.ENUM('awaiting_work', 'awaiting_recheck', 'completed'),
+    defaultValue: 'awaiting_work'
+  }
+});
 
 // =====================================================
 // СВЯЗИ МЕЖДУ МОДЕЛЯМИ
@@ -343,6 +409,8 @@ Notification.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 Notification.belongsTo(PuStatus, { foreignKey: 'puStatusId' });
 UploadHistory.belongsTo(User, { foreignKey: 'userId' });
 UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
+CheckHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
+CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -882,8 +950,10 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
   try {
     const { comment, checkFromDate } = req.body;
     
-    if (!comment || comment.trim().length < 10) {
-      return res.status(400).json({ error: 'Комментарий должен быть не менее 10 символов' });
+    // Проверка на количество слов (минимум 5)
+    const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
+    if (wordCount < 5) {
+      return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
     }
     
     // Находим уведомление
@@ -895,6 +965,21 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
     
     // Парсим данные об ошибке
     const errorData = JSON.parse(notification.message);
+    
+    // Создаем запись в истории проверок
+    await CheckHistory.create({
+      resId: notification.resId,
+      networkStructureId: notification.networkStructureId,
+      puNumber: errorData.puNumber,
+      tpName: errorData.tpName,
+      vlName: errorData.vlName,
+      position: errorData.position,
+      initialError: errorData.errorDetails,
+      initialCheckDate: notification.createdAt,
+      resComment: comment,
+      workCompletedDate: new Date(),
+      status: 'awaiting_recheck'
+    }, { transaction });
     
     // Обновляем статус ПУ на pending_recheck
     await PuStatus.update(
@@ -922,6 +1007,7 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
       tpName: errorData.tpName,
       vlName: errorData.vlName,
       resName: errorData.resName,
+      errorDetails: errorData.errorDetails, // Добавляем исходную ошибку
       checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
       completedComment: comment,
       completedBy: req.user.id,
@@ -945,6 +1031,7 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
     
   } catch (error) {
     await transaction.rollback();
+    console.error('Complete work error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1013,7 +1100,215 @@ app.delete('/api/network/clear-all',
     }
 
 });
+// НОВЫЙ РОУТ ДЛЯ УДАЛЕНИЯ ВЫБРАННЫХ СТРУКТУР
+app.post('/api/network/delete-selected', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { ids, password } = req.body;
+      
+      // Проверка пароля
+      if (password !== '1191') {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'Не выбраны записи для удаления' });
+      }
+      
+      console.log(`Deleting network structures: ${ids.join(', ')}`);
+      
+      // Сначала удаляем связанные уведомления
+      const notificationsDeleted = await Notification.destroy({
+        where: {
+          networkStructureId: { [Op.in]: ids }
+        },
+        transaction
+      });
+      
+      // Удаляем статусы ПУ
+      const puStatusesDeleted = await PuStatus.destroy({
+        where: {
+          networkStructureId: { [Op.in]: ids }
+        },
+        transaction
+      });
+      
+      // Теперь удаляем сами структуры
+      const structuresDeleted = await NetworkStructure.destroy({
+        where: {
+          id: { [Op.in]: ids }
+        },
+        transaction
+      });
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `Удалено ${structuresDeleted} записей`,
+        deleted: {
+          structures: structuresDeleted,
+          notifications: notificationsDeleted,
+          puStatuses: puStatusesDeleted
+        }
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Delete selected error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
 
+// НОВЫЕ РОУТЫ ДЛЯ ДЕТАЛЬНЫХ ОТЧЕТОВ
+app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
+  try {
+    const { type, dateFrom, dateTo } = req.query;
+    
+    let whereClause = {};
+    if (dateFrom || dateTo) {
+      whereClause.createdAt = {};
+      if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        whereClause.createdAt[Op.lte] = endDate;
+      }
+    }
+    
+    // Добавляем фильтр по РЭС для не-админов
+    if (req.user.role !== 'admin') {
+      whereClause.resId = req.user.resId;
+    }
+    
+    let reportData = [];
+    
+    switch (type) {
+      case 'pending_work':
+        // Ожидающие мероприятий
+        const pendingWork = await Notification.findAll({
+          where: {
+            ...whereClause,
+            type: 'error',
+            isRead: false
+          },
+          include: [
+            { model: ResUnit },
+            { model: NetworkStructure }
+          ]
+        });
+        
+        reportData = pendingWork.map(n => {
+          const data = JSON.parse(n.message);
+          return {
+            resName: n.ResUnit?.name,
+            tpName: data.tpName,
+            vlName: data.vlName,
+            position: data.position,
+            puNumber: data.puNumber,
+            errorDetails: data.errorDetails,
+            errorDate: n.createdAt
+          };
+        });
+        break;
+        
+      case 'pending_askue':
+        // Ожидающие проверки АСКУЭ
+        const pendingAskue = await Notification.findAll({
+          where: {
+            ...whereClause,
+            type: 'pending_askue',
+            isRead: false
+          },
+          include: [
+            { model: ResUnit },
+            { model: NetworkStructure }
+          ]
+        });
+        
+        reportData = pendingAskue.map(n => {
+          const data = JSON.parse(n.message);
+          return {
+            resName: n.ResUnit?.name,
+            tpName: data.tpName,
+            vlName: data.vlName,
+            position: data.position,
+            puNumber: data.puNumber,
+            errorDetails: data.errorDetails || 'Требуется перепроверка',
+            errorDate: n.createdAt,
+            resComment: data.completedComment,
+            workCompletedDate: data.completedAt
+          };
+        });
+        break;
+        
+      case 'completed':
+        // Завершенные проверки (из CheckHistory)
+        const completed = await CheckHistory.findAll({
+          where: {
+            ...whereClause,
+            status: 'completed'
+          },
+          include: [ResUnit]
+        });
+        
+        reportData = completed.map(h => ({
+          resName: h.ResUnit?.name,
+          tpName: h.tpName,
+          vlName: h.vlName,
+          position: h.position,
+          puNumber: h.puNumber,
+          errorDetails: h.initialError,
+          errorDate: h.initialCheckDate,
+          resComment: h.resComment,
+          workCompletedDate: h.workCompletedDate,
+          recheckDate: h.recheckDate,
+          recheckResult: h.recheckResult
+        }));
+        break;
+    }
+    
+    res.json(reportData);
+  } catch (error) {
+    console.error('Detailed reports error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// РОУТ ДЛЯ УДАЛЕНИЯ УВЕДОМЛЕНИЙ (только админ)
+app.delete('/api/notifications/:id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      // Проверка пароля
+      if (password !== '1191') {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      const notification = await Notification.findByPk(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: 'Уведомление не найдено' });
+      }
+      
+      await notification.destroy();
+      
+      res.json({ 
+        success: true, 
+        message: 'Уведомление удалено' 
+      });
+      
+    } catch (error) {
+      console.error('Delete notification error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
@@ -1159,6 +1454,70 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             
             console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
             
+            // Проверяем, не является ли это перепроверкой
+            const existingNotification = await Notification.findOne({
+              where: {
+                type: 'pending_askue',
+                isRead: false,
+                message: {
+                  [Op.like]: `%"puNumber":"${fileName}"%`
+                }
+              }
+            });
+
+            if (existingNotification) {
+              console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
+              
+              // Это перепроверка!
+              const notifData = JSON.parse(existingNotification.message);
+              
+              if (!result.has_errors) {
+                // Ошибки исправлены
+                console.log(`Recheck successful - errors fixed for PU ${fileName}`);
+                
+                // Обновляем запись в истории
+                await CheckHistory.update({
+                  recheckDate: new Date(),
+                  recheckResult: 'ok',
+                  status: 'completed'
+                }, {
+                  where: {
+                    puNumber: fileName,
+                    status: 'awaiting_recheck'
+                  }
+                });
+                
+                // Помечаем уведомление как прочитанное (завершенное)
+                await existingNotification.update({ isRead: true });
+                
+                // Отправляем уведомление ответственному что проблема решена
+                await Notification.create({
+                  fromUserId: 1, // Системное уведомление
+                  toUserId: notifData.completedBy,
+                  resId: networkStructure.resId,
+                  networkStructureId: networkStructure.id,
+                  type: 'success',
+                  message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
+                  isRead: false
+                });
+                
+              } else {
+                // Ошибки НЕ исправлены
+                console.log(`Recheck failed - errors still present for PU ${fileName}`);
+                
+                // Обновляем запись в истории
+                await CheckHistory.update({
+                  recheckDate: new Date(),
+                  recheckResult: 'error',
+                  status: 'completed'
+                }, {
+                  where: {
+                    puNumber: fileName,
+                    status: 'awaiting_recheck'
+                  }
+                });
+              }
+            }
             // Добавляем в processed
             processed.push({
               puNumber: fileName,
@@ -1330,6 +1689,8 @@ async function initializeDatabase() {
     
     // Синхронизация моделей
     await sequelize.sync({ alter: true });
+    console.log('Ensuring CheckHistory table...');
+    await CheckHistory.sync({ alter: true });
     
     // Создаем РЭСы если их нет
     const resCount = await ResUnit.count();
