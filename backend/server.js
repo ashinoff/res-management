@@ -205,7 +205,7 @@ const PuStatus = sequelize.define('PuStatus', {
   },
   status: {
     type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'pending_recheck', 'empty'),
-  defaultValue: 'not_checked'
+    defaultValue: 'not_checked'
 },
   errorDetails: {
     type: DataTypes.TEXT,
@@ -947,133 +947,8 @@ app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['
     await transaction.rollback();
     res.status(500).json({ error: error.message });
   }
-  app.post('/api/network/upload-full-structure', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  upload.single('file'), 
-  async (req, res) => {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      const workbook = XLSX.readFile(req.file.path);
-      const sheetName = workbook.SheetNames[0];
-      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-      
-      let processed = 0;
-      let errors = [];
-      
-      // Опционально: очищаем старые данные
-      if (req.body.clearOld === 'true') {
-        console.log('Clearing old data...');
-        
-        // ВАЖНО: Сначала удаляем связанные записи
-        // 1. Удаляем уведомления связанные со структурой
-        await Notification.destroy({ 
-          where: { 
-            networkStructureId: { [Op.not]: null } 
-          }, 
-          transaction 
-        });
-        console.log('Notifications cleared');
-        
-        // 2. Удаляем статусы ПУ
-        await PuStatus.destroy({ 
-          where: {}, 
-          transaction 
-        });
-        console.log('PU statuses cleared');
-        
-        // 3. Теперь можем удалить структуру
-        await NetworkStructure.destroy({ 
-          where: {}, 
-          transaction 
-        });
-        console.log('Network structure cleared');
-      }
-      
-      // Обрабатываем каждую строку
-      for (const row of data) {
-        try {
-          // Ищем РЭС по полному имени из Excel
-          const resName = row['РЭС'];
-          const res = await ResUnit.findOne({ 
-            where: { name: resName },
-            transaction 
-          });
-          
-          if (!res) {
-            errors.push(`Неизвестный РЭС: ${resName}`);
-            continue;
-          }
-          
-          // Создаем или обновляем запись
-          const [structure, created] = await NetworkStructure.upsert({
-            resId: res.id,
-            tpName: row['ТП'] || '',
-            vlName: row['Фидер'] || '',
-            startPu: row['Начало'] ? String(row['Начало']) : null,
-            endPu: row['Конец'] ? String(row['Конец']) : null,
-            middlePu: row['Середина'] ? String(row['Середина']) : null,
-            lastUpdate: new Date()
-          }, {
-            transaction
-          });
-          
-          processed++;
-          
-          // Создаем статусы для новых ПУ
-          const positions = [
-            { pu: row['Начало'], pos: 'start' },
-            { pu: row['Конец'], pos: 'end' },
-            { pu: row['Середина'], pos: 'middle' }
-          ];
-          
-          for (const { pu, pos } of positions) {
-            if (pu) {
-              await PuStatus.findOrCreate({
-                where: { puNumber: String(pu) },
-                defaults: {
-                  position: pos,
-                  status: 'not_checked',
-                  networkStructureId: structure.id // Связываем со структурой
-                },
-                transaction
-              });
-            }
-          }
-          
-        } catch (err) {
-          errors.push(`Ошибка в строке ${row['ТП']}-${row['Фидер']}: ${err.message}`);
-        }
-      }
-      
-      await transaction.commit();
-      
-      // Удаляем файл
-      fs.unlinkSync(req.file.path);
-      
-      res.json({
-        success: true,
-        message: `Загружено ${processed} записей из ${data.length}`,
-        processed,
-        total: data.length,
-        errors: errors.length > 0 ? errors.slice(0, 10) : [] // Первые 10 ошибок
-      });
-      
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Structure upload error:', error);
-      
-      // Удаляем файл даже при ошибке
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      
-      res.status(500).json({ 
-        error: error.message,
-        details: 'Возможно нужно сначала удалить связанные данные'
-      });
-    }
+});
+  
 // НОВЫЙ РОУТ ДЛЯ ОЧИСТКИ ВСЕХ ДАННЫХ
 // Добавь это в server.js после других роутов
 
@@ -1340,9 +1215,9 @@ async function analyzeFile(filePath, type, originalFileName = null) {
           errors: [`Ошибка парсинга результата: ${e.message}`]
         });
       }
-    });
-  });
-}  // <-- ДОБАВИТЬ: закрываем функцию analyzeFile
+    });  // Закрывает python.on('close')
+  });    // Закрывает new Promise
+}        //  закрываем функцию analyzeFile
     
   
 
