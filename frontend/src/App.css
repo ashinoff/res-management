@@ -1248,3 +1248,430 @@ css/* Стили для ячейки с ПУ */
 .settings .upload-btn:hover:not(:disabled) {
   background-color: #2980b9;
 }
+/* ===================================================== 
+   СТИЛИ ДЛЯ ЧЕКБОКСОВ И УДАЛЕНИЯ В СТРУКТУРЕ СЕТИ
+   ===================================================== */
+
+.structure-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.checkbox-column {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox-column input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+}
+
+tr.selected {
+  background-color: #fff3cd !important;
+}
+
+.delete-selected-btn {
+  background-color: #dc3545;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.delete-selected-btn:hover {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+/* Модальное окно удаления */
+.delete-modal {
+  max-width: 400px;
+}
+
+.delete-modal .warning {
+  color: #dc3545;
+  font-weight: bold;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f8d7da;
+  border-radius: 4px;
+}
+
+/* ===================================================== 
+   СТИЛИ ДЛЯ ОБНОВЛЕННЫХ УВЕДОМЛЕНИЙ
+   ===================================================== */
+
+.notifications-controls {
+  margin-bottom: 20px;
+}
+
+.complete-work-btn {
+  margin-top: 15px;
+  background-color: #28a745;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.complete-work-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+/* Выделенные блоки для комментариев и дат */
+.highlight-box {
+  margin: 15px 0;
+  padding: 15px;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.comment-box {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-left: 4px solid #2196f3;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+}
+
+.date-box {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border-left: 4px solid #ff9800;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+}
+
+.highlight-label {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.highlight-text {
+  font-size: 16px;
+  color: #1a1a1a;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Модальное окно выполнения работ */
+.complete-work-modal {
+  max-width: 500px;
+}
+
+.work-info {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.work-info p {
+  margin: 5px 0;
+}
+
+.word-count {
+  display: block;
+  text-align: right;
+  color: #666;
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+/* ===================================================== 
+   СТИЛИ ДЛЯ ОТЧЕТОВ
+   ===================================================== */
+
+.report-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 15px;
+  margin-bottom: 30px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.control-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+}
+
+.control-group select,
+.control-group input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.export-btn {
+  background-color: #28a745;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s;
+}
+
+.export-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.report-summary {
+  background-color: #e7f3ff;
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #2196f3;
+}
+
+.report-summary h3 {
+  margin: 0 0 5px 0;
+  color: #1976d2;
+}
+
+.report-summary p {
+  margin: 0;
+  color: #555;
+}
+
+.report-table {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.report-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th {
+  background-color: #f8f9fa;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.report-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.report-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+.error-cell {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.no-data {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6c757d;
+}
+
+.no-data p {
+  font-size: 18px;
+}
+
+/* Статусы в отчетах */
+td.status-ok {
+  color: #28a745;
+  font-weight: 500;
+}
+
+td.status-error {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+/* ===================================================== 
+   СТИЛИ ДЛЯ УДАЛЕНИЯ УВЕДОМЛЕНИЙ
+   ===================================================== */
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delete-notification-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.delete-notification-btn:hover {
+  opacity: 1;
+  background-color: #ffebee;
+  transform: scale(1.1);
+}
+
+/* При наведении на уведомление показываем кнопку удаления */
+.notification:hover .delete-notification-btn {
+  opacity: 1;
+}
+
+/* ===================================================== 
+   СТИЛИ ДЛЯ УСПЕШНЫХ УВЕДОМЛЕНИЙ
+   ===================================================== */
+
+.notification.success {
+  border-left: 4px solid #28a745;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+.notification.success:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+}
+
+.notification.success .notification-body {
+  color: #166534;
+  font-weight: 500;
+}
+
+/* Стили для success и info уведомлений */
+.success-notification-content,
+.info-notification-content {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.success-icon,
+.info-icon {
+  font-size: 24px;
+}
+
+.success-text {
+  flex: 1;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.info-text {
+  flex: 1;
+  font-size: 14px;
+  color: #555;
+}
+
+.notification.info {
+  border-left: 4px solid #17a2b8;
+  background: linear-gradient(135deg, #e7f6ff 0%, #d1ecf1 100%);
+}
+
+/* ===================================================== 
+   АНИМАЦИИ ДЛЯ КРАСОТЫ
+   ===================================================== */
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification {
+  animation: slideIn 0.3s ease-out;
+}
+
+.highlight-box {
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.highlight-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Пульсация для важных элементов */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 152, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0);
+  }
+}
+
+.date-box {
+  animation: pulse 2s infinite;
+}
+
+/* Анимация появления успешных уведомлений */
+@keyframes successPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+  }
+}
+
+.notification.success.unread {
+  animation: successPulse 1s ease-out;
+}
