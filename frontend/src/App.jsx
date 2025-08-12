@@ -168,16 +168,27 @@ function NetworkStructure({ selectedRes }) {
   useEffect(() => {
     loadNetworkStructure();
     
-    // Слушаем событие обновления структуры
-    const handleStructureUpdate = () => {
-      loadNetworkStructure();
-    };
-    
-    window.addEventListener('structureUpdated', handleStructureUpdate);
-    return () => {
-      window.removeEventListener('structureUpdated', handleStructureUpdate);
-    };
-  }, [selectedRes]);
+    // Слушаем различные события обновления
+  const handleStructureUpdate = () => {
+    loadNetworkStructure();
+  };
+  
+  const handleDataCleared = () => {
+    setNetworkData([]);
+    setSelectedIds([]);
+    loadNetworkStructure();
+  };
+  
+  window.addEventListener('structureUpdated', handleStructureUpdate);
+  window.addEventListener('dataCleared', handleDataCleared);
+  window.addEventListener('structureDeleted', handleStructureUpdate); // новое событие
+  
+  return () => {
+    window.removeEventListener('structureUpdated', handleStructureUpdate);
+    window.removeEventListener('dataCleared', handleDataCleared);
+    window.removeEventListener('structureDeleted', handleStructureUpdate);
+  };
+}, [selectedRes]);
 
   const loadNetworkStructure = async () => {
     try {
@@ -296,11 +307,16 @@ function NetworkStructure({ selectedRes }) {
       setShowDeleteModal(false);
       setDeletePassword('');
       setSelectedIds([]);
-      await loadNetworkStructure();
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
+
+      // НОВОЕ: создаем событие для обновления
+   
+      
+       window.dispatchEvent(new CustomEvent('structureDeleted'));
+    
+  } catch (error) {
+    alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+  }
+};
   
   const renderPuCell = (item, position) => {
     const puNumber = position === 'start' ? item.startPu : 
@@ -735,7 +751,28 @@ function Notifications({ filterType }) {
   
   useEffect(() => {
     loadNotifications();
-  }, [filterType]);
+    // Слушаем события которые требуют обновления
+  const handleUpdate = () => {
+    loadNotifications();
+  };
+  
+  window.addEventListener('structureUpdated', handleUpdate);
+  window.addEventListener('notificationsUpdated', handleUpdate);
+  window.addEventListener('dataCleared', handleUpdate);
+  
+  // Автообновление каждые 30 секунд (опционально)
+  const interval = setInterval(() => {
+    loadNotifications();
+  }, 30000);
+  
+  return () => {
+    window.removeEventListener('structureUpdated', handleUpdate);
+    window.removeEventListener('notificationsUpdated', handleUpdate);
+    window.removeEventListener('dataCleared', handleUpdate);
+    clearInterval(interval);
+  };
+}, [filterType]);
+  
 
   const loadNotifications = async () => {
     try {
@@ -754,7 +791,6 @@ function Notifications({ filterType }) {
   };
 
   const handleCompleteWork = async () => {
-    // Проверка на количество слов (минимум 5)
     const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
     if (wordCount < 5) {
       alert('Комментарий должен содержать не менее 5 слов');
@@ -766,12 +802,13 @@ function Notifications({ filterType }) {
         comment,
         checkFromDate
       });
-      
+    
       alert('Мероприятия отмечены как выполненные');
       setShowCompleteModal(false);
       setComment('');
       setSelectedNotification(null);
-      loadNotifications();
+      // НОВОЕ: создаем событие для обновления
+      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
     }
@@ -896,23 +933,8 @@ function Notifications({ filterType }) {
               {notif.type === 'error' && (() => {
                 try {
                   const data = JSON.parse(notif.message);
-    
-                  // ОТЛАДКА - добавь это временно
-                  console.log('DEBUG Notification:', {
-                    notifId: notif.id,
-                    notifType: notif.type,
-                    userRole: user.role,
-                    filterType: filterType,
-                    shouldShowButton: user.role === 'res_responsible'
-                  });
-    
                   return (
                     <div className="error-notification-content">
-                      {/* ВРЕМЕННО для отладки */}
-                      <div style={{background: '#f0f0f0', padding: '5px', fontSize: '12px', marginBottom: '10px'}}>
-                        🐛 DEBUG: role={user.role}, filter={filterType}, type={notif.type}
-                      </div>
-        
                       <div className="error-location">
                         <span className="label">РЭС:</span> {data.resName} | 
                         <span className="label"> ТП:</span> {data.tpName} | 
@@ -928,24 +950,20 @@ function Notifications({ filterType }) {
                       <div className="error-text">
                         <span className="label">Ошибка:</span> {data.errorDetails}
                       </div>
-        
-                      {/* КНОПКА БЕЗ УСЛОВИЙ для теста */}
-                      <button 
-                        className="complete-work-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          console.log('Button clicked!', { notif, data });
-                          setSelectedNotification({ id: notif.id, data });
-                          setShowCompleteModal(true);
-                        }}
-                        style={{
-                          display: 'block',
-                          marginTop: '15px',
-                          backgroundColor: user.role === 'res_responsible' ? '#28a745' : '#dc3545'
-                        }}
-                      >
-                        ✅ Мероприятия выполнены (role: {user.role})
-                      </button>
+                      
+                      {/* КНОПКА ТОЛЬКО ДЛЯ res_responsible */}
+                      {user.role === 'res_responsible' && (
+                        <button 
+                          className="complete-work-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNotification({ id: notif.id, data });
+                            setShowCompleteModal(true);
+                          }}
+                        >
+                          ✅ Мероприятия выполнены
+                        </button>
+                      )}
                     </div>
                   );
                 } catch (e) {
@@ -1285,10 +1303,14 @@ function Settings() {
   const [clearOld, setClearOld] = useState(false);
   const [clearing, setClearing] = useState(false);
   
-  // Новое для управления пользователями
+  // Для управления пользователями
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [userMessage, setUserMessage] = useState('');
+  
+  // НОВОЕ: модальное окно для удаления всех данных
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearPassword, setClearPassword] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -1313,7 +1335,7 @@ function Settings() {
       if (response.data.errors) {
         console.log('Errors:', response.data.errors);
       }
-      loadUsers(); // Перезагружаем список
+      loadUsers();
     } catch (error) {
       setUserMessage('Ошибка создания пользователей: ' + error.response?.data?.error);
     }
@@ -1325,21 +1347,26 @@ function Settings() {
     setUploadStats(null);
   };
 
+  // НОВОЕ: удаление с паролем
   const handleClearAll = async () => {
-    if (!confirm('⚠️ Вы уверены что хотите удалить ВСЕ данные?\n\nБудут удалены:\n- Вся структура сети\n- Все статусы проверок\n- Все уведомления\n- Вся история загрузок\n\nЭто действие НЕЛЬЗЯ отменить!')) {
+    if (clearPassword !== '1191') {
+      alert('Неверный пароль');
       return;
     }
-
+    
     setClearing(true);
     try {
-      const response = await api.delete('/api/network/clear-all');
+      const response = await api.delete('/api/network/clear-all', {
+        data: { password: clearPassword }
+      });
       
       setMessage('✅ Все данные успешно удалены!');
       console.log('Cleared:', response.data.deleted);
+      setShowClearModal(false);
+      setClearPassword('');
       
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Создаем событие для обновления всех компонентов
+      window.dispatchEvent(new CustomEvent('dataCleared'));
       
     } catch (error) {
       setMessage('❌ Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
@@ -1372,9 +1399,8 @@ function Settings() {
       setUploadStats(response.data);
       setFile(null);
       
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Создаем событие для обновления структуры
+      window.dispatchEvent(new CustomEvent('structureUpdated'));
       
     } catch (error) {
       console.error('Upload error:', error);
@@ -1451,7 +1477,7 @@ function Settings() {
         <h3>⚠️ Очистка данных</h3>
         <p>Используйте эту опцию если хотите полностью перезагрузить структуру сети.</p>
         <button 
-          onClick={handleClearAll}
+          onClick={() => setShowClearModal(true)}
           disabled={clearing}
           className="danger-btn"
         >
@@ -1516,6 +1542,51 @@ function Settings() {
           </div>
         )}
       </div>
+      
+      {/* Модальное окно для удаления всех данных */}
+      {showClearModal && (
+        <div className="modal-backdrop" onClick={() => setShowClearModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение полной очистки</h3>
+              <button className="close-btn" onClick={() => setShowClearModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="warning">⚠️ ВНИМАНИЕ! Будут удалены:</p>
+              <ul>
+                <li>Вся структура сети</li>
+                <li>Все статусы проверок</li>
+                <li>Все уведомления</li>
+                <li>Вся история загрузок</li>
+                <li>Вся история проверок</li>
+              </ul>
+              <p className="warning">Это действие НЕЛЬЗЯ отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={clearPassword}
+                  onChange={(e) => setClearPassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowClearModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleClearAll}
+                disabled={!clearPassword || clearing}
+              >
+                {clearing ? 'Удаление...' : 'Удалить всё'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1562,11 +1633,48 @@ export default function App() {
   };
 
   const handleLogin = (userData) => {
-    setUser(userData);
-    if (userData.resId) {
-      setSelectedRes(userData.resId);
+  // ВАЖНО: сохраняем полные данные пользователя
+  setUser({
+    id: userData.id,
+    fio: userData.fio,
+    role: userData.role,
+    resId: userData.resId,
+    resName: userData.resName
+  });
+  if (userData.resId) {
+    setSelectedRes(userData.resId);
+  }
+};
+
+// ИСПРАВЛЕННАЯ проверка токена при загрузке:
+useEffect(() => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      
+      // ВАЖНО: восстанавливаем полную информацию о пользователе
+      // Делаем запрос на сервер для получения актуальных данных
+      api.get('/api/auth/me')
+        .then(response => {
+          setUser(response.data.user);
+          setSelectedRes(response.data.user.resId);
+        })
+        .catch(() => {
+          // Если нет эндпоинта /api/auth/me, используем данные из токена
+          setUser({
+            id: payload.id,
+            role: payload.role,
+            resId: payload.resId
+          });
+          setSelectedRes(payload.resId);
+        });
+        
+    } catch (error) {
+      localStorage.removeItem('token');
     }
-  };
+  }
+}, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
