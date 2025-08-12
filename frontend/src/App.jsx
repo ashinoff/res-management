@@ -1,10 +1,10 @@
 // =====================================================
-// ПОЛНЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
+// УЛУЧШЕННЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
-// Версия с ВСЕМИ исправлениями и улучшениями
+// Версия с компактными уведомлениями и оптимизацией
 // =====================================================
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -165,32 +165,8 @@ function NetworkStructure({ selectedRes }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   
-  useEffect(() => {
-    loadNetworkStructure();
-    
-    // Слушаем различные события обновления
-  const handleStructureUpdate = () => {
-    loadNetworkStructure();
-  };
-  
-  const handleDataCleared = () => {
-    setNetworkData([]);
-    setSelectedIds([]);
-    loadNetworkStructure();
-  };
-  
-  window.addEventListener('structureUpdated', handleStructureUpdate);
-  window.addEventListener('dataCleared', handleDataCleared);
-  window.addEventListener('structureDeleted', handleStructureUpdate); // новое событие
-  
-  return () => {
-    window.removeEventListener('structureUpdated', handleStructureUpdate);
-    window.removeEventListener('dataCleared', handleDataCleared);
-    window.removeEventListener('structureDeleted', handleStructureUpdate);
-  };
-}, [selectedRes]);
-
-  const loadNetworkStructure = async () => {
+  // Оптимизированная функция загрузки
+  const loadNetworkStructure = useCallback(async () => {
     try {
       const response = await api.get(`/api/network/structure/${selectedRes || ''}`);
       setNetworkData(response.data);
@@ -199,7 +175,24 @@ function NetworkStructure({ selectedRes }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedRes]);
+
+  useEffect(() => {
+    loadNetworkStructure();
+    
+    // Слушаем события обновления
+    const handleUpdate = () => loadNetworkStructure();
+    
+    window.addEventListener('structureUpdated', handleUpdate);
+    window.addEventListener('dataCleared', handleUpdate);
+    window.addEventListener('structureDeleted', handleUpdate);
+    
+    return () => {
+      window.removeEventListener('structureUpdated', handleUpdate);
+      window.removeEventListener('dataCleared', handleUpdate);
+      window.removeEventListener('structureDeleted', handleUpdate);
+    };
+  }, [loadNetworkStructure]);
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -290,13 +283,8 @@ function NetworkStructure({ selectedRes }) {
     }
   };
   
-  // Удаление выбранных
+  // Удаление выбранных с автообновлением
   const handleDeleteSelected = async () => {
-    if (deletePassword !== '1191') {
-      alert('Неверный пароль');
-      return;
-    }
-    
     try {
       const response = await api.post('/api/network/delete-selected', {
         ids: selectedIds,
@@ -307,16 +295,14 @@ function NetworkStructure({ selectedRes }) {
       setShowDeleteModal(false);
       setDeletePassword('');
       setSelectedIds([]);
-
-      // НОВОЕ: создаем событие для обновления
-   
       
-       window.dispatchEvent(new CustomEvent('structureDeleted'));
-    
-  } catch (error) {
-    alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-  }
-};
+      // Автообновление
+      await loadNetworkStructure();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
   
   const renderPuCell = (item, position) => {
     const puNumber = position === 'start' ? item.startPu : 
@@ -466,11 +452,11 @@ function NetworkStructure({ selectedRes }) {
       
       {/* Модальное окно для удаления */}
       {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+        <div className="modal-backdrop" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Подтверждение удаления</h3>
-              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+              <button className="close-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>✕</button>
             </div>
             <div className="modal-body">
               <p>Вы собираетесь удалить {selectedIds.length} записей.</p>
@@ -487,7 +473,7 @@ function NetworkStructure({ selectedRes }) {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+              <button className="cancel-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
                 Отмена
               </button>
               <button 
@@ -523,6 +509,34 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
     errorSummary = details?.errorDetails || 'Нет данных';
   }
   
+  // Парсим фазы из деталей
+  const getPhaseErrors = () => {
+    if (!parsedDetails) return { A: false, B: false, C: false };
+    
+    const phases = { A: false, B: false, C: false };
+    
+    // Ищем упоминания фаз в тексте ошибки
+    if (parsedDetails.overvoltage) {
+      ['A', 'B', 'C'].forEach(phase => {
+        if (parsedDetails.overvoltage[`phase_${phase}`]?.count > 0) {
+          phases[phase] = true;
+        }
+      });
+    }
+    
+    if (parsedDetails.undervoltage) {
+      ['A', 'B', 'C'].forEach(phase => {
+        if (parsedDetails.undervoltage[`phase_${phase}`]?.count > 0) {
+          phases[phase] = true;
+        }
+      });
+    }
+    
+    return phases;
+  };
+  
+  const phaseErrors = getPhaseErrors();
+  
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content error-details-modal" onClick={e => e.stopPropagation()}>
@@ -535,6 +549,12 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
           <p><strong>ТП:</strong> {tpName}</p>
           <p><strong>Фидер:</strong> {vlName}</p>
           <p><strong>Позиция:</strong> {position === 'start' ? 'Начало' : position === 'middle' ? 'Середина' : 'Конец'}</p>
+        </div>
+        
+        <div className="phase-indicators-large">
+          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : 'phase-ok'}`}>A</div>
+          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : 'phase-ok'}`}>B</div>
+          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : 'phase-ok'}`}>C</div>
         </div>
         
         <div className="error-summary">
@@ -592,13 +612,6 @@ function FileUpload({ selectedRes }) {
       return;
     }
 
-    console.log('Upload params:', {
-      file: file.name,
-      type: selectedType,
-      resId: resIdToUse,
-      userRole: user.role
-    });
-
     setUploading(true);
     setUploadResult(null);
     
@@ -611,8 +624,6 @@ function FileUpload({ selectedRes }) {
       const response = await api.post('/api/upload/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      
-      console.log('Upload response:', response.data);
       
       // Показываем результат
       setUploadResult({
@@ -635,6 +646,7 @@ function FileUpload({ selectedRes }) {
       
       // Создаем событие для обновления структуры
       window.dispatchEvent(new CustomEvent('structureUpdated'));
+      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
       
     } catch (error) {
       console.error('Upload error:', error);
@@ -733,7 +745,7 @@ function FileUpload({ selectedRes }) {
 }
 
 // =====================================================
-// КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
+// КОМПОНЕНТ УВЕДОМЛЕНИЙ (КОМПАКТНЫЙ!)
 // =====================================================
 
 function Notifications({ filterType }) {
@@ -748,33 +760,11 @@ function Notifications({ filterType }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteNotificationId, setDeleteNotificationId] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsNotification, setDetailsNotification] = useState(null);
   
-  useEffect(() => {
-    loadNotifications();
-    // Слушаем события которые требуют обновления
-  const handleUpdate = () => {
-    loadNotifications();
-  };
-  
-  window.addEventListener('structureUpdated', handleUpdate);
-  window.addEventListener('notificationsUpdated', handleUpdate);
-  window.addEventListener('dataCleared', handleUpdate);
-  
-  // Автообновление каждые 30 секунд (опционально)
-  const interval = setInterval(() => {
-    loadNotifications();
-  }, 30000);
-  
-  return () => {
-    window.removeEventListener('structureUpdated', handleUpdate);
-    window.removeEventListener('notificationsUpdated', handleUpdate);
-    window.removeEventListener('dataCleared', handleUpdate);
-    clearInterval(interval);
-  };
-}, [filterType]);
-  
-
-  const loadNotifications = async () => {
+  // Оптимизированная функция загрузки
+  const loadNotifications = useCallback(async () => {
     try {
       const response = await api.get('/api/notifications');
       // Фильтруем по переданному типу
@@ -788,7 +778,28 @@ function Notifications({ filterType }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType]);
+
+  useEffect(() => {
+    loadNotifications();
+    
+    // Слушаем события обновления
+    const handleUpdate = () => loadNotifications();
+    
+    window.addEventListener('structureUpdated', handleUpdate);
+    window.addEventListener('notificationsUpdated', handleUpdate);
+    window.addEventListener('dataCleared', handleUpdate);
+    
+    // Автообновление каждые 30 секунд
+    const interval = setInterval(loadNotifications, 30000);
+    
+    return () => {
+      window.removeEventListener('structureUpdated', handleUpdate);
+      window.removeEventListener('notificationsUpdated', handleUpdate);
+      window.removeEventListener('dataCleared', handleUpdate);
+      clearInterval(interval);
+    };
+  }, [loadNotifications]);
 
   const handleCompleteWork = async () => {
     const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
@@ -807,19 +818,16 @@ function Notifications({ filterType }) {
       setShowCompleteModal(false);
       setComment('');
       setSelectedNotification(null);
-      // НОВОЕ: создаем событие для обновления
-      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
+      
+      // Автообновление
+      await loadNotifications();
+      
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
     }
   };
 
   const handleDeleteNotification = async () => {
-    if (deletePassword !== '1191') {
-      alert('Неверный пароль');
-      return;
-    }
-   
     try {
       await api.delete(`/api/notifications/${deleteNotificationId}`, {
         data: { password: deletePassword }
@@ -829,44 +837,38 @@ function Notifications({ filterType }) {
       setShowDeleteModal(false);
       setDeletePassword('');
       setDeleteNotificationId(null);
-      loadNotifications();
+      
+      // Автообновление
+      await loadNotifications();
+      
     } catch (error) {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  const renderAskueDetails = (message) => {
+  // Определение фаз с ошибками
+  const getPhaseErrors = useCallback((errorDetails) => {
+    const phases = { A: false, B: false, C: false };
+    if (!errorDetails) return phases;
+    
     try {
-      const data = JSON.parse(message);
-      return (
-        <div className="askue-notification-content">
-          <div className="askue-header">⚡ Требуется снять журнал событий</div>
-          <div className="askue-details">
-            <p><strong>ПУ №:</strong> {data.puNumber}</p>
-            <p><strong>ТП:</strong> {data.tpName} | <strong>ВЛ:</strong> {data.vlName}</p>
-            <p><strong>Позиция:</strong> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}</p>
-            
-            <div className="highlight-box comment-box">
-              <p className="highlight-label">💬 Комментарий РЭС:</p>
-              <p className="highlight-text">{data.completedComment}</p>
-            </div>
-            
-            <div className="highlight-box date-box">
-              <p className="highlight-label">📅 Журнал с даты:</p>
-              <p className="highlight-text">{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</p>
-            </div>
-            
-            <div className="completed-info">
-              <p><strong>Дата выполнения мероприятий:</strong> {new Date(data.completedAt).toLocaleString('ru-RU')}</p>
-              <p><strong>Выполнил:</strong> Ответственный РЭС</p>
-            </div>
-          </div>
-        </div>
-      );
+      // Ищем упоминания фаз в тексте
+      const text = typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails);
+      if (text.includes('Фаза A') || text.includes('phase_A')) phases.A = true;
+      if (text.includes('Фаза B') || text.includes('phase_B')) phases.B = true;
+      if (text.includes('Фаза C') || text.includes('phase_C')) phases.C = true;
+      
+      // Если ни одна фаза не найдена, помечаем все
+      if (!phases.A && !phases.B && !phases.C) {
+        phases.A = phases.B = phases.C = true;
+      }
     } catch (e) {
-      return <div>{message}</div>;
+      // По умолчанию все фазы с ошибкой
+      phases.A = phases.B = phases.C = true;
     }
-  };
+    
+    return phases;
+  }, []);
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
@@ -905,37 +907,18 @@ function Notifications({ filterType }) {
         {filteredNotifications.map(notif => (
           <div 
             key={notif.id} 
-            className={`notification ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
+            className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
           >
-            <div className="notification-header">
-              <span className="notification-from">От: {notif.fromUser?.fio || 'Система'}</span>
-              <div className="notification-actions">
-                <span className="notification-date">
-                  {new Date(notif.createdAt).toLocaleString('ru-RU')}
-                </span>
-                {user.role === 'admin' && (
-                  <button
-                    className="delete-notification-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteNotificationId(notif.id);
-                      setShowDeleteModal(true);
-                    }}
-                    title="Удалить уведомление"
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="notification-body">
-              {/* ИСПРАВЛЕННЫЙ БЛОК ДЛЯ УВЕДОМЛЕНИЙ ОБ ОШИБКАХ */}
-              {notif.type === 'error' && (() => {
-                try {
-                  const data = JSON.parse(notif.message);
-                  return (
-                    <div className="error-notification-content">
-                      <div className="error-location">
+            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
+            {notif.type === 'error' && (() => {
+              try {
+                const data = JSON.parse(notif.message);
+                const phaseErrors = getPhaseErrors(data.errorDetails);
+                
+                return (
+                  <div className="notification-compact-content">
+                    <div className="notification-main-info">
+                      <div className="notification-location">
                         <span className="label">РЭС:</span> {data.resName} | 
                         <span className="label"> ТП:</span> {data.tpName} | 
                         <span className="label"> ВЛ:</span> {data.vlName} | 
@@ -944,52 +927,213 @@ function Notifications({ filterType }) {
                           data.position === 'middle' ? 'Середина' : 'Конец'
                         }
                       </div>
-                      <div className="error-pu">
-                        <span className="label">ПУ №:</span> {data.puNumber}
+                      <div className="notification-pu">
+                        <span className="label">ПУ №:</span> <strong>{data.puNumber}</strong>
                       </div>
-                      <div className="error-text">
-                        <span className="label">Ошибка:</span> {data.errorDetails}
+                    </div>
+                    
+                    <div className="notification-actions-row">
+                      <div className="phase-indicators">
+                        <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : 'phase-ok'}`}>A</div>
+                        <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : 'phase-ok'}`}>B</div>
+                        <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : 'phase-ok'}`}>C</div>
                       </div>
                       
-                      {/* КНОПКА ТОЛЬКО ДЛЯ res_responsible */}
-                      {user.role === 'res_responsible' && (
+                      <div className="notification-buttons">
                         <button 
-                          className="complete-work-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedNotification({ id: notif.id, data });
-                            setShowCompleteModal(true);
+                          className="btn-details"
+                          onClick={() => {
+                            setDetailsNotification({ ...notif, data });
+                            setShowDetailsModal(true);
                           }}
+                          title="Подробности"
                         >
-                          ✅ Мероприятия выполнены
+                          🔍
                         </button>
-                      )}
+                        
+                        {user.role === 'res_responsible' && (
+                          <button 
+                            className="btn-complete"
+                            onClick={() => {
+                              setSelectedNotification({ id: notif.id, data });
+                              setShowCompleteModal(true);
+                            }}
+                            title="Выполнить мероприятия"
+                          >
+                            ✅
+                          </button>
+                        )}
+                        
+                        {user.role === 'admin' && (
+                          <button
+                            className="btn-delete"
+                            onClick={() => {
+                              setDeleteNotificationId(notif.id);
+                              setShowDeleteModal(true);
+                            }}
+                            title="Удалить"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  );
-                } catch (e) {
-                  return <div className="error-text">Ошибка отображения: {notif.message}</div>;
-                }
-              })()}
-              
-              {notif.type === 'pending_askue' && renderAskueDetails(notif.message)}
-              
-              {notif.type === 'success' && (
-                <div className="success-notification-content">
-                  <div className="success-icon">✅</div>
-                  <div className="success-text">{notif.message}</div>
-                </div>
-              )}
+                  </div>
+                );
+              } catch (e) {
+                return <div className="error-text">Ошибка отображения</div>;
+              }
+            })()}
+            
+            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
+            {notif.type === 'pending_askue' && (() => {
+              try {
+                const data = JSON.parse(notif.message);
+                return (
+                  <div className="notification-compact-content askue">
+                    <div className="notification-main-info">
+                      <div className="notification-location">
+                        <span className="label">ТП:</span> {data.tpName} | 
+                        <span className="label"> ПУ №:</span> <strong>{data.puNumber}</strong> | 
+                        <span className="label"> Журнал с:</span> <strong>{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</strong>
+                      </div>
+                    </div>
+                    
+                    <div className="notification-actions-row">
+                      <div className="notification-buttons">
+                        <button 
+                          className="btn-upload"
+                          onClick={() => alert('Перейдите в раздел "Загрузить файлы" и загрузите файл ' + data.puNumber + '.xls')}
+                          title="Загрузить файл"
+                        >
+                          📤 Загрузить
+                        </button>
+                        
+                        <button 
+                          className="btn-details"
+                          onClick={() => {
+                            setDetailsNotification({ ...notif, data });
+                            setShowDetailsModal(true);
+                          }}
+                          title="Подробности"
+                        >
+                          🔍
+                        </button>
+                        
+                        {user.role === 'admin' && (
+                          <button
+                            className="btn-delete"
+                            onClick={() => {
+                              setDeleteNotificationId(notif.id);
+                              setShowDeleteModal(true);
+                            }}
+                            title="Удалить"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              } catch (e) {
+                return <div className="error-text">Ошибка отображения</div>;
+              }
+            })()}
+            
+            {/* УСПЕШНЫЕ УВЕДОМЛЕНИЯ */}
+            {notif.type === 'success' && (
+              <div className="notification-compact-content success">
+                <div className="success-icon">✅</div>
+                <div className="success-text">{notif.message}</div>
+              </div>
+            )}
 
-              {notif.type === 'info' && (
-                <div className="info-notification-content">
-                  <div className="info-icon">ℹ️</div>
-                  <div className="info-text">{notif.message}</div>
-                </div>
-              )}
-            </div>
+            {/* ИНФОРМАЦИОННЫЕ УВЕДОМЛЕНИЯ */}
+            {notif.type === 'info' && (
+              <div className="notification-compact-content info">
+                <div className="info-icon">ℹ️</div>
+                <div className="info-text">{notif.message}</div>
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* Модальное окно деталей */}
+      {showDetailsModal && detailsNotification && (
+        <div className="modal-backdrop" onClick={() => setShowDetailsModal(false)}>
+          <div className="modal-content details-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подробная информация</h3>
+              <button className="close-btn" onClick={() => setShowDetailsModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              {detailsNotification.type === 'error' && (
+                <>
+                  <div className="detail-row">
+                    <strong>РЭС:</strong> {detailsNotification.data.resName}
+                  </div>
+                  <div className="detail-row">
+                    <strong>ТП:</strong> {detailsNotification.data.tpName}
+                  </div>
+                  <div className="detail-row">
+                    <strong>Фидер:</strong> {detailsNotification.data.vlName}
+                  </div>
+                  <div className="detail-row">
+                    <strong>ПУ №:</strong> {detailsNotification.data.puNumber}
+                  </div>
+                  <div className="detail-row">
+                    <strong>Позиция:</strong> {
+                      detailsNotification.data.position === 'start' ? 'Начало' :
+                      detailsNotification.data.position === 'middle' ? 'Середина' : 'Конец'
+                    }
+                  </div>
+                  <div className="error-details-box">
+                    <strong>Детали ошибки:</strong>
+                    <p>{detailsNotification.data.errorDetails}</p>
+                  </div>
+                </>
+              )}
+              
+              {detailsNotification.type === 'pending_askue' && (
+                <>
+                  <div className="askue-details-content">
+                    <h4>⚡ Требуется снять журнал событий</h4>
+                    <div className="detail-row">
+                      <strong>ПУ №:</strong> {detailsNotification.data.puNumber}
+                    </div>
+                    <div className="detail-row">
+                      <strong>ТП:</strong> {detailsNotification.data.tpName}
+                    </div>
+                    <div className="detail-row">
+                      <strong>Фидер:</strong> {detailsNotification.data.vlName}
+                    </div>
+                    <div className="highlight-box">
+                      <strong>📅 Журнал событий с даты:</strong>
+                      <p>{new Date(detailsNotification.data.checkFromDate).toLocaleDateString('ru-RU')}</p>
+                    </div>
+                    <div className="highlight-box">
+                      <strong>💬 Комментарий РЭС:</strong>
+                      <p>{detailsNotification.data.completedComment}</p>
+                    </div>
+                    <div className="detail-row">
+                      <strong>Мероприятия выполнены:</strong> {new Date(detailsNotification.data.completedAt).toLocaleString('ru-RU')}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button className="action-btn" onClick={() => setShowDetailsModal(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Модальное окно для выполнения мероприятий */}
       {showCompleteModal && selectedNotification && (
@@ -1048,11 +1192,11 @@ function Notifications({ filterType }) {
       
       {/* Модальное окно для удаления */}
       {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+        <div className="modal-backdrop" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Подтверждение удаления</h3>
-              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+              <button className="close-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>✕</button>
             </div>
             <div className="modal-body">
               <p>Вы собираетесь удалить это уведомление.</p>
@@ -1069,7 +1213,7 @@ function Notifications({ filterType }) {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+              <button className="cancel-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
                 Отмена
               </button>
               <button 
@@ -1168,9 +1312,11 @@ function Reports() {
     }
   };
 
-  // Фильтрация по ТП
-  const filteredData = reportData.filter(item => 
-    !searchTp || item.tpName?.toLowerCase().includes(searchTp.toLowerCase())
+  // Фильтрация по ТП с мемоизацией
+  const filteredData = useMemo(() => 
+    reportData.filter(item => 
+      !searchTp || item.tpName?.toLowerCase().includes(searchTp.toLowerCase())
+    ), [reportData, searchTp]
   );
 
   if (loading) return <div className="loading">Загрузка отчета...</div>;
@@ -1292,87 +1438,58 @@ function Reports() {
 }
 
 // =====================================================
-// КОМПОНЕНТ НАСТРОЕК
+// КОМПОНЕНТ НАСТРОЕК С УПРАВЛЕНИЕМ ПОЛЬЗОВАТЕЛЯМИ
 // =====================================================
 
 function Settings() {
+  const [activeTab, setActiveTab] = useState('structure');
+  
+  return (
+    <div className="settings-container">
+      <h2>Настройки системы</h2>
+      
+      <div className="settings-tabs">
+        <button 
+          className={activeTab === 'structure' ? 'active' : ''}
+          onClick={() => setActiveTab('structure')}
+        >
+          📁 Структура сети
+        </button>
+        <button 
+          className={activeTab === 'users' ? 'active' : ''}
+          onClick={() => setActiveTab('users')}
+        >
+          👥 Пользователи
+        </button>
+        <button 
+          className={activeTab === 'maintenance' ? 'active' : ''}
+          onClick={() => setActiveTab('maintenance')}
+        >
+          🔧 Обслуживание
+        </button>
+      </div>
+      
+      <div className="settings-content">
+        {activeTab === 'structure' && <StructureSettings />}
+        {activeTab === 'users' && <UserSettings />}
+        {activeTab === 'maintenance' && <MaintenanceSettings />}
+      </div>
+    </div>
+  );
+}
+
+// Подкомпонент настроек структуры
+function StructureSettings() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [uploadStats, setUploadStats] = useState(null);
   const [clearOld, setClearOld] = useState(false);
-  const [clearing, setClearing] = useState(false);
   
-  // Для управления пользователями
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userMessage, setUserMessage] = useState('');
-  
-  // НОВОЕ: модальное окно для удаления всех данных
-  const [showClearModal, setShowClearModal] = useState(false);
-  const [clearPassword, setClearPassword] = useState('');
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
-  const loadUsers = async () => {
-    setLoadingUsers(true);
-    try {
-      const response = await api.get('/api/users/list');
-      setUsers(response.data);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  const createTestUsers = async () => {
-    try {
-      const response = await api.post('/api/users/create-test');
-      setUserMessage(response.data.message);
-      if (response.data.errors) {
-        console.log('Errors:', response.data.errors);
-      }
-      loadUsers();
-    } catch (error) {
-      setUserMessage('Ошибка создания пользователей: ' + error.response?.data?.error);
-    }
-  };
-
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
     setMessage('');
     setUploadStats(null);
-  };
-
-  // НОВОЕ: удаление с паролем
-  const handleClearAll = async () => {
-    if (clearPassword !== '1191') {
-      alert('Неверный пароль');
-      return;
-    }
-    
-    setClearing(true);
-    try {
-      const response = await api.delete('/api/network/clear-all', {
-        data: { password: clearPassword }
-      });
-      
-      setMessage('✅ Все данные успешно удалены!');
-      console.log('Cleared:', response.data.deleted);
-      setShowClearModal(false);
-      setClearPassword('');
-      
-      // Создаем событие для обновления всех компонентов
-      window.dispatchEvent(new CustomEvent('dataCleared'));
-      
-    } catch (error) {
-      setMessage('❌ Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    } finally {
-      setClearing(false);
-    }
   };
 
   const handleUploadStructure = async () => {
@@ -1410,31 +1527,216 @@ function Settings() {
       setUploading(false);
     }
   };
-
+  
   return (
-    <div className="settings">
-      <h2>Настройки системы</h2>
+    <div className="settings-section">
+      <h3>📂 Загрузка структуры сети</h3>
+      <p className="section-description">
+        Загрузите Excel файл со структурой сети. Формат: РЭС | ТП | Фидер | Начало | Середина | Конец
+      </p>
       
-      {/* Секция управления пользователями */}
-      <div className="users-section">
-        <h3>👥 Управление пользователями</h3>
-        
-        <button 
-          onClick={createTestUsers}
-          className="action-btn"
-          style={{marginBottom: '20px'}}
-        >
-          🧪 Создать тестовых пользователей
-        </button>
-        
-        {userMessage && (
-          <div className={userMessage.includes('Создано') ? 'success-message' : 'error-message'}>
-            {userMessage}
+      <div className="upload-area">
+        <input 
+          type="file" 
+          accept=".xlsx,.xls"
+          onChange={handleFileSelect}
+          id="structure-file"
+        />
+        <label htmlFor="structure-file" className="file-label">
+          {file ? file.name : 'Выберите файл Excel'}
+        </label>
+      </div>
+      
+      <div className="settings-option">
+        <label className="checkbox-label">
+          <input 
+            type="checkbox" 
+            checked={clearOld}
+            onChange={(e) => setClearOld(e.target.checked)}
+          />
+          <span>Удалить существующие данные перед загрузкой</span>
+        </label>
+      </div>
+      
+      <button 
+        onClick={handleUploadStructure} 
+        disabled={uploading || !file}
+        className="primary-btn"
+      >
+        {uploading ? 'Загрузка...' : '📤 Загрузить структуру'}
+      </button>
+      
+      {message && (
+        <div className={message.includes('✅') ? 'success-message' : 'error-message'}>
+          {message}
+        </div>
+      )}
+      
+      {uploadStats && (
+        <div className="upload-stats">
+          <h4>Результаты загрузки:</h4>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <span className="stat-label">Обработано:</span>
+              <span className="stat-value">{uploadStats.processed}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Всего записей:</span>
+              <span className="stat-value">{uploadStats.total}</span>
+            </div>
           </div>
-        )}
-        
-        <div className="users-table" style={{maxHeight: '300px', overflow: 'auto'}}>
-          <table>
+          {uploadStats.errors && uploadStats.errors.length > 0 && (
+            <div className="errors-list">
+              <p>⚠️ Ошибки при загрузке:</p>
+              <ul>
+                {uploadStats.errors.slice(0, 5).map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
+              {uploadStats.errors.length > 5 && (
+                <p>... и еще {uploadStats.errors.length - 5} ошибок</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Подкомпонент управления пользователями
+function UserSettings() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [resList, setResList] = useState([]);
+  
+  // Форма для создания/редактирования
+  const [userForm, setUserForm] = useState({
+    fio: '',
+    login: '',
+    password: '',
+    email: '',
+    role: 'uploader',
+    resId: ''
+  });
+  
+  useEffect(() => {
+    loadUsers();
+    loadResList();
+  }, []);
+  
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/api/users/list');
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const loadResList = async () => {
+    try {
+      const response = await api.get('/api/res/list');
+      setResList(response.data);
+    } catch (error) {
+      console.error('Error loading RES list:', error);
+    }
+  };
+  
+  const handleCreateUser = async () => {
+    try {
+      await api.post('/api/users/create', userForm);
+      alert('Пользователь создан успешно');
+      setShowCreateModal(false);
+      setUserForm({
+        fio: '',
+        login: '',
+        password: '',
+        email: '',
+        role: 'uploader',
+        resId: ''
+      });
+      loadUsers();
+    } catch (error) {
+      alert('Ошибка создания пользователя: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const handleUpdateUser = async () => {
+    try {
+      await api.put(`/api/users/${editingUser.id}`, userForm);
+      alert('Пользователь обновлен успешно');
+      setShowEditModal(false);
+      setEditingUser(null);
+      loadUsers();
+    } catch (error) {
+      alert('Ошибка обновления пользователя: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const handleDeleteUser = async (userId) => {
+    if (!confirm('Удалить пользователя?')) return;
+    
+    const password = prompt('Введите пароль администратора:');
+    if (!password) return;
+    
+    try {
+      await api.delete(`/api/users/${userId}`, { data: { password } });
+      alert('Пользователь удален');
+      loadUsers();
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const startEdit = (user) => {
+    setEditingUser(user);
+    setUserForm({
+      fio: user.fio,
+      login: user.login,
+      password: '',
+      email: user.email,
+      role: user.role,
+      resId: user.resId || ''
+    });
+    setShowEditModal(true);
+  };
+  
+  const createTestUsers = async () => {
+    try {
+      const response = await api.post('/api/users/create-test');
+      alert(response.data.message);
+      loadUsers();
+    } catch (error) {
+      alert('Ошибка создания тестовых пользователей');
+    }
+  };
+  
+  return (
+    <div className="settings-section">
+      <div className="section-header">
+        <h3>👥 Управление пользователями</h3>
+        <div className="header-actions">
+          <button onClick={createTestUsers} className="secondary-btn">
+            🧪 Создать тестовых
+          </button>
+          <button onClick={() => setShowCreateModal(true)} className="primary-btn">
+            ➕ Новый пользователь
+          </button>
+        </div>
+      </div>
+      
+      <div className="users-table-container">
+        {loading ? (
+          <div className="loading">Загрузка...</div>
+        ) : (
+          <table className="users-table">
             <thead>
               <tr>
                 <th>ФИО</th>
@@ -1442,105 +1744,292 @@ function Settings() {
                 <th>Роль</th>
                 <th>РЭС</th>
                 <th>Email</th>
+                <th>Действия</th>
               </tr>
             </thead>
             <tbody>
-              {loadingUsers ? (
-                <tr><td colSpan="5">Загрузка...</td></tr>
-              ) : (
-                users.map(user => (
-                  <tr key={user.id}>
-                    <td>{user.fio}</td>
-                    <td><strong>{user.login}</strong></td>
-                    <td>
+              {users.map(user => (
+                <tr key={user.id}>
+                  <td>{user.fio}</td>
+                  <td><strong>{user.login}</strong></td>
+                  <td>
+                    <span className={`role-badge role-${user.role}`}>
                       {user.role === 'admin' ? '👑 Админ' : 
                        user.role === 'uploader' ? '📤 Загрузчик' : 
                        '⚡ Ответственный'}
-                    </td>
-                    <td>{user.ResUnit?.name || '-'}</td>
-                    <td>{user.email}</td>
-                  </tr>
-                ))
-              )}
+                    </span>
+                  </td>
+                  <td>{user.ResUnit?.name || '-'}</td>
+                  <td>{user.email}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button 
+                        onClick={() => startEdit(user)}
+                        className="btn-icon"
+                        title="Редактировать"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="btn-icon danger"
+                        title="Удалить"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-          <div style={{marginTop: '10px', fontSize: '12px', color: '#666'}}>
-            💡 Пароль для всех тестовых пользователей: <strong>test123</strong>
-          </div>
-        </div>
+        )}
       </div>
       
-      <hr style={{margin: '30px 0', border: '1px solid #e5e5e5'}} />
+      {/* Модальное окно создания пользователя */}
+      {showCreateModal && (
+        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+          <div className="modal-content user-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Создание пользователя</h3>
+              <button className="close-btn" onClick={() => setShowCreateModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label>ФИО</label>
+                <input
+                  type="text"
+                  value={userForm.fio}
+                  onChange={(e) => setUserForm({...userForm, fio: e.target.value})}
+                  placeholder="Иванов Иван Иванович"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Логин</label>
+                <input
+                  type="text"
+                  value={userForm.login}
+                  onChange={(e) => setUserForm({...userForm, login: e.target.value})}
+                  placeholder="ivanov"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Пароль</label>
+                <input
+                  type="password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                  placeholder="Минимум 6 символов"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({...userForm, email: e.target.value})}
+                  placeholder="ivanov@res.ru"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Роль</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({...userForm, role: e.target.value})}
+                >
+                  <option value="admin">Администратор</option>
+                  <option value="uploader">Загрузчик АСКУЭ</option>
+                  <option value="res_responsible">Ответственный РЭС</option>
+                </select>
+              </div>
+              
+              {userForm.role !== 'admin' && (
+                <div className="form-group">
+                  <label>РЭС</label>
+                  <select
+                    value={userForm.resId}
+                    onChange={(e) => setUserForm({...userForm, resId: e.target.value})}
+                  >
+                    <option value="">Выберите РЭС</option>
+                    {resList.map(res => (
+                      <option key={res.id} value={res.id}>{res.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowCreateModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="primary-btn" 
+                onClick={handleCreateUser}
+                disabled={!userForm.fio || !userForm.login || !userForm.password || !userForm.email}
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
-      {/* Секция очистки данных */}
-      <div className="clear-data-section">
-        <h3>⚠️ Очистка данных</h3>
-        <p>Используйте эту опцию если хотите полностью перезагрузить структуру сети.</p>
+      {/* Модальное окно редактирования (аналогично создания) */}
+      {showEditModal && (
+        <div className="modal-backdrop" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content user-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Редактирование пользователя</h3>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label>ФИО</label>
+                <input
+                  type="text"
+                  value={userForm.fio}
+                  onChange={(e) => setUserForm({...userForm, fio: e.target.value})}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Логин</label>
+                <input
+                  type="text"
+                  value={userForm.login}
+                  onChange={(e) => setUserForm({...userForm, login: e.target.value})}
+                  disabled
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Новый пароль (оставьте пустым чтобы не менять)</label>
+                <input
+                  type="password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                  placeholder="Оставьте пустым"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({...userForm, email: e.target.value})}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Роль</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({...userForm, role: e.target.value})}
+                >
+                  <option value="admin">Администратор</option>
+                  <option value="uploader">Загрузчик АСКУЭ</option>
+                  <option value="res_responsible">Ответственный РЭС</option>
+                </select>
+              </div>
+              
+              {userForm.role !== 'admin' && (
+                <div className="form-group">
+                  <label>РЭС</label>
+                  <select
+                    value={userForm.resId}
+                    onChange={(e) => setUserForm({...userForm, resId: e.target.value})}
+                  >
+                    <option value="">Выберите РЭС</option>
+                    {resList.map(res => (
+                      <option key={res.id} value={res.id}>{res.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowEditModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="primary-btn" 
+                onClick={handleUpdateUser}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Подкомпонент обслуживания системы
+function MaintenanceSettings() {
+  const [clearing, setClearing] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearPassword, setClearPassword] = useState('');
+  
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const response = await api.delete('/api/network/clear-all', {
+        data: { password: clearPassword }
+      });
+      
+      alert('✅ Все данные успешно удалены!');
+      setShowClearModal(false);
+      setClearPassword('');
+      
+      // Создаем событие для обновления всех компонентов
+      window.dispatchEvent(new CustomEvent('dataCleared'));
+      
+    } catch (error) {
+      alert('❌ Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+    } finally {
+      setClearing(false);
+    }
+  };
+  
+  return (
+    <div className="settings-section">
+      <h3>🔧 Обслуживание системы</h3>
+      
+      <div className="maintenance-card danger">
+        <h4>⚠️ Полная очистка данных</h4>
+        <p>Удаляет всю структуру сети, статусы проверок, уведомления и историю.</p>
+        <p className="warning-text">Это действие необратимо!</p>
         <button 
           onClick={() => setShowClearModal(true)}
           disabled={clearing}
           className="danger-btn"
         >
-          {clearing ? 'Удаление...' : '🗑️ Удалить ВСЕ данные'}
+          {clearing ? 'Удаление...' : '🗑️ Очистить все данные'}
         </button>
       </div>
       
-      <hr style={{margin: '30px 0', border: '1px solid #e5e5e5'}} />
-      
-      {/* Секция загрузки структуры */}
-      <div className="upload-structure">
-        <h3>📂 Загрузка структуры сети</h3>
-        
-        <div className="file-input-wrapper">
-          <input 
-            type="file" 
-            accept=".xlsx,.xls"
-            onChange={handleFileSelect}
-          />
-          {file && <p className="file-name">Выбран файл: {file.name}</p>}
-        </div>
-        
-        <div className="checkbox-group">
-          <label>
-            <input 
-              type="checkbox" 
-              checked={clearOld}
-              onChange={(e) => setClearOld(e.target.checked)}
-            />
-            Удалить существующие данные перед загрузкой
-          </label>
-        </div>
-        
-        <button 
-          onClick={handleUploadStructure} 
-          disabled={uploading || !file}
-          className="upload-btn"
-        >
-          {uploading ? 'Загрузка...' : '📤 Загрузить структуру'}
-        </button>
-        
-        {message && (
-          <div className={message.includes('✅') ? 'success-message' : 'error-message'}>
-            {message}
+      <div className="maintenance-card">
+        <h4>📊 Статистика системы</h4>
+        <div className="stats-grid">
+          <div className="stat-item">
+            <span className="stat-label">Версия системы:</span>
+            <span className="stat-value">2.0</span>
           </div>
-        )}
-        
-        {uploadStats && (
-          <div className="upload-results">
-            <h4>Результаты загрузки:</h4>
-            <p>✅ Обработано: {uploadStats.processed} из {uploadStats.total} записей</p>
-            {uploadStats.errors && uploadStats.errors.length > 0 && (
-              <div className="errors-list">
-                <p>⚠️ Ошибки при загрузке:</p>
-                <ul>
-                  {uploadStats.errors.map((err, idx) => (
-                    <li key={idx}>{err}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <div className="stat-item">
+            <span className="stat-label">База данных:</span>
+            <span className="stat-value">PostgreSQL</span>
           </div>
-        )}
+        </div>
       </div>
       
       {/* Модальное окно для удаления всех данных */}
@@ -1601,19 +2090,28 @@ export default function App() {
   const [selectedRes, setSelectedRes] = useState(null);
   const [resList, setResList] = useState([]);
 
+  // Оптимизированная проверка токена
   useEffect(() => {
-    // Проверяем токен при загрузке
     const token = localStorage.getItem('token');
     if (token) {
-      // Здесь можно добавить проверку токена через API
-      // Пока просто парсим токен
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUser(payload);
-        setSelectedRes(payload.resId);
-      } catch (error) {
-        localStorage.removeItem('token');
-      }
+      api.get('/api/auth/me')
+        .then(response => {
+          setUser(response.data.user);
+          setSelectedRes(response.data.user.resId);
+        })
+        .catch(() => {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            setUser({
+              id: payload.id,
+              role: payload.role,
+              resId: payload.resId
+            });
+            setSelectedRes(payload.resId);
+          } catch (error) {
+            localStorage.removeItem('token');
+          }
+        });
     }
   }, []);
 
@@ -1632,49 +2130,18 @@ export default function App() {
     }
   };
 
-  const handleLogin = (userData) => {
-  // ВАЖНО: сохраняем полные данные пользователя
-  setUser({
-    id: userData.id,
-    fio: userData.fio,
-    role: userData.role,
-    resId: userData.resId,
-    resName: userData.resName
-  });
-  if (userData.resId) {
-    setSelectedRes(userData.resId);
-  }
-};
-
-// ИСПРАВЛЕННАЯ проверка токена при загрузке:
-useEffect(() => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      
-      // ВАЖНО: восстанавливаем полную информацию о пользователе
-      // Делаем запрос на сервер для получения актуальных данных
-      api.get('/api/auth/me')
-        .then(response => {
-          setUser(response.data.user);
-          setSelectedRes(response.data.user.resId);
-        })
-        .catch(() => {
-          // Если нет эндпоинта /api/auth/me, используем данные из токена
-          setUser({
-            id: payload.id,
-            role: payload.role,
-            resId: payload.resId
-          });
-          setSelectedRes(payload.resId);
-        });
-        
-    } catch (error) {
-      localStorage.removeItem('token');
+  const handleLogin = useCallback((userData) => {
+    setUser({
+      id: userData.id,
+      fio: userData.fio,
+      role: userData.role,
+      resId: userData.resId,
+      resName: userData.resName
+    });
+    if (userData.resId) {
+      setSelectedRes(userData.resId);
     }
-  }
-}, []);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -1702,7 +2169,7 @@ useEffect(() => {
         return <Settings />;
       default:
         return <NetworkStructure selectedRes={selectedRes} />;
-     }
+    }
   };
 
   return (
