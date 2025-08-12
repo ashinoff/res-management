@@ -1,7 +1,7 @@
 // =====================================================
 // ПОЛНЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
-// Версия с загрузкой структуры и поддержкой СИРИУС
+// Версия с ВСЕМИ исправлениями и улучшениями
 // =====================================================
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
@@ -156,17 +156,27 @@ function NetworkStructure({ selectedRes }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedPosition, setSelectedPosition] = useState(null);
   
-  // НОВОЕ - для редактирования
+  // Для редактирования
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   
-  // НОВОЕ - для выбора и удаления
+  // Для выбора и удаления
   const [selectedIds, setSelectedIds] = useState([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   
   useEffect(() => {
     loadNetworkStructure();
+    
+    // Слушаем событие обновления структуры
+    const handleStructureUpdate = () => {
+      loadNetworkStructure();
+    };
+    
+    window.addEventListener('structureUpdated', handleStructureUpdate);
+    return () => {
+      window.removeEventListener('structureUpdated', handleStructureUpdate);
+    };
   }, [selectedRes]);
 
   const loadNetworkStructure = async () => {
@@ -191,18 +201,6 @@ function NetworkStructure({ selectedRes }) {
     }
   };
 
-  const handleNotifyCompleted = async (networkStructureId) => {
-    try {
-      await api.post('/api/notifications/work-completed', {
-        networkStructureId,
-        message: 'Мероприятия выполнены'
-      });
-      alert('Уведомление отправлено');
-    } catch (error) {
-      alert('Ошибка отправки уведомления');
-    }
-  };
-
   const handleCellClick = (item, position) => {
     const puNumber = position === 'start' ? item.startPu : 
                      position === 'middle' ? item.middlePu : 
@@ -222,7 +220,7 @@ function NetworkStructure({ selectedRes }) {
     }
   };
   
-  // НОВОЕ - начать редактирование
+  // Начать редактирование
   const startEdit = (item, position) => {
     if (user.role !== 'admin') return;
     
@@ -233,7 +231,7 @@ function NetworkStructure({ selectedRes }) {
     setEditValue(currentValue || '');
   };
   
-  // НОВОЕ - сохранить изменения
+  // Сохранить изменения
   const saveEdit = async (item) => {
     try {
       const updateData = {
@@ -262,7 +260,7 @@ function NetworkStructure({ selectedRes }) {
     setEditValue('');
   };
   
-  // НОВОЕ - обработка выбора строк
+  // Обработка выбора строк
   const handleSelectRow = (id) => {
     setSelectedIds(prev => {
       if (prev.includes(id)) {
@@ -281,7 +279,7 @@ function NetworkStructure({ selectedRes }) {
     }
   };
   
-  // НОВОЕ - удаление выбранных
+  // Удаление выбранных
   const handleDeleteSelected = async () => {
     if (deletePassword !== '1191') {
       alert('Неверный пароль');
@@ -406,7 +404,6 @@ function NetworkStructure({ selectedRes }) {
               <th>Середина</th>
               <th>Конец</th>
               <th>Дата обновления</th>
-              {user.role === 'res_responsible' && <th>Действия</th>}
             </tr>
           </thead>
           <tbody>
@@ -428,16 +425,6 @@ function NetworkStructure({ selectedRes }) {
                 <td>{renderPuCell(item, 'middle')}</td>
                 <td>{renderPuCell(item, 'end')}</td>
                 <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
-                {user.role === 'res_responsible' && (
-                  <td>
-                    <button 
-                      className="notify-btn"
-                      onClick={() => handleNotifyCompleted(item.id)}
-                    >
-                      Уведомить
-                    </button>
-                  </td>
-                )}
               </tr>
             ))}
           </tbody>
@@ -501,7 +488,8 @@ function NetworkStructure({ selectedRes }) {
     </div>
   );
 }
-    
+
+// Модальное окно с деталями ошибки
 function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position }) {
   if (!isOpen || !details) return null;
   
@@ -510,14 +498,12 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
   let parsedDetails = null;
   
   try {
-    // Если errorDetails это JSON строка
     if (details?.errorDetails) {
       const parsed = JSON.parse(details.errorDetails);
       errorSummary = parsed.summary || details.errorDetails;
       parsedDetails = parsed.details;
     }
   } catch (e) {
-    // Если не удалось распарсить - используем как есть
     errorSummary = details?.errorDetails || 'Нет данных';
   }
   
@@ -577,13 +563,11 @@ function FileUpload({ selectedRes }) {
       return;
     }
 
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: определяем resId
+    // Определяем resId
     let resIdToUse;
     if (user.role === 'admin') {
-      // Админ может выбирать РЭС или использовать дефолтный
       resIdToUse = selectedRes || user.resId || 1;
     } else {
-      // Остальные только свой РЭС
       resIdToUse = user.resId;
     }
 
@@ -605,7 +589,7 @@ function FileUpload({ selectedRes }) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', selectedType);
-    formData.append('resId', resIdToUse); // ВАЖНО: всегда передаем resId
+    formData.append('resId', resIdToUse);
 
     try {
       const response = await api.post('/api/upload/analyze', formData, {
@@ -633,10 +617,8 @@ function FileUpload({ selectedRes }) {
       setFile(null);
       setSelectedType('');
       
-      // Обновляем страницу через 2 секунды чтобы показать новые статусы
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Создаем событие для обновления структуры
+      window.dispatchEvent(new CustomEvent('structureUpdated'));
       
     } catch (error) {
       console.error('Upload error:', error);
@@ -735,7 +717,7 @@ function FileUpload({ selectedRes }) {
 }
 
 // =====================================================
-// КОМПОНЕНТ УВЕДОМЛЕНИЙ
+// КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
 // =====================================================
 
 function Notifications({ filterType }) {
@@ -794,84 +776,25 @@ function Notifications({ filterType }) {
       alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
     }
   };
+
   const handleDeleteNotification = async () => {
-   if (deletePassword !== '1191') {
-     alert('Неверный пароль');
-     return;
-   }
-  
-   try {
-     await api.delete(`/api/notifications/${deleteNotificationId}`, {
-       data: { password: deletePassword }
-     });
-    
-     alert('Уведомление удалено');
-     setShowDeleteModal(false);
-     setDeletePassword('');
-     setDeleteNotificationId(null);
-     loadNotifications();
-   } catch (error) {
-     alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-   }
- };
-  const renderErrorDetails = (message) => {
+    if (deletePassword !== '1191') {
+      alert('Неверный пароль');
+      return;
+    }
+   
     try {
-      const data = JSON.parse(message);
-      
-      // Парсим детали ошибок если есть
-      let phases = { A: false, B: false, C: false };
-      if (data.errorDetails) {
-        // Ищем упоминания фаз в тексте ошибки
-        if (data.errorDetails.includes('Ua') || data.errorDetails.includes('фаза A')) phases.A = true;
-        if (data.errorDetails.includes('Ub') || data.errorDetails.includes('фаза B')) phases.B = true;
-        if (data.errorDetails.includes('Uc') || data.errorDetails.includes('фаза C')) phases.C = true;
-        
-        // Если явно не указаны фазы, но есть ошибка - помечаем все
-        if (!phases.A && !phases.B && !phases.C) {
-          phases = { A: true, B: true, C: true };
-        }
-      }
-      
-      return (
-        <div className="error-notification-content">
-          <div className="error-location">
-            <span className="label">РЭС:</span> {data.resName} | 
-            <span className="label"> ТП:</span> {data.tpName} | 
-            <span className="label"> ВЛ:</span> {data.vlName} | 
-            <span className="label"> Позиция:</span> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}
-          </div>
-          <div className="error-pu">
-            <span className="label">ПУ №:</span> {data.puNumber}
-          </div>
-          <div className="error-phases">
-            <span className="label">Фазы:</span>
-            <div className="phase-indicators">
-              <div className={`phase-box ${phases.A ? 'phase-error' : 'phase-ok'}`}>A</div>
-              <div className={`phase-box ${phases.B ? 'phase-error' : 'phase-ok'}`}>B</div>
-              <div className={`phase-box ${phases.C ? 'phase-error' : 'phase-ok'}`}>C</div>
-            </div>
-          </div>
-          <div className="error-text">
-            <span className="label">Ошибка:</span> {data.errorDetails}
-          </div>
-          
-          {/* Кнопка для выполнения мероприятий */}
-          {user.role === 'res_responsible' && filterType === 'error' && (
-            <button 
-              className="complete-work-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedNotification({ id: notif.id, data });
-                setShowCompleteModal(true);
-              }}
-            >
-              ✅ Мероприятия выполнены
-            </button>
-          )}
-        </div>
-      );
-    } catch (e) {
-      return <div>{message}</div>;
+      await api.delete(`/api/notifications/${deleteNotificationId}`, {
+        data: { password: deletePassword }
+      });
+     
+      alert('Уведомление удалено');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setDeleteNotificationId(null);
+      loadNotifications();
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -969,44 +892,50 @@ function Notifications({ filterType }) {
               </div>
             </div>
             <div className="notification-body">
-              {notif.type === 'error' && (
-                <div>
-                  {(() => {
-                    const data = JSON.parse(notif.message);
-                    return (
-                      <div className="error-notification-content">
-                        <div className="error-location">
-                          <span className="label">РЭС:</span> {data.resName} | 
-                          <span className="label"> ТП:</span> {data.tpName} | 
-                          <span className="label"> ВЛ:</span> {data.vlName} | 
-                          <span className="label"> Позиция:</span> {data.position === 'start' ? 'Начало' : data.position === 'middle' ? 'Середина' : 'Конец'}
-                        </div>
-                        <div className="error-pu">
-                          <span className="label">ПУ №:</span> {data.puNumber}
-                        </div>
-                        <div className="error-text">
-                          <span className="label">Ошибка:</span> {data.errorDetails}
-                        </div>
-                        
-                        {/* Кнопка для выполнения мероприятий */}
-                        {user.role === 'res_responsible' && (
-                          <button 
-                            className="complete-work-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedNotification({ id: notif.id, data });
-                              setShowCompleteModal(true);
-                            }}
-                          >
-                            ✅ Мероприятия выполнены
-                          </button>
-                        )}
+              {/* ИСПРАВЛЕННЫЙ БЛОК ДЛЯ УВЕДОМЛЕНИЙ ОБ ОШИБКАХ */}
+              {notif.type === 'error' && (() => {
+                try {
+                  const data = JSON.parse(notif.message);
+                  return (
+                    <div className="error-notification-content">
+                      <div className="error-location">
+                        <span className="label">РЭС:</span> {data.resName} | 
+                        <span className="label"> ТП:</span> {data.tpName} | 
+                        <span className="label"> ВЛ:</span> {data.vlName} | 
+                        <span className="label"> Позиция:</span> {
+                          data.position === 'start' ? 'Начало' : 
+                          data.position === 'middle' ? 'Середина' : 'Конец'
+                        }
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                      <div className="error-pu">
+                        <span className="label">ПУ №:</span> {data.puNumber}
+                      </div>
+                      <div className="error-text">
+                        <span className="label">Ошибка:</span> {data.errorDetails}
+                      </div>
+                      
+                      {/* КНОПКА ТЕПЕРЬ ПРАВИЛЬНО РАСПОЛОЖЕНА */}
+                      {user.role === 'res_responsible' && (
+                        <button 
+                          className="complete-work-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNotification({ id: notif.id, data });
+                            setShowCompleteModal(true);
+                          }}
+                        >
+                          ✅ Мероприятия выполнены
+                        </button>
+                      )}
+                    </div>
+                  );
+                } catch (e) {
+                  return <div className="error-text">Ошибка отображения: {notif.message}</div>;
+                }
+              })()}
+              
               {notif.type === 'pending_askue' && renderAskueDetails(notif.message)}
+              
               {notif.type === 'success' && (
                 <div className="success-notification-content">
                   <div className="success-icon">✅</div>
@@ -1020,7 +949,6 @@ function Notifications({ filterType }) {
                   <div className="info-text">{notif.message}</div>
                 </div>
               )}
-            </div>
             </div>
           </div>
         ))}
@@ -1080,6 +1008,8 @@ function Notifications({ filterType }) {
           </div>
         </div>
       )}
+      
+      {/* Модальное окно для удаления */}
       {showDeleteModal && (
         <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
@@ -1125,7 +1055,7 @@ function Notifications({ filterType }) {
 // =====================================================
 
 function Reports() {
-  const [reportType, setReportType] = useState('pending_work'); // pending_work, pending_askue, completed
+  const [reportType, setReportType] = useState('pending_work');
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dateFrom, setDateFrom] = useState(
@@ -1184,7 +1114,6 @@ function Reports() {
     });
 
     // Здесь бы использовать библиотеку для экспорта в Excel
-    // Пока просто выведем в консоль
     console.log('Export data:', exportData);
     alert('Функция экспорта будет реализована позже');
   };
@@ -1326,7 +1255,7 @@ function Reports() {
 }
 
 // =====================================================
-// КОМПОНЕНТ НАСТРОЕК (НОВЫЙ!)
+// КОМПОНЕНТ НАСТРОЕК
 // =====================================================
 
 function Settings() {
@@ -1482,6 +1411,7 @@ function Settings() {
     </div>
   );
 }
+
 // =====================================================
 // ОСНОВНОЕ ПРИЛОЖЕНИЕ
 // =====================================================
