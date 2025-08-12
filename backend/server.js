@@ -1682,15 +1682,26 @@ app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), asyn
 });
 
 // ПОЛУЧЕНИЕ СПИСКА ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (для проверки)
-app.get('/api/users/list', authenticateToken, checkRole(['admin']), async (req, res) => {
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const users = await User.findAll({
+    const user = await User.findByPk(req.user.id, {
       attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
-      include: [ResUnit],
-      order: [['resId', 'ASC'], ['role', 'ASC']]
+      include: [ResUnit]
     });
     
-    res.json(users);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      user: {
+        id: user.id,
+        fio: user.fio,
+        role: user.role,
+        resId: user.resId,
+        resName: user.ResUnit?.name
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
