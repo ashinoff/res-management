@@ -1551,7 +1551,99 @@ async function createNotifications(fromUserId, resId, errors) {
   
   console.log('All notifications created');
 }
+app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    console.log('Creating test users...');
+    
+    // Тестовые пользователи для каждого РЭС
+    const testUsers = [
+      // Адлерский РЭС (id=2)
+      {
+        fio: 'Иванов Иван Иванович',
+        login: 'uploader_adler',
+        password: 'test123',
+        role: 'uploader',
+        resId: 2,
+        email: 'uploader_adler@res.ru'
+      },
+      {
+        fio: 'Петров Петр Петрович',
+        login: 'res_adler',
+        password: 'test123',
+        role: 'res_responsible',
+        resId: 2,
+        email: 'res_adler@res.ru'
+      },
+      // Сочинский РЭС (id=4)
+      {
+        fio: 'Сидоров Сидор Сидорович',
+        login: 'uploader_sochi',
+        password: 'test123',
+        role: 'uploader',
+        resId: 4,
+        email: 'uploader_sochi@res.ru'
+      },
+      {
+        fio: 'Козлов Козел Козлович',
+        login: 'res_sochi',
+        password: 'test123',
+        role: 'res_responsible',
+        resId: 4,
+        email: 'res_sochi@res.ru'
+      }
+    ];
+    
+    const created = [];
+    const errors = [];
+    
+    for (const userData of testUsers) {
+      try {
+        // Проверяем, существует ли уже пользователь
+        const existing = await User.findOne({ where: { login: userData.login } });
+        if (existing) {
+          errors.push(`Пользователь ${userData.login} уже существует`);
+          continue;
+        }
+        
+        const user = await User.create(userData);
+        created.push({
+          login: user.login,
+          role: user.role,
+          resId: user.resId
+        });
+        console.log(`Created user: ${user.login}`);
+      } catch (err) {
+        errors.push(`Ошибка создания ${userData.login}: ${err.message}`);
+      }
+    }
+    
+    res.json({ 
+      success: true,
+      message: `Создано ${created.length} пользователей`,
+      created,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (error) {
+    console.error('Create test users error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
+// ПОЛУЧЕНИЕ СПИСКА ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (для проверки)
+app.get('/api/users/list', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
+      include: [ResUnit],
+      order: [['resId', 'ASC'], ['role', 'ASC']]
+    });
+    
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
