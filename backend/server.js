@@ -1,6 +1,6 @@
 // =====================================================
-// ПОЛНЫЙ BACKEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
-// Версия с ВСЕМИ исправлениями и улучшениями
+// УЛУЧШЕННЫЙ BACKEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
+// Версия с полным управлением пользователями
 // =====================================================
 
 // Устанавливаем кодировку
@@ -60,7 +60,8 @@ app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'RES Management Backend is running',
-    version: '1.0.0'
+    version: '2.0.0',
+    features: ['user-management', 'phase-detection', 'auto-updates']
   });
 });
 
@@ -405,6 +406,7 @@ const CheckHistory = sequelize.define('CheckHistory', {
 // =====================================================
 
 User.belongsTo(ResUnit, { foreignKey: 'resId' });
+ResUnit.hasMany(User, { foreignKey: 'resId' });
 NetworkStructure.belongsTo(ResUnit, { foreignKey: 'resId' });
 NetworkStructure.hasMany(PuStatus, { foreignKey: 'networkStructureId' });
 PuStatus.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
@@ -425,6 +427,12 @@ CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 // Хеширование паролей
 User.beforeCreate(async (user) => {
   user.password = await bcrypt.hash(user.password, 10);
+});
+
+User.beforeUpdate(async (user) => {
+  if (user.changed('password') && user.password && !user.password.startsWith('$2a$')) {
+    user.password = await bcrypt.hash(user.password, 10);
+  }
 });
 
 // Валидация пароля
@@ -557,10 +565,38 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// 1.1 ПОЛУЧЕНИЕ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
+      include: [ResUnit]
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      user: {
+        id: user.id,
+        fio: user.fio,
+        role: user.role,
+        resId: user.resId,
+        resName: user.ResUnit?.name
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 2. ПОЛУЧЕНИЕ СПИСКА РЭС
 app.get('/api/res/list', authenticateToken, async (req, res) => {
   try {
-    const resList = await ResUnit.findAll();
+    const resList = await ResUnit.findAll({
+      order: [['name', 'ASC']]
+    });
     res.json(resList);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -833,7 +869,7 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         NetworkStructure
       ],
       order: [['createdAt', 'DESC']],
-      limit: 50
+      limit: 100
     });
     
     res.json(notifications);
@@ -1237,6 +1273,248 @@ app.delete('/api/notifications/:id',
 });
 
 // =====================================================
+// УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
+// =====================================================
+
+// 13. ПОЛУЧЕНИЕ СПИСКА ПОЛЬЗОВАТЕЛЕЙ
+app.get('/api/users/list', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email', 'createdAt'],
+      include: [ResUnit],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 14. СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ
+app.post('/api/users/create', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { fio, login, password, email, role, resId } = req.body;
+    
+    // Валидация
+    if (!fio || !login || !password || !email || !role) {
+      return res.status(400).json({ error: 'Все поля обязательны' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль должен содержать минимум 6 символов' });
+    }
+    
+    if (role !== 'admin' && !resId) {
+      return res.status(400).json({ error: 'Для не-админов необходимо указать РЭС' });
+    }
+    
+    // Проверка уникальности логина
+    const existingUser = await User.findOne({ where: { login } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Пользователь с таким логином уже существует' });
+    }
+    
+    // Создание пользователя
+    const user = await User.create({
+      fio,
+      login,
+      password,
+      email,
+      role,
+      resId: role === 'admin' ? null : resId
+    });
+    
+    const createdUser = await User.findByPk(user.id, {
+      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
+      include: [ResUnit]
+    });
+    
+    res.json({
+      success: true,
+      message: 'Пользователь создан успешно',
+      user: createdUser
+    });
+    
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 15. ОБНОВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ
+app.put('/api/users/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { fio, password, email, role, resId } = req.body;
+    
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
+    // Обновляем только переданные поля
+    const updateData = {};
+    if (fio) updateData.fio = fio;
+    if (email) updateData.email = email;
+    if (role) updateData.role = role;
+    if (role === 'admin') {
+      updateData.resId = null;
+    } else if (resId !== undefined) {
+      updateData.resId = resId;
+    }
+    
+    // Если передан новый пароль
+    if (password && password.length > 0) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Пароль должен содержать минимум 6 символов' });
+      }
+      updateData.password = password;
+    }
+    
+    await user.update(updateData);
+    
+    const updatedUser = await User.findByPk(userId, {
+      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
+      include: [ResUnit]
+    });
+    
+    res.json({
+      success: true,
+      message: 'Пользователь обновлен успешно',
+      user: updatedUser
+    });
+    
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 16. УДАЛЕНИЕ ПОЛЬЗОВАТЕЛЯ
+app.delete('/api/users/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { password } = req.body;
+    
+    // Проверка пароля
+    if (password !== DELETE_PASSWORD) {
+      return res.status(403).json({ error: 'Неверный пароль' });
+    }
+    
+    // Нельзя удалить себя
+    if (userId == req.user.id) {
+      return res.status(400).json({ error: 'Нельзя удалить свой аккаунт' });
+    }
+    
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
+    // Проверяем, не последний ли это админ
+    if (user.role === 'admin') {
+      const adminCount = await User.count({ where: { role: 'admin' } });
+      if (adminCount <= 1) {
+        return res.status(400).json({ error: 'Нельзя удалить последнего администратора' });
+      }
+    }
+    
+    await user.destroy();
+    
+    res.json({
+      success: true,
+      message: 'Пользователь удален'
+    });
+    
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 17. СОЗДАНИЕ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ
+app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), async (req, res) => {
+  try {
+    console.log('Creating test users...');
+    
+    // Тестовые пользователи для каждого РЭС
+    const testUsers = [
+      // Адлерский РЭС (id=2)
+      {
+        fio: 'Иванов Иван Иванович',
+        login: 'uploader_adler',
+        password: 'test123',
+        role: 'uploader',
+        resId: 2,
+        email: 'uploader_adler@res.ru'
+      },
+      {
+        fio: 'Петров Петр Петрович',
+        login: 'res_adler',
+        password: 'test123',
+        role: 'res_responsible',
+        resId: 2,
+        email: 'res_adler@res.ru'
+      },
+      // Сочинский РЭС (id=4)
+      {
+        fio: 'Сидоров Сидор Сидорович',
+        login: 'uploader_sochi',
+        password: 'test123',
+        role: 'uploader',
+        resId: 4,
+        email: 'uploader_sochi@res.ru'
+      },
+      {
+        fio: 'Козлов Козел Козлович',
+        login: 'res_sochi',
+        password: 'test123',
+        role: 'res_responsible',
+        resId: 4,
+        email: 'res_sochi@res.ru'
+      }
+    ];
+    
+    const created = [];
+    const errors = [];
+    
+    for (const userData of testUsers) {
+      try {
+        // Проверяем, существует ли уже пользователь
+        const existing = await User.findOne({ where: { login: userData.login } });
+        if (existing) {
+          errors.push(`Пользователь ${userData.login} уже существует`);
+          continue;
+        }
+        
+        const user = await User.create(userData);
+        created.push({
+          login: user.login,
+          role: user.role,
+          resId: user.resId
+        });
+        console.log(`Created user: ${user.login}`);
+      } catch (err) {
+        errors.push(`Ошибка создания ${userData.login}: ${err.message}`);
+      }
+    }
+    
+    res.json({ 
+      success: true,
+      message: `Создано ${created.length} пользователей`,
+      created,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (error) {
+    console.error('Create test users error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
 
@@ -1440,7 +1718,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                 });
                 
               } else {
-                // Ошибки НЕ исправлены
+                // Ошибки НЕ исправлены - возвращаем в мероприятия
                 console.log(`Recheck failed - errors still present for PU ${fileName}`);
                 
                 // Обновляем запись в истории
@@ -1454,6 +1732,18 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     status: 'awaiting_recheck'
                   }
                 });
+                
+                // Помечаем старое уведомление АСКУЭ как прочитанное
+                await existingNotification.update({ isRead: true });
+                
+                // Создаем новое уведомление об ошибке для ответственных
+                errors.push({
+                  puNumber: fileName,
+                  error: result.summary,
+                  details: result.details,
+                  networkStructureId: networkStructure.id,
+                  resId: networkStructure.resId
+                });
               }
             }
             
@@ -1464,7 +1754,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
               error: result.has_errors ? result.summary : null
             });
             
-            // Если есть ошибки - добавляем для уведомлений
+            // Если есть ошибки и это НЕ перепроверка - добавляем для уведомлений
             if (result.has_errors && !existingNotification) {
               errors.push({
                 puNumber: fileName,
@@ -1602,110 +1892,7 @@ async function createNotifications(fromUserId, resId, errors) {
   
   console.log('All notifications created');
 }
-app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), async (req, res) => {
-  try {
-    console.log('Creating test users...');
-    
-    // Тестовые пользователи для каждого РЭС
-    const testUsers = [
-      // Адлерский РЭС (id=2)
-      {
-        fio: 'Иванов Иван Иванович',
-        login: 'uploader_adler',
-        password: 'test123',
-        role: 'uploader',
-        resId: 2,
-        email: 'uploader_adler@res.ru'
-      },
-      {
-        fio: 'Петров Петр Петрович',
-        login: 'res_adler',
-        password: 'test123',
-        role: 'res_responsible',
-        resId: 2,
-        email: 'res_adler@res.ru'
-      },
-      // Сочинский РЭС (id=4)
-      {
-        fio: 'Сидоров Сидор Сидорович',
-        login: 'uploader_sochi',
-        password: 'test123',
-        role: 'uploader',
-        resId: 4,
-        email: 'uploader_sochi@res.ru'
-      },
-      {
-        fio: 'Козлов Козел Козлович',
-        login: 'res_sochi',
-        password: 'test123',
-        role: 'res_responsible',
-        resId: 4,
-        email: 'res_sochi@res.ru'
-      }
-    ];
-    
-    const created = [];
-    const errors = [];
-    
-    for (const userData of testUsers) {
-      try {
-        // Проверяем, существует ли уже пользователь
-        const existing = await User.findOne({ where: { login: userData.login } });
-        if (existing) {
-          errors.push(`Пользователь ${userData.login} уже существует`);
-          continue;
-        }
-        
-        const user = await User.create(userData);
-        created.push({
-          login: user.login,
-          role: user.role,
-          resId: user.resId
-        });
-        console.log(`Created user: ${user.login}`);
-      } catch (err) {
-        errors.push(`Ошибка создания ${userData.login}: ${err.message}`);
-      }
-    }
-    
-    res.json({ 
-      success: true,
-      message: `Создано ${created.length} пользователей`,
-      created,
-      errors: errors.length > 0 ? errors : undefined
-    });
-    
-  } catch (error) {
-    console.error('Create test users error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
-// ПОЛУЧЕНИЕ СПИСКА ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (для проверки)
-app.get('/api/auth/me', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findByPk(req.user.id, {
-      attributes: ['id', 'fio', 'login', 'role', 'resId', 'email'],
-      include: [ResUnit]
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-      user: {
-        id: user.id,
-        fio: user.fio,
-        role: user.role,
-        resId: user.resId,
-        resName: user.ResUnit?.name
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
@@ -1717,8 +1904,7 @@ async function initializeDatabase() {
     
     // Синхронизация моделей
     await sequelize.sync({ alter: true });
-    console.log('Ensuring CheckHistory table...');
-    await CheckHistory.sync({ alter: true });
+    console.log('All models synchronized');
     
     // Создаем РЭСы если их нет
     const resCount = await ResUnit.count();
@@ -1745,21 +1931,9 @@ async function initializeDatabase() {
         where: { name: 'СИРИУС' },
         defaults: { name: 'СИРИУС' }
       });
-      console.log('SIRIUS added/checked', created ? 'created' : 'exists');
+      console.log('SIRIUS', created ? 'created' : 'already exists');
     } catch (err) {
       console.error('Error creating SIRIUS:', err);
-    }
-    
-    // Удаляем опечатку СИРИСУС если есть
-    try {
-      const deleted = await ResUnit.destroy({ 
-        where: { name: 'СИРИСУС' } 
-      });
-      if (deleted > 0) {
-        console.log('Removed SIRISUS typo');
-      }
-    } catch (err) {
-      console.error('Error removing SIRISUS:', err);
     }
     
     console.log('Database initialization complete');
@@ -1787,6 +1961,12 @@ async function initializeDatabase() {
 initializeDatabase().then(() => {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log('Features enabled:');
+    console.log('- User Management ✓');
+    console.log('- Phase Detection ✓'); 
+    console.log('- Auto Updates ✓');
+    console.log('- Compact Notifications ✓');
   });
 });
 
