@@ -896,8 +896,23 @@ function Notifications({ filterType }) {
               {notif.type === 'error' && (() => {
                 try {
                   const data = JSON.parse(notif.message);
+    
+                  // ОТЛАДКА - добавь это временно
+                  console.log('DEBUG Notification:', {
+                    notifId: notif.id,
+                    notifType: notif.type,
+                    userRole: user.role,
+                    filterType: filterType,
+                    shouldShowButton: user.role === 'res_responsible'
+                  });
+    
                   return (
                     <div className="error-notification-content">
+                      {/* ВРЕМЕННО для отладки */}
+                      <div style={{background: '#f0f0f0', padding: '5px', fontSize: '12px', marginBottom: '10px'}}>
+                        🐛 DEBUG: role={user.role}, filter={filterType}, type={notif.type}
+                      </div>
+        
                       <div className="error-location">
                         <span className="label">РЭС:</span> {data.resName} | 
                         <span className="label"> ТП:</span> {data.tpName} | 
@@ -913,20 +928,24 @@ function Notifications({ filterType }) {
                       <div className="error-text">
                         <span className="label">Ошибка:</span> {data.errorDetails}
                       </div>
-                      
-                      {/* КНОПКА ТЕПЕРЬ ПРАВИЛЬНО РАСПОЛОЖЕНА */}
-                      {user.role === 'res_responsible' && (
-                        <button 
-                          className="complete-work-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedNotification({ id: notif.id, data });
-                            setShowCompleteModal(true);
-                          }}
-                        >
-                          ✅ Мероприятия выполнены
-                        </button>
-                      )}
+        
+                      {/* КНОПКА БЕЗ УСЛОВИЙ для теста */}
+                      <button 
+                        className="complete-work-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('Button clicked!', { notif, data });
+                          setSelectedNotification({ id: notif.id, data });
+                          setShowCompleteModal(true);
+                        }}
+                        style={{
+                          display: 'block',
+                          marginTop: '15px',
+                          backgroundColor: user.role === 'res_responsible' ? '#28a745' : '#dc3545'
+                        }}
+                      >
+                        ✅ Мероприятия выполнены (role: {user.role})
+                      </button>
                     </div>
                   );
                 } catch (e) {
