@@ -1,6 +1,6 @@
 // =====================================================
 // ПОЛНЫЙ BACKEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
-// Всё в одном файле для удобства переноса между чатами
+// Версия с ВСЕМИ исправлениями и улучшениями
 // =====================================================
 
 // Устанавливаем кодировку
@@ -47,10 +47,14 @@ app.use((req, res, next) => {
 });
 const PORT = process.env.PORT || 3000;
 
+// ВАЖНО: Пароль для удаления из переменной окружения
+const DELETE_PASSWORD = process.env.DELETE_PASSWORD || '1191';
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
+
 // Health check для Render
 app.get('/', (req, res) => {
   res.json({ 
@@ -59,6 +63,7 @@ app.get('/', (req, res) => {
     version: '1.0.0'
   });
 });
+
 // Создаем папку uploads если её нет
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
@@ -205,8 +210,8 @@ const PuStatus = sequelize.define('PuStatus', {
   },
   status: {
     type: DataTypes.ENUM('not_checked', 'checked_ok', 'checked_error', 'pending_recheck', 'empty'),
-      defaultValue: 'not_checked'
-},
+    defaultValue: 'not_checked'
+  },
   errorDetails: {
     type: DataTypes.TEXT,
     allowNull: true
@@ -260,8 +265,8 @@ const Notification = sequelize.define('Notification', {
     }
   },
   type: {
-  type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'pending_askue'),
-  allowNull: false
+    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'pending_askue'),
+    allowNull: false
   },
   message: {
     type: DataTypes.TEXT,
@@ -327,6 +332,7 @@ const UploadHistory = sequelize.define('UploadHistory', {
     defaultValue: 'processing'
   }
 });
+
 // 7. Модель истории проверок
 const CheckHistory = sequelize.define('CheckHistory', {
   id: {
@@ -454,7 +460,7 @@ const checkRole = (roles) => {
   };
 };
 
-// Настройка multer для загрузки файлов
+// Настройка multer для загрузки файлов с ограничением размера
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
@@ -467,15 +473,30 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB максимум
+  },
   fileFilter: (req, file, cb) => {
     const allowedExtensions = ['.xlsx', '.xls', '.csv'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only Excel and CSV files are allowed'));
+      cb(new Error('Разрешены только Excel и CSV файлы'));
     }
   }
+});
+
+// Обработчик ошибок multer
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'Файл слишком большой. Максимальный размер: 10MB' 
+      });
+    }
+  }
+  next(error);
 });
 
 // Email сервис
@@ -556,7 +577,7 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    // НОВОЕ: Адлерский РЭС (id=2) также видит СИРИУС (id=8)
+    // Адлерский РЭС (id=2) также видит СИРИУС (id=8)
     let whereClause = {};
     if (resId) {
       if (resId == 2 || req.user.resId == 2) {
@@ -573,7 +594,7 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
         {
           model: PuStatus,
           required: false,
-          attributes: ['id', 'puNumber', 'position', 'status', 'errorDetails', 'lastCheck'] // явно указываем поля
+          attributes: ['id', 'puNumber', 'position', 'status', 'errorDetails', 'lastCheck']
         },
         ResUnit
       ],
@@ -586,45 +607,7 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
   }
 });
 
-// 4. ЗАГРУЗКА СТРУКТУРЫ СЕТИ (только админ)
-app.post('/api/network/upload-structure', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  upload.single('file'), 
-  async (req, res) => {
-    try {
-      const workbook = XLSX.readFile(req.file.path);
-      const sheetName = workbook.SheetNames[0];
-      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-      
-      // Парсим данные и создаем записи
-      for (const row of data) {
-        const resName = row['РЭС'] || row['RES'];
-        const res = await ResUnit.findOne({ where: { name: resName } });
-        
-        if (res) {
-          // Создаем или обновляем структуру
-          await NetworkStructure.upsert({
-            resId: res.id,
-            tpName: row['Наименование ТП'] || row['TP'],
-            vlName: row['Наименование ВЛ'] || row['VL'],
-            startPu: row['Начало'] || row['Start'] || null,
-            endPu: row['Конец'] || row['End'] || null,
-            middlePu: row['Середина'] || row['Middle'] || null
-          });
-        }
-      }
-      
-      // Удаляем файл после обработки
-      fs.unlinkSync(req.file.path);
-      
-      res.json({ message: 'Structure uploaded successfully' });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-});
-
-// ОБНОВЛЕНИЕ структуры сети (только админ)
+// 4. ОБНОВЛЕНИЕ структуры сети (только админ)
 app.put('/api/network/structure/:id', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -653,11 +636,12 @@ app.post('/api/upload/analyze',
   checkRole(['admin', 'uploader']),
   upload.single('file'),
   async (req, res) => {
+    let uploadRecord;
     try {
       const { type } = req.body;
       const userId = req.user.id;
       
-      // ВАЖНО: Берем resId из body (если есть) или из токена пользователя
+      // Берем resId из body (если есть) или из токена пользователя
       const resId = req.body.resId || req.user.resId;
 
       console.log('=== UPLOAD ANALYZE START ===');
@@ -671,7 +655,7 @@ app.post('/api/upload/analyze',
       }
       
       // Создаем запись в истории
-      const uploadRecord = await UploadHistory.create({
+      uploadRecord = await UploadHistory.create({
         userId,
         resId,
         fileName: req.file.originalname,
@@ -686,7 +670,7 @@ app.post('/api/upload/analyze',
       const analysisResult = await analyzeFile(
         req.file.path, 
         type, 
-        req.file.originalname  // ВАЖНО: передаем оригинальное имя
+        req.file.originalname  // передаем оригинальное имя
       );
       
       console.log('Analysis result:', {
@@ -721,7 +705,7 @@ app.post('/api/upload/analyze',
         message: 'Файл обработан успешно',
         processed: analysisResult.processed.length,
         errors: analysisResult.errors.length,
-        details: analysisResult.processed  // Добавляем детали для отладки
+        details: analysisResult.processed
       });
       
     } catch (error) {
@@ -738,7 +722,8 @@ app.post('/api/upload/analyze',
       });
     }
 });
-// 4.5 ЗАГРУЗКА ПОЛНОЙ СТРУКТУРЫ СЕТИ С ОБНОВЛЕНИЕМ
+
+// 6. ЗАГРУЗКА ПОЛНОЙ СТРУКТУРЫ СЕТИ
 app.post('/api/network/upload-full-structure', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -751,7 +736,6 @@ app.post('/api/network/upload-full-structure',
       const sheetName = workbook.SheetNames[0];
       const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
       
-      // Маппинг РЭСов
       let processed = 0;
       let errors = [];
       
@@ -777,7 +761,7 @@ app.post('/api/network/upload-full-structure',
           
           // Создаем или обновляем запись
           await NetworkStructure.upsert({
-            resId: res.id,  // Используем найденный ID из базы
+            resId: res.id,
             tpName: row['ТП'] || '',
             vlName: row['Фидер'] || '',
             startPu: row['Начало'] ? String(row['Начало']) : null,
@@ -824,7 +808,7 @@ app.post('/api/network/upload-full-structure',
         message: `Загружено ${processed} записей из ${data.length}`,
         processed,
         total: data.length,
-        errors: errors.length > 0 ? errors.slice(0, 10) : [] // Первые 10 ошибок
+        errors: errors.length > 0 ? errors.slice(0, 10) : []
       });
       
     } catch (error) {
@@ -833,7 +817,7 @@ app.post('/api/network/upload-full-structure',
     }
 });
 
-// 6. ПОЛУЧЕНИЕ УВЕДОМЛЕНИЙ
+// 7. ПОЛУЧЕНИЕ УВЕДОМЛЕНИЙ
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
     const whereClause = req.user.role === 'admin' 
@@ -858,187 +842,103 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
   }
 });
 
-// 7. ОТМЕТИТЬ УВЕДОМЛЕНИЕ КАК ПРОЧИТАННОЕ
-app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
-  try {
-    await Notification.update(
-      { isRead: true },
-      { where: { id: req.params.id } }
-    );
-    res.json({ message: 'Notification marked as read' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 8. ОТПРАВКА УВЕДОМЛЕНИЯ О ВЫПОЛНЕННЫХ МЕРОПРИЯТИЯХ
-app.post('/api/notifications/work-completed', authenticateToken, checkRole(['res_responsible']), async (req, res) => {
-  try {
-    const { networkStructureId, message } = req.body;
+// 8. ВЫПОЛНЕНИЕ МЕРОПРИЯТИЙ
+app.post('/api/notifications/:id/complete-work', 
+  authenticateToken, 
+  checkRole(['res_responsible']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
     
-    // Найти всех загрузчиков этого РЭС
-    const uploaders = await User.findAll({
-      where: {
-        resId: req.user.resId,
-        role: 'uploader'
+    try {
+      const { comment, checkFromDate } = req.body;
+      
+      // Проверка на количество слов (минимум 5)
+      const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
+      if (wordCount < 5) {
+        return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
       }
-    });
-    
-    // Создать уведомления для каждого загрузчика
-    for (const uploader of uploaders) {
-      await Notification.create({
-        fromUserId: req.user.id,
-        toUserId: uploader.id,
-        resId: req.user.resId,
-        networkStructureId,
-        type: 'info',
-        message: `Мероприятия выполнены: ${message}`
-      });
-    }
-    
-    res.json({ message: 'Notifications sent' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 9. ПОЛУЧЕНИЕ ОТЧЕТОВ
-app.get('/api/reports/summary', authenticateToken, checkRole(['admin']), async (req, res) => {
-  try {
-    const { startDate, endDate, resId } = req.query;
-    
-    const whereClause = {};
-    if (startDate) whereClause.createdAt = { [Op.gte]: new Date(startDate) };
-    if (endDate) whereClause.createdAt = { ...whereClause.createdAt, [Op.lte]: new Date(endDate) };
-    if (resId) whereClause.resId = resId;
-    
-    const uploadStats = await UploadHistory.findAll({
-      where: whereClause,
-      include: [User, ResUnit],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    const errorStats = await PuStatus.count({
-      where: { status: 'checked_error' },
-      include: [{
-        model: NetworkStructure,
-        where: resId ? { resId } : {}
-      }]
-    });
-    
-    const pendingStats = await NetworkStructure.count({
-      where: resId ? { resId } : {},
-      include: [{
-        model: PuStatus,
-        where: { status: 'checked_error' }
-      }]
-    });
-    
-    res.json({
-      uploads: uploadStats,
-      totalErrors: errorStats,
-      pendingChecks: pendingStats
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Отметить мероприятия как выполненные
-app.post('/api/notifications/:id/complete-work', authenticateToken, checkRole(['res_responsible']), async (req, res) => {
-  const transaction = await sequelize.transaction();
-  
-  try {
-    const { comment, checkFromDate } = req.body;
-    
-    // Проверка на количество слов (минимум 5)
-    const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
-    if (wordCount < 5) {
-      return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
-    }
-    
-    // Находим уведомление
-    const notification = await Notification.findByPk(req.params.id);
-    if (!notification) {
-      await transaction.rollback();
-      return res.status(404).json({ error: 'Уведомление не найдено' });
-    }
-    
-    // Парсим данные об ошибке
-    const errorData = JSON.parse(notification.message);
-    
-    // Создаем запись в истории проверок
-    await CheckHistory.create({
-      resId: notification.resId,
-      networkStructureId: notification.networkStructureId,
-      puNumber: errorData.puNumber,
-      tpName: errorData.tpName,
-      vlName: errorData.vlName,
-      position: errorData.position,
-      initialError: errorData.errorDetails,
-      initialCheckDate: notification.createdAt,
-      resComment: comment,
-      workCompletedDate: new Date(),
-      status: 'awaiting_recheck'
-    }, { transaction });
-    
-    // Обновляем статус ПУ на pending_recheck
-    await PuStatus.update(
-      { status: 'pending_recheck' },
-      { 
-        where: { puNumber: errorData.puNumber },
-        transaction
+      
+      // Находим уведомление
+      const notification = await Notification.findByPk(req.params.id);
+      if (!notification) {
+        await transaction.rollback();
+        return res.status(404).json({ error: 'Уведомление не найдено' });
       }
-    );
-    
-    // Помечаем старое уведомление как прочитанное
-    await notification.update({ isRead: true }, { transaction });
-    
-    // Создаем новое уведомление для АСКУЭ
-    const askueUsers = await User.findAll({
-      where: {
-        resId: notification.resId,
-        role: 'uploader'
-      }
-    });
-    
-    const askueMessage = {
-      puNumber: errorData.puNumber,
-      position: errorData.position,
-      tpName: errorData.tpName,
-      vlName: errorData.vlName,
-      resName: errorData.resName,
-      errorDetails: errorData.errorDetails, // Добавляем исходную ошибку
-      checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
-      completedComment: comment,
-      completedBy: req.user.id,
-      completedAt: new Date()
-    };
-    
-    for (const askueUser of askueUsers) {
-      await Notification.create({
-        fromUserId: req.user.id,
-        toUserId: askueUser.id,
+      
+      // Парсим данные об ошибке
+      const errorData = JSON.parse(notification.message);
+      
+      // Создаем запись в истории проверок
+      await CheckHistory.create({
         resId: notification.resId,
         networkStructureId: notification.networkStructureId,
-        type: 'pending_askue',
-        message: JSON.stringify(askueMessage),
-        isRead: false
+        puNumber: errorData.puNumber,
+        tpName: errorData.tpName,
+        vlName: errorData.vlName,
+        position: errorData.position,
+        initialError: errorData.errorDetails,
+        initialCheckDate: notification.createdAt,
+        resComment: comment,
+        workCompletedDate: new Date(),
+        status: 'awaiting_recheck'
       }, { transaction });
+      
+      // Обновляем статус ПУ на pending_recheck
+      await PuStatus.update(
+        { status: 'pending_recheck' },
+        { 
+          where: { puNumber: errorData.puNumber },
+          transaction
+        }
+      );
+      
+      // Помечаем старое уведомление как прочитанное
+      await notification.update({ isRead: true }, { transaction });
+      
+      // Создаем новое уведомление для АСКУЭ
+      const askueUsers = await User.findAll({
+        where: {
+          resId: notification.resId,
+          role: 'uploader'
+        }
+      });
+      
+      const askueMessage = {
+        puNumber: errorData.puNumber,
+        position: errorData.position,
+        tpName: errorData.tpName,
+        vlName: errorData.vlName,
+        resName: errorData.resName,
+        errorDetails: errorData.errorDetails,
+        checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
+        completedComment: comment,
+        completedBy: req.user.id,
+        completedAt: new Date()
+      };
+      
+      for (const askueUser of askueUsers) {
+        await Notification.create({
+          fromUserId: req.user.id,
+          toUserId: askueUser.id,
+          resId: notification.resId,
+          networkStructureId: notification.networkStructureId,
+          type: 'pending_askue',
+          message: JSON.stringify(askueMessage),
+          isRead: false
+        }, { transaction });
+      }
+      
+      await transaction.commit();
+      res.json({ success: true, message: 'Мероприятия отмечены как выполненные' });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Complete work error:', error);
+      res.status(500).json({ error: error.message });
     }
-    
-    await transaction.commit();
-    res.json({ success: true, message: 'Мероприятия отмечены как выполненные' });
-    
-  } catch (error) {
-    await transaction.rollback();
-    console.error('Complete work error:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
-  
-// НОВЫЙ РОУТ ДЛЯ ОЧИСТКИ ВСЕХ ДАННЫХ
-// Добавь это в server.js после других роутов
 
+// 9. ОЧИСТКА ВСЕХ ДАННЫХ
 app.delete('/api/network/clear-all', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -1049,33 +949,16 @@ app.delete('/api/network/clear-all',
       console.log('Starting complete data cleanup...');
       
       // Порядок важен! Сначала удаляем зависимые данные
-      
-      // 1. Удаляем историю загрузок
-      const uploadsDeleted = await UploadHistory.destroy({ 
-        where: {}, 
-        transaction 
-      });
+      const uploadsDeleted = await UploadHistory.destroy({ where: {}, transaction });
       console.log(`Deleted ${uploadsDeleted} upload records`);
       
-      // 2. Удаляем уведомления
-      const notificationsDeleted = await Notification.destroy({ 
-        where: {}, 
-        transaction 
-      });
+      const notificationsDeleted = await Notification.destroy({ where: {}, transaction });
       console.log(`Deleted ${notificationsDeleted} notifications`);
       
-      // 3. Удаляем статусы ПУ
-      const puStatusesDeleted = await PuStatus.destroy({ 
-        where: {}, 
-        transaction 
-      });
+      const puStatusesDeleted = await PuStatus.destroy({ where: {}, transaction });
       console.log(`Deleted ${puStatusesDeleted} PU statuses`);
       
-      // 4. Теперь можем удалить структуру сети
-      const structuresDeleted = await NetworkStructure.destroy({ 
-        where: {}, 
-        transaction 
-      });
+      const structuresDeleted = await NetworkStructure.destroy({ where: {}, transaction });
       console.log(`Deleted ${structuresDeleted} network structures`);
       
       await transaction.commit();
@@ -1098,9 +981,9 @@ app.delete('/api/network/clear-all',
         error: 'Ошибка при удалении данных: ' + error.message 
       });
     }
-
 });
-// НОВЫЙ РОУТ ДЛЯ УДАЛЕНИЯ ВЫБРАННЫХ СТРУКТУР
+
+// 10. УДАЛЕНИЕ ВЫБРАННЫХ СТРУКТУР
 app.post('/api/network/delete-selected', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -1110,8 +993,8 @@ app.post('/api/network/delete-selected',
     try {
       const { ids, password } = req.body;
       
-      // Проверка пароля
-      if (password !== '1191') {
+      // Проверка пароля через переменную окружения
+      if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
@@ -1121,27 +1004,19 @@ app.post('/api/network/delete-selected',
       
       console.log(`Deleting network structures: ${ids.join(', ')}`);
       
-      // Сначала удаляем связанные уведомления
+      // Сначала удаляем связанные данные
       const notificationsDeleted = await Notification.destroy({
-        where: {
-          networkStructureId: { [Op.in]: ids }
-        },
+        where: { networkStructureId: { [Op.in]: ids } },
         transaction
       });
       
-      // Удаляем статусы ПУ
       const puStatusesDeleted = await PuStatus.destroy({
-        where: {
-          networkStructureId: { [Op.in]: ids }
-        },
+        where: { networkStructureId: { [Op.in]: ids } },
         transaction
       });
       
-      // Теперь удаляем сами структуры
       const structuresDeleted = await NetworkStructure.destroy({
-        where: {
-          id: { [Op.in]: ids }
-        },
+        where: { id: { [Op.in]: ids } },
         transaction
       });
       
@@ -1164,7 +1039,7 @@ app.post('/api/network/delete-selected',
     }
 });
 
-// НОВЫЕ РОУТЫ ДЛЯ ДЕТАЛЬНЫХ ОТЧЕТОВ
+// 11. ДЕТАЛЬНЫЕ ОТЧЕТЫ
 app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
   try {
     const { type, dateFrom, dateTo } = req.query;
@@ -1247,7 +1122,7 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
         break;
         
       case 'completed':
-        // Завершенные проверки (из CheckHistory)
+        // Завершенные проверки
         const completed = await CheckHistory.findAll({
           where: {
             ...whereClause,
@@ -1279,7 +1154,7 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
   }
 });
 
-// РОУТ ДЛЯ УДАЛЕНИЯ УВЕДОМЛЕНИЙ (только админ)
+// 12. УДАЛЕНИЕ УВЕДОМЛЕНИЙ
 app.delete('/api/notifications/:id', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -1287,8 +1162,8 @@ app.delete('/api/notifications/:id',
     try {
       const { password } = req.body;
       
-      // Проверка пароля
-      if (password !== '1191') {
+      // Проверка пароля через переменную окружения
+      if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
@@ -1309,34 +1184,55 @@ app.delete('/api/notifications/:id',
       res.status(500).json({ error: error.message });
     }
 });
+
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
 
-// Заглушка для анализа файлов (замени на реальный Python)
 // Анализ файлов через Python скрипты
 async function analyzeFile(filePath, type, originalFileName = null) {
   return new Promise((resolve, reject) => {
     let scriptPath;
     
+    // Используем правильный путь для Render
+    const analyzersDir = path.join(process.cwd(), 'analyzers');
+    
     switch(type) {
       case 'rim_single':
-        scriptPath = path.join(__dirname, 'analyzers', 'rim_single.py');
+        scriptPath = path.join(analyzersDir, 'rim_single.py');
         break;
       case 'rim_mass':
-        scriptPath = path.join(__dirname, 'analyzers', 'rim_mass_analyzer.py');
+        scriptPath = path.join(analyzersDir, 'rim_mass_analyzer.py');
         break;
       case 'nartis':
-        scriptPath = path.join(__dirname, 'analyzers', 'nartis_analyzer.py');
+        scriptPath = path.join(analyzersDir, 'nartis_analyzer.py');
         break;
       case 'energomera':
-        scriptPath = path.join(__dirname, 'analyzers', 'energomera_analyzer.py');
+        scriptPath = path.join(analyzersDir, 'energomera_analyzer.py');
         break;
       default:
         return resolve({
           processed: [],
           errors: ['Неизвестный тип анализатора']
         });
+    }
+    
+    // Проверяем существование директории analyzers
+    if (!fs.existsSync(analyzersDir)) {
+      console.error('Analyzers directory not found:', analyzersDir);
+      return resolve({
+        processed: [],
+        errors: [`Директория analyzers не найдена`]
+      });
+    }
+    
+    // Проверяем существование Python скрипта
+    if (!fs.existsSync(scriptPath)) {
+      console.error('Python script not found:', scriptPath);
+      return resolve({
+        processed: [],
+        errors: [`Python скрипт не найден: ${scriptPath}`]
+      });
     }
     
     // Пробуем запустить Python
@@ -1353,22 +1249,13 @@ async function analyzeFile(filePath, type, originalFileName = null) {
         console.error('Both python3 and python failed:', err2);
         return resolve({
           processed: [],
-          errors: ['Python не установлен на сервере']
+          errors: ['Python не установлен на сервере. Убедитесь что в Build Command есть: npm install && pip install xlrd']
         });
       }
     }
 
     console.log('Running Python script:', scriptPath);
     console.log('Analyzing file:', filePath);
-
-    // Проверяем существование Python скрипта
-    if (!fs.existsSync(scriptPath)) {
-      console.error('Python script not found:', scriptPath);
-      return resolve({
-        processed: [],
-        errors: [`Python скрипт не найден: ${scriptPath}`]
-      });
-    }
 
     let output = '';
     let errorOutput = '';
@@ -1387,7 +1274,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
       console.error('Python process error:', error);
       return resolve({
         processed: [],
-        errors: [`Ошибка запуска Python: ${error.message}`]
+        errors: [`Python не установлен или недоступен. Убедитесь что в Build Command на Render есть: npm install && pip install xlrd`]
       });
     });
 
@@ -1413,14 +1300,14 @@ async function analyzeFile(filePath, type, originalFileName = null) {
           const processed = [];
           const errors = [];
           
-          // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: извлекаем номер ПУ из имени файла
+          // Извлекаем номер ПУ из имени файла
           const fileName = originalFileName 
             ? path.basename(originalFileName, path.extname(originalFileName))
             : path.basename(filePath, path.extname(filePath));
           
           console.log('Extracted PU number from filename:', fileName);
           
-          // Ищем ПУ в структуре сети - ищем ТОЧНОЕ совпадение
+          // Ищем ПУ в структуре сети
           const networkStructure = await NetworkStructure.findOne({
             where: {
               [Op.or]: [
@@ -1448,7 +1335,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
               networkStructureId: networkStructure.id,
               position: position,
               status: result.has_errors ? 'checked_error' : 'checked_ok',
-              errorDetails: result.has_errors ? result.summary : null,  // ← ВОТ ТУТ ИЗМЕНЕНИЕ!
+              errorDetails: result.has_errors ? result.summary : null,
               lastCheck: new Date()
             });
             
@@ -1487,7 +1374,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                   }
                 });
                 
-                // Помечаем уведомление как прочитанное (завершенное)
+                // Помечаем уведомление как прочитанное
                 await existingNotification.update({ isRead: true });
                 
                 // Отправляем уведомление ответственному что проблема решена
@@ -1518,6 +1405,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                 });
               }
             }
+            
             // Добавляем в processed
             processed.push({
               puNumber: fileName,
@@ -1526,7 +1414,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             });
             
             // Если есть ошибки - добавляем для уведомлений
-            if (result.has_errors) {
+            if (result.has_errors && !existingNotification) {
               errors.push({
                 puNumber: fileName,
                 error: result.summary,
@@ -1574,26 +1462,11 @@ async function analyzeFile(filePath, type, originalFileName = null) {
           errors: [`Ошибка парсинга результата: ${e.message}`]
         });
       }
-    });  // Закрывает python.on('close')
-  });    // Закрывает new Promise
-}        //  закрываем функцию analyzeFile
-    
-  
-
-
-// Обновление статуса ПУ
-async function updatePuStatus(puNumber, status, errorDetails) {
-  const pu = await PuStatus.findOne({ where: { puNumber } });
-  if (pu) {
-    await pu.update({
-      status,
-      errorDetails,
-      lastCheck: new Date()
     });
-  }
+  });
 }
 
-// Создание уведомлений об ошибках с деталями
+// Создание уведомлений об ошибках
 async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
   console.log(`Looking for users with res_responsible or admin role for RES ${resId}`);
@@ -1652,7 +1525,7 @@ async function createNotifications(fromUserId, resId, errors) {
       vlName: networkStructure.vlName,
       resName: networkStructure.ResUnit.name,
       errorDetails: errorInfo.error,
-      details: errorInfo.details  // Добавляем детальную информацию
+      details: errorInfo.details
     };
     
     console.log('Creating notifications with data:', errorData);
@@ -1678,6 +1551,7 @@ async function createNotifications(fromUserId, resId, errors) {
   
   console.log('All notifications created');
 }
+
 // =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
@@ -1711,7 +1585,7 @@ async function initializeDatabase() {
       console.log('RES units created');
     }
     
-    // Создаем СИРИУС <-- ВОТ ТУТ ВСТАВЛЯЕШЬ
+    // Создаем СИРИУС
     try {
       const [sirius, created] = await ResUnit.findOrCreate({
         where: { name: 'СИРИУС' },
@@ -1722,7 +1596,7 @@ async function initializeDatabase() {
       console.error('Error creating SIRIUS:', err);
     }
     
-    // ДОБАВЬТЕ ЭТО - удаляем опечатку СИРИСУС
+    // Удаляем опечатку СИРИСУС если есть
     try {
       const deleted = await ResUnit.destroy({ 
         where: { name: 'СИРИСУС' } 
@@ -1753,7 +1627,7 @@ async function initializeDatabase() {
     console.error('Database initialization error:', error);
     process.exit(1);
   }
-} // <-- Конец функции
+}
 
 // Запуск сервера
 initializeDatabase().then(() => {
