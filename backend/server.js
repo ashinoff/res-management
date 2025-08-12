@@ -946,19 +946,50 @@ app.delete('/api/network/clear-all',
     const transaction = await sequelize.transaction();
     
     try {
+      // НОВОЕ: проверяем пароль
+      const { password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
       console.log('Starting complete data cleanup...');
       
-      // Порядок важен! Сначала удаляем зависимые данные
-      const uploadsDeleted = await UploadHistory.destroy({ where: {}, transaction });
+      // ВАЖНО: правильный порядок удаления!
+      
+      // 1. Сначала CheckHistory (новое!)
+      const checkHistoryDeleted = await CheckHistory.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${checkHistoryDeleted} check history records`);
+      
+      // 2. История загрузок
+      const uploadsDeleted = await UploadHistory.destroy({ 
+        where: {}, 
+        transaction 
+      });
       console.log(`Deleted ${uploadsDeleted} upload records`);
       
-      const notificationsDeleted = await Notification.destroy({ where: {}, transaction });
+      // 3. Уведомления
+      const notificationsDeleted = await Notification.destroy({ 
+        where: {}, 
+        transaction 
+      });
       console.log(`Deleted ${notificationsDeleted} notifications`);
       
-      const puStatusesDeleted = await PuStatus.destroy({ where: {}, transaction });
+      // 4. Статусы ПУ
+      const puStatusesDeleted = await PuStatus.destroy({ 
+        where: {}, 
+        transaction 
+      });
       console.log(`Deleted ${puStatusesDeleted} PU statuses`);
       
-      const structuresDeleted = await NetworkStructure.destroy({ where: {}, transaction });
+      // 5. Теперь можем удалить структуру сети
+      const structuresDeleted = await NetworkStructure.destroy({ 
+        where: {}, 
+        transaction 
+      });
       console.log(`Deleted ${structuresDeleted} network structures`);
       
       await transaction.commit();
@@ -967,6 +998,7 @@ app.delete('/api/network/clear-all',
         success: true,
         message: 'Все данные успешно удалены',
         deleted: {
+          checkHistory: checkHistoryDeleted,
           uploads: uploadsDeleted,
           notifications: notificationsDeleted,
           puStatuses: puStatusesDeleted,
@@ -993,7 +1025,7 @@ app.post('/api/network/delete-selected',
     try {
       const { ids, password } = req.body;
       
-      // Проверка пароля через переменную окружения
+      // Проверка пароля
       if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
       }
@@ -1004,19 +1036,37 @@ app.post('/api/network/delete-selected',
       
       console.log(`Deleting network structures: ${ids.join(', ')}`);
       
-      // Сначала удаляем связанные данные
+      // ВАЖНО: правильный порядок удаления!
+      
+      // 1. Сначала удаляем CheckHistory (новое!)
+      const checkHistoryDeleted = await CheckHistory.destroy({
+        where: {
+          networkStructureId: { [Op.in]: ids }
+        },
+        transaction
+      });
+      
+      // 2. Удаляем уведомления
       const notificationsDeleted = await Notification.destroy({
-        where: { networkStructureId: { [Op.in]: ids } },
+        where: {
+          networkStructureId: { [Op.in]: ids }
+        },
         transaction
       });
       
+      // 3. Удаляем статусы ПУ
       const puStatusesDeleted = await PuStatus.destroy({
-        where: { networkStructureId: { [Op.in]: ids } },
+        where: {
+          networkStructureId: { [Op.in]: ids }
+        },
         transaction
       });
       
+      // 4. Теперь можем удалить сами структуры
       const structuresDeleted = await NetworkStructure.destroy({
-        where: { id: { [Op.in]: ids } },
+        where: {
+          id: { [Op.in]: ids }
+        },
         transaction
       });
       
@@ -1027,6 +1077,7 @@ app.post('/api/network/delete-selected',
         message: `Удалено ${structuresDeleted} записей`,
         deleted: {
           structures: structuresDeleted,
+          checkHistory: checkHistoryDeleted,
           notifications: notificationsDeleted,
           puStatuses: puStatusesDeleted
         }
