@@ -1265,6 +1265,40 @@ function Settings() {
   const [uploadStats, setUploadStats] = useState(null);
   const [clearOld, setClearOld] = useState(false);
   const [clearing, setClearing] = useState(false);
+  
+  // Новое для управления пользователями
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userMessage, setUserMessage] = useState('');
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const response = await api.get('/api/users/list');
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const createTestUsers = async () => {
+    try {
+      const response = await api.post('/api/users/create-test');
+      setUserMessage(response.data.message);
+      if (response.data.errors) {
+        console.log('Errors:', response.data.errors);
+      }
+      loadUsers(); // Перезагружаем список
+    } catch (error) {
+      setUserMessage('Ошибка создания пользователей: ' + error.response?.data?.error);
+    }
+  };
 
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
@@ -1284,7 +1318,6 @@ function Settings() {
       setMessage('✅ Все данные успешно удалены!');
       console.log('Cleared:', response.data.deleted);
       
-      // Обновляем страницу через 2 секунды
       setTimeout(() => {
         window.location.reload();
       }, 2000);
@@ -1320,7 +1353,6 @@ function Settings() {
       setUploadStats(response.data);
       setFile(null);
       
-      // Обновляем страницу
       setTimeout(() => {
         window.location.reload();
       }, 2000);
@@ -1337,6 +1369,63 @@ function Settings() {
   return (
     <div className="settings">
       <h2>Настройки системы</h2>
+      
+      {/* Секция управления пользователями */}
+      <div className="users-section">
+        <h3>👥 Управление пользователями</h3>
+        
+        <button 
+          onClick={createTestUsers}
+          className="action-btn"
+          style={{marginBottom: '20px'}}
+        >
+          🧪 Создать тестовых пользователей
+        </button>
+        
+        {userMessage && (
+          <div className={userMessage.includes('Создано') ? 'success-message' : 'error-message'}>
+            {userMessage}
+          </div>
+        )}
+        
+        <div className="users-table" style={{maxHeight: '300px', overflow: 'auto'}}>
+          <table>
+            <thead>
+              <tr>
+                <th>ФИО</th>
+                <th>Логин</th>
+                <th>Роль</th>
+                <th>РЭС</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingUsers ? (
+                <tr><td colSpan="5">Загрузка...</td></tr>
+              ) : (
+                users.map(user => (
+                  <tr key={user.id}>
+                    <td>{user.fio}</td>
+                    <td><strong>{user.login}</strong></td>
+                    <td>
+                      {user.role === 'admin' ? '👑 Админ' : 
+                       user.role === 'uploader' ? '📤 Загрузчик' : 
+                       '⚡ Ответственный'}
+                    </td>
+                    <td>{user.ResUnit?.name || '-'}</td>
+                    <td>{user.email}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          <div style={{marginTop: '10px', fontSize: '12px', color: '#666'}}>
+            💡 Пароль для всех тестовых пользователей: <strong>test123</strong>
+          </div>
+        </div>
+      </div>
+      
+      <hr style={{margin: '30px 0', border: '1px solid #e5e5e5'}} />
       
       {/* Секция очистки данных */}
       <div className="clear-data-section">
