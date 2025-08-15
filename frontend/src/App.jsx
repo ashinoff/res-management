@@ -513,7 +513,14 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
   const getPhaseErrors = () => {
     const phases = { A: false, B: false, C: false };
     
-    if (!parsedDetails) return phases;
+    if (!parsedDetails) {
+      // Если нет деталей, парсим из текста ошибки
+      const text = errorSummary;
+      if (text.includes('Фаза A') || text.includes('phase_A')) phases.A = true;
+      if (text.includes('Фаза B') || text.includes('phase_B')) phases.B = true;
+      if (text.includes('Фаза C') || text.includes('phase_C')) phases.C = true;
+      return phases;
+    }
     
     // Проверяем overvoltage
     if (parsedDetails.overvoltage) {
@@ -542,21 +549,23 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
         
-        <div className="modal-info">
-          <p><strong>ТП:</strong> {tpName}</p>
-          <p><strong>Фидер:</strong> {vlName}</p>
-          <p><strong>Позиция:</strong> {position === 'start' ? 'Начало' : position === 'middle' ? 'Середина' : 'Конец'}</p>
-        </div>
-        
-        <div className="phase-indicators-large">
-          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-        </div>
-        
-        <div className="error-summary">
-          <h4>Обнаруженные отклонения:</h4>
-          <div className="error-text">{errorSummary}</div>
+        <div className="modal-body">
+          <div className="modal-info">
+            <p><strong>ТП:</strong> {tpName}</p>
+            <p><strong>Фидер:</strong> {vlName}</p>
+            <p><strong>Позиция:</strong> {position === 'start' ? 'Начало' : position === 'middle' ? 'Середина' : 'Конец'}</p>
+          </div>
+          
+          <div className="phase-indicators-large">
+            <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+            <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+            <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+          </div>
+          
+          <div className="error-summary">
+            <h4>Обнаруженные отклонения:</h4>
+            <div className="error-text">{errorSummary}</div>
+          </div>
         </div>
         
         <div className="modal-footer">
@@ -995,80 +1004,79 @@ function Notifications({ filterType }) {
             className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
           >
             {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
-            {notif.type === 'error' && (() => {
-              try {
-                const data = JSON.parse(notif.message);
-                const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
-                
-                return (
-                  <div className="notification-compact-content">
-                    <div className="notification-main-info">
-                      <div className="notification-location">
-                        <span className="label">РЭС:</span> {data.resName} | 
-                        <span className="label"> ТП:</span> {data.tpName} | 
-                        <span className="label"> ВЛ:</span> {data.vlName} | 
-                        <span className="label"> Позиция:</span> {
-                          data.position === 'start' ? 'Начало' : 
-                          data.position === 'middle' ? 'Середина' : 'Конец'
-                        }
-                      </div>
-                      <div className="notification-pu">
-                        <span className="label">ПУ №:</span> <strong>{data.puNumber}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="notification-actions-row">
-                      <div className="phase-indicators">
-                        <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-                        <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-                        <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-                      </div>
-                      
-                      <div className="notification-buttons">
-                        <button 
-                          className="btn-details"
-                          onClick={() => {
-                            setDetailsNotification({ ...notif, data });
-                            setShowDetailsModal(true);
-                          }}
-                          title="Подробности"
-                        >
-                          🔍
-                        </button>
-                        
-                        {user.role === 'res_responsible' && (
-                          <button 
-                            className="btn-complete"
-                            onClick={() => {
-                              setSelectedNotification({ id: notif.id, data });
-                              setShowCompleteModal(true);
-                            }}
-                            title="Выполнить мероприятия"
-                          >
-                            ✅
-                          </button>
-                        )}
-                        
-                        {user.role === 'admin' && (
-                          <button
-                            className="btn-delete"
-                            onClick={() => {
-                              setDeleteNotificationId(notif.id);
-                              setShowDeleteModal(true);
-                            }}
-                            title="Удалить"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              } catch (e) {
-                return <div className="error-text">Ошибка отображения</div>;
-              }
-            })()}
+{notif.type === 'error' && (() => {
+  try {
+    const data = JSON.parse(notif.message);
+    const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
+    
+    return (
+      <div className="notification-narrow-content">
+        <div className="notification-phases">
+          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+        </div>
+        
+        <div className="notification-narrow-info">
+          <div className="notification-tp">{data.tpName}</div>
+          <div className="notification-narrow-details">
+            <span className="label">РЭС:</span> {data.resName} | 
+            <span className="label"> ТП:</span> {data.tpName} | 
+            <span className="label"> ВЛ:</span> {data.vlName} | 
+            <span className="label"> Позиция:</span> {
+              data.position === 'start' ? 'Начало' : 
+              data.position === 'middle' ? 'Середина' : 'Конец'
+            }
+          </div>
+          <div className="notification-pu-number">
+            ПУ №: <strong>{data.puNumber}</strong>
+          </div>
+        </div>
+        
+        <div className="notification-narrow-actions">
+          <button 
+            className="btn-details-light"
+            onClick={() => {
+              setDetailsNotification({ ...notif, data });
+              setShowDetailsModal(true);
+            }}
+            title="Подробности"
+          >
+            🔍
+          </button>
+          
+          {user.role === 'res_responsible' && (
+            <button 
+              className="btn-complete"
+              onClick={() => {
+                setSelectedNotification({ id: notif.id, data });
+                setShowCompleteModal(true);
+              }}
+              title="Выполнить мероприятия"
+            >
+              ✅
+            </button>
+          )}
+          
+          {user.role === 'admin' && (
+            <button
+              className="btn-delete"
+              onClick={() => {
+                setDeleteNotificationId(notif.id);
+                setShowDeleteModal(true);
+              }}
+              title="Удалить"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  } catch (e) {
+    return <div className="error-text">Ошибка отображения</div>;
+  }
+})()}
             
             {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
             {notif.type === 'pending_askue' && (() => {
