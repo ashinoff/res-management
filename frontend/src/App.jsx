@@ -762,6 +762,8 @@ function Notifications({ filterType }) {
   const [deletePassword, setDeletePassword] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsNotification, setDetailsNotification] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadingPu, setUploadingPu] = useState(null);
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
@@ -845,7 +847,49 @@ function Notifications({ filterType }) {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
-
+  // Добавим обработчик загрузки файла
+  const handleFileUpload = async (puNumber) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+  
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+    
+      // Проверяем имя файла
+      const fileName = file.name.split('.')[0];
+      if (fileName !== puNumber) {
+        alert(`Имя файла должно быть ${puNumber}.xls или ${puNumber}.xlsx`);
+        return;
+      }
+    
+      setUploadingPu(puNumber);
+    
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'rim_single'); // или определяем тип автоматически
+      formData.append('resId', user.resId);
+    
+      try {
+        await api.post('/api/upload/analyze', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      
+        alert('Файл успешно загружен и обработан!');
+      
+        // Обновляем уведомления
+        await loadNotifications();
+      
+      } catch (error) {
+        alert('Ошибка загрузки: ' + (error.response?.data?.error || error.message));
+      } finally {
+        setUploadingPu(null);
+      }
+    };
+  
+    input.click();
+  };
   // Определение фаз с ошибками
   const getPhaseErrors = useCallback((errorDetails) => {
     const phases = { A: false, B: false, C: false };
@@ -1003,10 +1047,11 @@ function Notifications({ filterType }) {
                       <div className="notification-buttons">
                         <button 
                           className="btn-upload"
-                          onClick={() => alert('Перейдите в раздел "Загрузить файлы" и загрузите файл ' + data.puNumber + '.xls')}
+                          onClick={() => handleFileUpload(data.puNumber)}
+                          disabled={uploadingPu === data.puNumber}
                           title="Загрузить файл"
                         >
-                          📤 Загрузить
+                          {uploadingPu === data.puNumber ? '⏳ Загрузка...' : '📤 Загрузить'}
                         </button>
                         
                         <button 
