@@ -1,7 +1,7 @@
 /* =====================================================
    ПРОФЕССИОНАЛЬНЫЕ СТИЛИ ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
    Файл: src/App.css
-   Версия с компактными уведомлениями и улучшенным дизайном
+   Версия с правильной подсветкой фаз
    ===================================================== */
 
 /* Сброс стилей и базовые настройки */
@@ -511,7 +511,15 @@ button:disabled {
   align-items: center;
 }
 
-/* Индикаторы фаз - ВСЕ зеленые по умолчанию */
+/* ===================================================== 
+   ИНДИКАТОРЫ ФАЗ - ВСЕ ЗЕЛЕНЫЕ ПО УМОЛЧАНИЮ!
+   ===================================================== */
+
+.phase-indicators {
+  display: flex;
+  gap: 8px;
+}
+
 .phase-indicator {
   width: 32px;
   height: 32px;
@@ -522,17 +530,47 @@ button:disabled {
   font-weight: bold;
   font-size: 14px;
   transition: all 0.3s ease;
-  /* По умолчанию ВСЕ зеленые */
+  /* ВСЕ ФАЗЫ ЗЕЛЕНЫЕ ПО УМОЛЧАНИЮ! */
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+  position: relative;
+  overflow: hidden;
 }
 
-/* Только если есть ошибка - красный */
+/* Зеленое свечение для всех фаз по умолчанию */
+.phase-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(72, 187, 120, 0.3) 0%, transparent 70%);
+  animation: greenGlow 3s ease-in-out infinite;
+}
+
+@keyframes greenGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* ТОЛЬКО если есть ошибка - красный */
 .phase-indicator.phase-error {
   background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
   box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
   animation: phaseError 2s ease-in-out infinite;
+}
+
+.phase-indicator.phase-error::before {
+  background: radial-gradient(circle at center, rgba(245, 101, 101, 0.4) 0%, transparent 70%);
+  animation: redPulse 1.5s ease-in-out infinite;
 }
 
 @keyframes phaseError {
@@ -542,11 +580,22 @@ button:disabled {
   }
   50% {
     transform: scale(1.05);
-    box-shadow: 0 2px 16px rgba(245, 101, 101, 0.5);
+    box-shadow: 0 2px 16px rgba(245, 101, 101, 0.6);
   }
 }
 
-/* Большие индикаторы в модальном окне */
+@keyframes redPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Большие индикаторы фаз в модальном окне */
 .phase-indicators-large {
   display: flex;
   gap: 16px;
@@ -567,6 +616,7 @@ button:disabled {
 .phase-indicators-large .phase-indicator.phase-error {
   background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
   box-shadow: 0 3px 12px rgba(245, 101, 101, 0.3);
+  animation: phaseError 2s ease-in-out infinite;
 }
 
 /* Кнопки в уведомлениях */
@@ -624,6 +674,12 @@ button:disabled {
 
 .btn-upload:hover {
   box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.btn-upload:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Компактные уведомления АСКУЭ */
@@ -1226,6 +1282,377 @@ button:disabled {
   font-size: 16px;
 }
 
+/* Дополнительные стили для загрузки файлов */
+.upload-info {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.upload-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.upload-info .hint {
+  color: #667eea;
+  font-weight: 500;
+}
+
+.file-input-wrapper {
+  margin: 20px 0;
+}
+
+.file-info {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.file-info p {
+  margin: 4px 0;
+  color: #4a5568;
+}
+
+.file-info strong {
+  color: #2d3748;
+}
+
+.file-info .pu-number strong {
+  color: #667eea;
+  font-size: 18px;
+}
+
+.upload-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.upload-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.upload-btn:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+}
+
+.upload-result {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.upload-result.success {
+  background: #f0fff4;
+  border-color: #9ae6b4;
+  color: #22543d;
+}
+
+.upload-result.error {
+  background: #fff5f5;
+  border-color: #feb2b2;
+  color: #742a2a;
+}
+
+.upload-result h3 {
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+
+.upload-result p {
+  margin: 8px 0;
+}
+
+.upload-result details {
+  margin-top: 16px;
+}
+
+.upload-result summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #667eea;
+}
+
+.upload-result pre {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+/* Стили для отчетов */
+.report-controls {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-group label {
+  color: #4a5568;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.control-group select,
+.control-group input[type="date"] {
+  padding: 8px 12px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.control-group select:focus,
+.control-group input[type="date"]:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.report-summary {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 24px;
+}
+
+.report-summary h3 {
+  margin-bottom: 8px;
+  color: #2c3e50;
+  font-size: 24px;
+}
+
+.report-summary p {
+  color: #718096;
+  font-size: 16px;
+}
+
+.report-table {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.report-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th {
+  background: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+}
+
+.report-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.report-table tr:hover {
+  background: #f8f9fb;
+}
+
+.report-table .error-cell {
+  color: #e53e3e;
+  font-weight: 500;
+}
+
+.no-data {
+  text-align: center;
+  padding: 60px;
+  color: #718096;
+}
+
+.no-data p {
+  font-size: 16px;
+}
+
+/* Дополнительные утилиты */
+.edit-hint {
+  color: #667eea;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.delete-selected-btn {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.delete-selected-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+}
+
+.checkbox-column {
+  width: 50px;
+  text-align: center;
+}
+
+.checkbox-column input[type="checkbox"] {
+  cursor: pointer;
+  transform: scale(1.2);
+}
+
+tr.selected {
+  background: #f0f4ff;
+}
+
+.edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-cell input {
+  padding: 4px 8px;
+  border: 1px solid #667eea;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100px;
+}
+
+.edit-cell button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  width: auto;
+  min-width: 30px;
+}
+
+.save-btn {
+  background: #48bb78;
+  color: white;
+}
+
+.save-btn:hover {
+  background: #38a169;
+}
+
+.cancel-btn {
+  background: #f56565;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #e53e3e;
+}
+
+.word-count {
+  display: block;
+  margin-top: 8px;
+  color: #718096;
+  font-size: 13px;
+}
+
+.work-info {
+  background: #f7fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.work-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.work-info strong {
+  color: #2d3748;
+}
+
+.askue-details-content h4 {
+  color: #ed8936;
+  margin-bottom: 16px;
+  font-size: 20px;
+}
+
+.delete-modal .warning {
+  color: #e53e3e;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.delete-modal ul {
+  margin-left: 24px;
+  margin-bottom: 16px;
+  color: #4a5568;
+}
+
+.delete-modal ul li {
+  margin: 4px 0;
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
   .app {
@@ -1254,6 +1681,20 @@ button:disabled {
   }
   
   .search-input {
+    width: 100%;
+  }
+  
+  .report-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group {
+    width: 100%;
+  }
+  
+  .control-group input,
+  .control-group select {
     width: 100%;
   }
 }
@@ -1310,86 +1751,31 @@ button:disabled {
   color: #e53e3e;
   font-weight: 600;
 }
-/* Индикаторы фаз с подсветкой фона */
-.phase-indicator {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 14px;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
+
+/* Дополнительная анимация для успешных уведомлений */
+.notification-compact.success {
+  animation: slideIn 0.3s ease-out, successPulse 2s ease-in-out;
 }
 
-.phase-indicator.phase-ok {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-  color: white;
-  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
-}
-
-.phase-indicator.phase-ok::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(135deg, #68d391 0%, #48bb78 100%);
-  border-radius: 8px;
-  z-index: -1;
-  opacity: 0.5;
-  animation: pulseGreen 2s ease-in-out infinite;
-}
-
-.phase-indicator.phase-error {
-  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-  color: white;
-  box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
-  animation: phaseError 1s ease-in-out infinite alternate;
-}
-
-.phase-indicator.phase-error::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
-  border-radius: 8px;
-  z-index: -1;
-  opacity: 0.5;
-  animation: pulseRed 2s ease-in-out infinite;
-}
-
-@keyframes pulseGreen {
+@keyframes successPulse {
   0%, 100% {
-    transform: scale(1);
-    opacity: 0.5;
+    border-left-color: #38a169;
   }
   50% {
-    transform: scale(1.1);
-    opacity: 0.8;
+    border-left-color: #68d391;
+    background: linear-gradient(to right, #f0fff4 0%, white 10%);
   }
 }
 
-@keyframes pulseRed {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
+.success-icon,
+.info-icon {
+  font-size: 24px;
+  margin-right: 12px;
 }
 
-/* Кнопка загрузки активная */
-.btn-upload:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+.success-text,
+.info-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
 }
