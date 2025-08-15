@@ -422,6 +422,76 @@ button:disabled {
    КОМПАКТНЫЕ УВЕДОМЛЕНИЯ
    ===================================================== */
 
+.notification-narrow-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.notification-phases {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.notification-narrow-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-tp {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.notification-narrow-details {
+  font-size: 13px;
+  color: #718096;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notification-pu-number {
+  font-size: 14px;
+  color: #4a5568;
+  margin-top: 2px;
+}
+
+.notification-pu-number strong {
+  color: #667eea;
+  font-size: 16px;
+}
+
+.notification-narrow-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Светлая кнопка лупы */
+.btn-details-light {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f7fafc;
+  color: #a0aec0;
+  width: auto;
+}
+
+.btn-details-light:hover {
+  background: #edf2f7;
+  color: #718096;
+  transform: translateY(-1px);
+}
 .notifications h2 {
   margin-bottom: 24px;
   color: #2c3e50;
@@ -770,7 +840,24 @@ button:disabled {
   overflow-y: auto;
   max-height: calc(90vh - 140px);
 }
+.modal-body {
+  padding: 24px 32px; /* Увеличиваем боковые отступы */
+  overflow-y: auto;
+  max-height: calc(90vh - 140px);
+}
 
+.modal-info {
+  padding-left: 8px; /* Дополнительный отступ для информации */
+}
+
+.error-summary {
+  padding: 0 8px; /* Отступы для текста ошибки */
+}
+
+.error-summary .error-text {
+  padding-left: 12px; /* Отступ для самого текста */
+  line-height: 1.6;
+}
 .modal-footer {
   padding: 20px 24px;
   border-top: 1px solid #e1e4e8;
