@@ -511,12 +511,7 @@ button:disabled {
   align-items: center;
 }
 
-/* Индикаторы фаз */
-.phase-indicators {
-  display: flex;
-  gap: 8px;
-}
-
+/* Индикаторы фаз - ВСЕ зеленые по умолчанию */
 .phase-indicator {
   width: 32px;
   height: 32px;
@@ -527,31 +522,31 @@ button:disabled {
   font-weight: bold;
   font-size: 14px;
   transition: all 0.3s ease;
-}
-
-.phase-indicator.phase-ok {
+  /* По умолчанию ВСЕ зеленые */
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
 }
 
+/* Только если есть ошибка - красный */
 .phase-indicator.phase-error {
   background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-  color: white;
   box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
-  animation: phaseError 1s ease-in-out infinite alternate;
+  animation: phaseError 2s ease-in-out infinite;
 }
 
 @keyframes phaseError {
-  from {
+  0%, 100% {
     transform: scale(1);
+    box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
   }
-  to {
+  50% {
     transform: scale(1.05);
+    box-shadow: 0 2px 16px rgba(245, 101, 101, 0.5);
   }
 }
 
-/* Большие индикаторы фаз в модальном окне */
+/* Большие индикаторы в модальном окне */
 .phase-indicators-large {
   display: flex;
   gap: 16px;
@@ -563,6 +558,15 @@ button:disabled {
   width: 60px;
   height: 60px;
   font-size: 24px;
+  /* Тоже все зеленые по умолчанию */
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 3px 12px rgba(72, 187, 120, 0.3);
+}
+
+.phase-indicators-large .phase-indicator.phase-error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  box-shadow: 0 3px 12px rgba(245, 101, 101, 0.3);
 }
 
 /* Кнопки в уведомлениях */
