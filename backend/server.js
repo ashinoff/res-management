@@ -1,6 +1,6 @@
 // =====================================================
 // УЛУЧШЕННЫЙ BACKEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
-// Версия с полным управлением пользователями
+// Версия с исправленной логикой уведомлений
 // =====================================================
 
 // Устанавливаем кодировку
@@ -60,8 +60,8 @@ app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'RES Management Backend is running',
-    version: '2.0.0',
-    features: ['user-management', 'phase-detection', 'auto-updates']
+    version: '2.0.1',
+    features: ['user-management', 'phase-detection', 'auto-updates', 'auto-hide-notifications']
   });
 });
 
@@ -684,7 +684,7 @@ app.post('/api/upload/analyze',
       console.log('User:', req.user);
       console.log('Request body:', req.body);
       console.log('Final resId:', resId);
-      console.log('File:', req.file?.originalname);
+      console.log('File:', req.file?.originalName);
 
       if (!resId) {
         return res.status(400).json({ error: 'Не выбран РЭС для загрузки' });
@@ -1683,18 +1683,18 @@ async function analyzeFile(filePath, type, originalFileName = null) {
 
             if (existingNotification) {
               console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
-  
-              // Это перепроверка!
-              const notifData = JSON.parse(existingNotification.message);
-  
+              
               // ВАЖНО: Всегда помечаем старое уведомление как прочитанное
               await existingNotification.update({ isRead: true });
               console.log('Marked ASKUE notification as read');
-  
+              
+              // Это перепроверка!
+              const notifData = JSON.parse(existingNotification.message);
+              
               if (!result.has_errors) {
                 // Ошибки исправлены
                 console.log(`Recheck successful - errors fixed for PU ${fileName}`);
-    
+                
                 // Обновляем запись в истории
                 await CheckHistory.update({
                   recheckDate: new Date(),
@@ -1706,7 +1706,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     status: 'awaiting_recheck'
                   }
                 });
-    
+                
                 // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
                 await Notification.update(
                   { isRead: true },
@@ -1719,7 +1719,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     }
                   }
                 );
-    
+                
                 // Отправляем уведомление ответственному что проблема решена
                 await Notification.create({
                   fromUserId: 1, // Системное уведомление
@@ -1730,11 +1730,11 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                   message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
                   isRead: false
                 });
-    
+                
               } else {
-                // Ошибки НЕ исправлены
+                // Ошибки НЕ исправлены - возвращаем в мероприятия
                 console.log(`Recheck failed - errors still present for PU ${fileName}`);
-    
+                
                 // Обновляем запись в истории
                 await CheckHistory.update({
                   recheckDate: new Date(),
@@ -1746,7 +1746,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     status: 'awaiting_recheck'
                   }
                 });
-    
+                
                 // Создаем новое уведомление об ошибке для ответственных
                 errors.push({
                   puNumber: fileName,
@@ -1869,7 +1869,7 @@ async function createNotifications(fromUserId, resId, errors) {
     if (networkStructure.middlePu === errorInfo.puNumber) position = 'middle';
     else if (networkStructure.endPu === errorInfo.puNumber) position = 'end';
     
-    // Формируем данные для уведомления
+    // Формируем данные для уведомления с полными деталями
     const errorData = {
       puNumber: errorInfo.puNumber,
       position: position,
@@ -1877,7 +1877,7 @@ async function createNotifications(fromUserId, resId, errors) {
       vlName: networkStructure.vlName,
       resName: networkStructure.ResUnit.name,
       errorDetails: errorInfo.error,
-      details: errorInfo.details
+      details: errorInfo.details  // Важно для определения фаз!
     };
     
     console.log('Creating notifications with data:', errorData);
@@ -1977,7 +1977,7 @@ initializeDatabase().then(() => {
     console.log('- User Management ✓');
     console.log('- Phase Detection ✓'); 
     console.log('- Auto Updates ✓');
-    console.log('- Compact Notifications ✓');
+    console.log('- Auto Hide Notifications ✓');
   });
 });
 
