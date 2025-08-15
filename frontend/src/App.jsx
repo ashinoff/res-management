@@ -1,7 +1,7 @@
 // =====================================================
 // УЛУЧШЕННЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
-// Версия с компактными уведомлениями и оптимизацией
+// Версия с исправленными фазами и загрузкой из АСКУЭ
 // =====================================================
 
 import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
@@ -509,28 +509,28 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
     errorSummary = details?.errorDetails || 'Нет данных';
   }
   
-  // Парсим фазы из деталей
+  // Парсим фазы из деталей - все зеленые по умолчанию!
   const getPhaseErrors = () => {
-  const phases = { A: false, B: false, C: false };
-  
-  if (!parsedDetails) return phases;
-  
-  // Проверяем overvoltage
-  if (parsedDetails.overvoltage) {
-    if (parsedDetails.overvoltage.phase_A?.count > 0) phases.A = true;
-    if (parsedDetails.overvoltage.phase_B?.count > 0) phases.B = true;
-    if (parsedDetails.overvoltage.phase_C?.count > 0) phases.C = true;
-  }
-  
-  // Проверяем undervoltage
-  if (parsedDetails.undervoltage) {
-    if (parsedDetails.undervoltage.phase_A?.count > 0) phases.A = true;
-    if (parsedDetails.undervoltage.phase_B?.count > 0) phases.B = true;
-    if (parsedDetails.undervoltage.phase_C?.count > 0) phases.C = true;
-  }
-  
-  return phases;
-};
+    const phases = { A: false, B: false, C: false };
+    
+    if (!parsedDetails) return phases;
+    
+    // Проверяем overvoltage
+    if (parsedDetails.overvoltage) {
+      if (parsedDetails.overvoltage.phase_A?.count > 0) phases.A = true;
+      if (parsedDetails.overvoltage.phase_B?.count > 0) phases.B = true;
+      if (parsedDetails.overvoltage.phase_C?.count > 0) phases.C = true;
+    }
+    
+    // Проверяем undervoltage
+    if (parsedDetails.undervoltage) {
+      if (parsedDetails.undervoltage.phase_A?.count > 0) phases.A = true;
+      if (parsedDetails.undervoltage.phase_B?.count > 0) phases.B = true;
+      if (parsedDetails.undervoltage.phase_C?.count > 0) phases.C = true;
+    }
+    
+    return phases;
+  };
   
   const phaseErrors = getPhaseErrors();
   
@@ -644,11 +644,6 @@ function FileUpload({ selectedRes }) {
       // Создаем событие для обновления структуры
       window.dispatchEvent(new CustomEvent('structureUpdated'));
       window.dispatchEvent(new CustomEvent('notificationsUpdated'));
-
-      // Принудительно обновляем уведомления через 1 секунду
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('notificationsUpdated'));
-      }, 1000);
       
     } catch (error) {
       console.error('Upload error:', error);
@@ -747,7 +742,7 @@ function FileUpload({ selectedRes }) {
 }
 
 // =====================================================
-// КОМПОНЕНТ УВЕДОМЛЕНИЙ (КОМПАКТНЫЙ!)
+// КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
 // =====================================================
 
 function Notifications({ filterType }) {
@@ -764,7 +759,6 @@ function Notifications({ filterType }) {
   const [deletePassword, setDeletePassword] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsNotification, setDetailsNotification] = useState(null);
-  const [uploadFile, setUploadFile] = useState(null);
   const [uploadingPu, setUploadingPu] = useState(null);
   
   // Оптимизированная функция загрузки
@@ -842,101 +836,124 @@ function Notifications({ filterType }) {
       setDeletePassword('');
       setDeleteNotificationId(null);
       
-      // Автообновление
+      // ВАЖНО: Автообновление после удаления!
       await loadNotifications();
       
     } catch (error) {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
-  // Добавим обработчик загрузки файла
+
+  // Функция загрузки файла прямо из уведомления АСКУЭ
   const handleFileUpload = async (puNumber) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls,.csv';
-  
+    
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-    
+      
       // Проверяем имя файла
       const fileName = file.name.split('.')[0];
       if (fileName !== puNumber) {
         alert(`Имя файла должно быть ${puNumber}.xls или ${puNumber}.xlsx`);
         return;
       }
-    
+      
       setUploadingPu(puNumber);
-    
+      
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', 'rim_single'); // или определяем тип автоматически
+      formData.append('type', 'rim_single'); // По умолчанию РИМ
       formData.append('resId', user.resId);
-    
+      
       try {
         await api.post('/api/upload/analyze', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
-      
+        
         alert('Файл успешно загружен и обработан!');
-      
+        
         // Обновляем уведомления
         await loadNotifications();
-      
+        
+        // Обновляем структуру
+        window.dispatchEvent(new CustomEvent('structureUpdated'));
+        
       } catch (error) {
         alert('Ошибка загрузки: ' + (error.response?.data?.error || error.message));
       } finally {
         setUploadingPu(null);
       }
     };
-  
+    
     input.click();
   };
-  // Определение фаз с ошибками
+
+  // ИСПРАВЛЕННАЯ функция определения фаз
   const getPhaseErrors = useCallback((errorDetails) => {
     const phases = { A: false, B: false, C: false };
+    
     if (!errorDetails) return phases;
     
     try {
-    // Если это JSON строка с деталями
-      if (typeof errorDetails === 'string' && errorDetails.includes('details')) {
-        const parsed = JSON.parse(errorDetails);
-        if (parsed.details) {
-        // Проверяем overvoltage
-          if (parsed.details.overvoltage) {
-            if (parsed.details.overvoltage.phase_A?.count > 0) phases.A = true;
-            if (parsed.details.overvoltage.phase_B?.count > 0) phases.B = true;
-            if (parsed.details.overvoltage.phase_C?.count > 0) phases.C = true;
-          }
-          // Проверяем undervoltage
-          if (parsed.details.undervoltage) {
-            if (parsed.details.undervoltage.phase_A?.count > 0) phases.A = true;
-            if (parsed.details.undervoltage.phase_B?.count > 0) phases.B = true;
-            if (parsed.details.undervoltage.phase_C?.count > 0) phases.C = true;
-          }
-          return phases;
+      let data = null;
+      
+      // Пытаемся распарсить JSON
+      if (typeof errorDetails === 'string') {
+        try {
+          const parsed = JSON.parse(errorDetails);
+          data = parsed.details || parsed;
+        } catch {
+          // Если не JSON, работаем как с текстом
+          data = errorDetails;
         }
+      } else {
+        data = errorDetails;
+      }
+      
+      // Если есть структурированные данные
+      if (data && typeof data === 'object') {
+        // Проверяем overvoltage
+        if (data.overvoltage) {
+          if (data.overvoltage.phase_A?.count > 0) phases.A = true;
+          if (data.overvoltage.phase_B?.count > 0) phases.B = true;
+          if (data.overvoltage.phase_C?.count > 0) phases.C = true;
+        }
+        
+        // Проверяем undervoltage
+        if (data.undervoltage) {
+          if (data.undervoltage.phase_A?.count > 0) phases.A = true;
+          if (data.undervoltage.phase_B?.count > 0) phases.B = true;
+          if (data.undervoltage.phase_C?.count > 0) phases.C = true;
+        }
+      } else if (typeof data === 'string') {
+        // Если это текст, ищем упоминания фаз
+        const text = data;
+        
+        // Паттерны для поиска ошибок по фазам
+        if (text.match(/[Фф]аза\s*A.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
+            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*A/i)) {
+          phases.A = true;
+        }
+        
+        if (text.match(/[Фф]аза\s*B.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
+            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*B/i)) {
+          phases.B = true;
+        }
+        
+        if (text.match(/[Фф]аза\s*C.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
+            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*C/i)) {
+          phases.C = true;
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing phase errors:', e);
     }
-
-      // Иначе ищем в тексте
-    const text = typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails);
     
-    // Ищем конкретные упоминания фаз с ошибками
-    if (text.match(/[Фф]аза\s*A.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.A = true;
-    if (text.match(/[Фф]аза\s*B.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.B = true;
-    if (text.match(/[Фф]аза\s*C.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.C = true;
-    
-    // Или в обратном порядке
-    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*A/i)) phases.A = true;
-    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*B/i)) phases.B = true;
-    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*C/i)) phases.C = true;
-    
-  } catch (e) {
-    console.error('Error parsing phase errors:', e);
-  }
-  
-  return phases;
-}, []);
+    return phases;
+  }, []);
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
@@ -981,7 +998,7 @@ function Notifications({ filterType }) {
             {notif.type === 'error' && (() => {
               try {
                 const data = JSON.parse(notif.message);
-                const phaseErrors = getPhaseErrors(data.errorDetails);
+                const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
                 
                 return (
                   <div className="notification-compact-content">
@@ -1141,9 +1158,10 @@ function Notifications({ filterType }) {
             <div className="modal-body">
               {detailsNotification.type === 'error' && (
                 <>
-                 <div className="phase-indicators-large">
-                  {(() => {
-                      const phaseErrors = getPhaseErrors(detailsNotification.data.errorDetails);
+                  {/* Показываем фазы в детальном окне */}
+                  <div className="phase-indicators-large">
+                    {(() => {
+                      const phaseErrors = getPhaseErrors(detailsNotification.data.details || detailsNotification.data.errorDetails);
                       return (
                         <>
                           <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
@@ -1153,10 +1171,7 @@ function Notifications({ filterType }) {
                       );
                     })()}
                   </div>
-
-                  <div className="detail-row">
-                    <strong>РЭС:</strong> {detailsNotification.data.resName}
-                  </div>
+                  
                   <div className="detail-row">
                     <strong>РЭС:</strong> {detailsNotification.data.resName}
                   </div>
@@ -2108,7 +2123,7 @@ function MaintenanceSettings() {
         <div className="stats-grid">
           <div className="stat-item">
             <span className="stat-label">Версия системы:</span>
-            <span className="stat-value">2.0</span>
+            <span className="stat-value">2.0.1</span>
           </div>
           <div className="stat-item">
             <span className="stat-label">База данных:</span>
