@@ -510,38 +510,30 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
   }
   
  // Парсим фазы из деталей - все зеленые по умолчанию!
+// Парсим фазы из деталей - красим ТОЛЬКО явно указанные!
 const getPhaseErrors = () => {
   const phases = { A: false, B: false, C: false };
   
-  // Анализируем и структурированные данные и текст
-  let textToAnalyze = errorSummary;
-  
   if (parsedDetails) {
-    // Проверяем overvoltage
+    // Проверяем только конкретные фазы
     if (parsedDetails.overvoltage) {
-      if (parsedDetails.overvoltage.phase_A?.count > 0) phases.A = true;
-      if (parsedDetails.overvoltage.phase_B?.count > 0) phases.B = true;
-      if (parsedDetails.overvoltage.phase_C?.count > 0) phases.C = true;
+      if (parsedDetails.overvoltage.phase_A && parsedDetails.overvoltage.phase_A.count > 0) phases.A = true;
+      if (parsedDetails.overvoltage.phase_B && parsedDetails.overvoltage.phase_B.count > 0) phases.B = true;
+      if (parsedDetails.overvoltage.phase_C && parsedDetails.overvoltage.phase_C.count > 0) phases.C = true;
     }
     
-    // Проверяем undervoltage
     if (parsedDetails.undervoltage) {
-      if (parsedDetails.undervoltage.phase_A?.count > 0) phases.A = true;
-      if (parsedDetails.undervoltage.phase_B?.count > 0) phases.B = true;
-      if (parsedDetails.undervoltage.phase_C?.count > 0) phases.C = true;
+      if (parsedDetails.undervoltage.phase_A && parsedDetails.undervoltage.phase_A.count > 0) phases.A = true;
+      if (parsedDetails.undervoltage.phase_B && parsedDetails.undervoltage.phase_B.count > 0) phases.B = true;
+      if (parsedDetails.undervoltage.phase_C && parsedDetails.undervoltage.phase_C.count > 0) phases.C = true;
     }
   }
   
-  // Всегда проверяем текст
-  if (textToAnalyze) {
-    if (textToAnalyze.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
-    if (textToAnalyze.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
-    if (textToAnalyze.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
-    
-    // Если написано "все фазы" или есть Uc
-    if (textToAnalyze.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн|Uc[><%]/i)) {
-      phases.A = phases.B = phases.C = true;
-    }
+  // Проверяем текст только на явные упоминания
+  if (errorSummary) {
+    if (errorSummary.match(/Фаза\s*A|phase_A/)) phases.A = true;
+    if (errorSummary.match(/Фаза\s*B|phase_B/)) phases.B = true;
+    if (errorSummary.match(/Фаза\s*C|phase_C/)) phases.C = true;
   }
   
   return phases;
@@ -909,6 +901,7 @@ function Notifications({ filterType }) {
   };
 
 // ИСПРАВЛЕННАЯ функция определения фаз
+/ ИСПРАВЛЕННАЯ функция определения фаз - красим ТОЛЬКО явно указанные!
 const getPhaseErrors = useCallback((errorDetails) => {
   const phases = { A: false, B: false, C: false };
   
@@ -925,7 +918,6 @@ const getPhaseErrors = useCallback((errorDetails) => {
         data = parsed.details || parsed;
         textToAnalyze = parsed.summary || errorDetails;
       } catch {
-        // Если не JSON, работаем как с текстом
         textToAnalyze = errorDetails;
       }
     } else if (typeof errorDetails === 'object') {
@@ -933,39 +925,29 @@ const getPhaseErrors = useCallback((errorDetails) => {
       textToAnalyze = errorDetails.summary || JSON.stringify(errorDetails);
     }
     
-    // Если есть структурированные данные
+    // Проверяем структурированные данные ТОЛЬКО если есть конкретные фазы
     if (data && typeof data === 'object') {
-      // Проверяем overvoltage
       if (data.overvoltage) {
-        if (data.overvoltage.phase_A?.count > 0) phases.A = true;
-        if (data.overvoltage.phase_B?.count > 0) phases.B = true;
-        if (data.overvoltage.phase_C?.count > 0) phases.C = true;
+        if (data.overvoltage.phase_A && data.overvoltage.phase_A.count > 0) phases.A = true;
+        if (data.overvoltage.phase_B && data.overvoltage.phase_B.count > 0) phases.B = true;
+        if (data.overvoltage.phase_C && data.overvoltage.phase_C.count > 0) phases.C = true;
       }
       
-      // Проверяем undervoltage
       if (data.undervoltage) {
-        if (data.undervoltage.phase_A?.count > 0) phases.A = true;
-        if (data.undervoltage.phase_B?.count > 0) phases.B = true;
-        if (data.undervoltage.phase_C?.count > 0) phases.C = true;
+        if (data.undervoltage.phase_A && data.undervoltage.phase_A.count > 0) phases.A = true;
+        if (data.undervoltage.phase_B && data.undervoltage.phase_B.count > 0) phases.B = true;
+        if (data.undervoltage.phase_C && data.undervoltage.phase_C.count > 0) phases.C = true;
       }
     }
     
-    // Всегда проверяем текст на упоминания фаз
+    // Проверяем текст ТОЛЬКО на явные упоминания конкретных фаз
     if (textToAnalyze) {
-      // Паттерны для поиска ошибок по фазам
-      if (textToAnalyze.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
-      if (textToAnalyze.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
-      if (textToAnalyze.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
+      // Только если явно написано "Фаза A" или "phase_A"
+      if (textToAnalyze.match(/Фаза\s*A|phase_A/)) phases.A = true;
+      if (textToAnalyze.match(/Фаза\s*B|phase_B/)) phases.B = true;
+      if (textToAnalyze.match(/Фаза\s*C|phase_C/)) phases.C = true;
       
-      // Если написано "все фазы" или "трехфазное"
-      if (textToAnalyze.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн/i)) {
-        phases.A = phases.B = phases.C = true;
-      }
-      
-      // Если есть упоминание Uc (междуфазное напряжение) - обычно все фазы
-      if (textToAnalyze.match(/Uc[><%]/i) && !phases.A && !phases.B && !phases.C) {
-        phases.A = phases.B = phases.C = true;
-      }
+      // НЕ красим все фазы при Uc - это междуфазное напряжение без указания конкретных фаз
     }
   } catch (e) {
     console.error('Error parsing phase errors:', e);
@@ -1178,46 +1160,38 @@ const getPhaseErrors = useCallback((errorDetails) => {
                 <>
                   {/* Показываем фазы в детальном окне */}
                   <div className="phase-indicators-large">
-                    {(() => {
-                      const errorData = detailsNotification.data.details || detailsNotification.data.errorDetails;
-                      const errorText = detailsNotification.data.errorDetails || '';
-        
-                      // Используем ту же логику что и везде
-                      const phases = { A: false, B: false, C: false };
-        
-                      // Проверяем структурированные данные если есть
-                      if (errorData && typeof errorData === 'object' && errorData.details) {
-                        const details = errorData.details;
-                        if (details.overvoltage) {
-                          if (details.overvoltage.phase_A?.count > 0) phases.A = true;
-                          if (details.overvoltage.phase_B?.count > 0) phases.B = true;
-                          if (details.overvoltage.phase_C?.count > 0) phases.C = true;
-                        }
-                        if (details.undervoltage) {
-                          if (details.undervoltage.phase_A?.count > 0) phases.A = true;
-                          if (details.undervoltage.phase_B?.count > 0) phases.B = true;
-                          if (details.undervoltage.phase_C?.count > 0) phases.C = true;
-                        }
-                      }
-        
-                      // Проверяем текст
-                      if (errorText.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
-                      if (errorText.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
-                      if (errorText.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
-        
-                      if (errorText.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн|Uc[><%]/i)) {
-                        phases.A = phases.B = phases.C = true;
-                      }
-        
-                      return (
-                        <>
-                          <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
-                          <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
-                          <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
-                        </>
-                      );
-                    })()}
-                  </div>
+  {(() => {
+    const phases = { A: false, B: false, C: false };
+    
+    // Проверяем только явные упоминания фаз
+    if (detailsNotification.data.details && typeof detailsNotification.data.details === 'object') {
+      const details = detailsNotification.data.details;
+      if (details.overvoltage) {
+        if (details.overvoltage.phase_A && details.overvoltage.phase_A.count > 0) phases.A = true;
+        if (details.overvoltage.phase_B && details.overvoltage.phase_B.count > 0) phases.B = true;
+        if (details.overvoltage.phase_C && details.overvoltage.phase_C.count > 0) phases.C = true;
+      }
+      if (details.undervoltage) {
+        if (details.undervoltage.phase_A && details.undervoltage.phase_A.count > 0) phases.A = true;
+        if (details.undervoltage.phase_B && details.undervoltage.phase_B.count > 0) phases.B = true;
+        if (details.undervoltage.phase_C && details.undervoltage.phase_C.count > 0) phases.C = true;
+      }
+    }
+    
+    const errorText = detailsNotification.data.errorDetails || '';
+    if (errorText.match(/Фаза\s*A|phase_A/)) phases.A = true;
+    if (errorText.match(/Фаза\s*B|phase_B/)) phases.B = true;
+    if (errorText.match(/Фаза\s*C|phase_C/)) phases.C = true;
+    
+    return (
+      <>
+        <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
+        <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
+        <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
+      </>
+    );
+  })()}
+</div>
                   
                   <div className="detail-row">
                     <strong>РЭС:</strong> {detailsNotification.data.resName}
