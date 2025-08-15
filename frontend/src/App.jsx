@@ -549,9 +549,9 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
         </div>
         
         <div className="phase-indicators-large">
-          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : 'phase-ok'}`}>A</div>
-          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : 'phase-ok'}`}>B</div>
-          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : 'phase-ok'}`}>C</div>
+          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
         </div>
         
         <div className="error-summary">
@@ -1002,9 +1002,9 @@ function Notifications({ filterType }) {
                     
                     <div className="notification-actions-row">
                       <div className="phase-indicators">
-                        <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : 'phase-ok'}`}>A</div>
-                        <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : 'phase-ok'}`}>B</div>
-                        <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : 'phase-ok'}`}>C</div>
+                        <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+                        <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+                        <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
                       </div>
                       
                       <div className="notification-buttons">
@@ -1141,6 +1141,22 @@ function Notifications({ filterType }) {
             <div className="modal-body">
               {detailsNotification.type === 'error' && (
                 <>
+                 <div className="phase-indicators-large">
+                  {(() => {
+                      const phaseErrors = getPhaseErrors(detailsNotification.data.errorDetails);
+                      return (
+                        <>
+                          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+                          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+                          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="detail-row">
+                    <strong>РЭС:</strong> {detailsNotification.data.resName}
+                  </div>
                   <div className="detail-row">
                     <strong>РЭС:</strong> {detailsNotification.data.resName}
                   </div>
