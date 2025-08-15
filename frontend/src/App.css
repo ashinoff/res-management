@@ -1306,3 +1306,86 @@ button:disabled {
   color: #e53e3e;
   font-weight: 600;
 }
+/* Индикаторы фаз с подсветкой фона */
+.phase-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.phase-indicator.phase-ok {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+}
+
+.phase-indicator.phase-ok::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(135deg, #68d391 0%, #48bb78 100%);
+  border-radius: 8px;
+  z-index: -1;
+  opacity: 0.5;
+  animation: pulseGreen 2s ease-in-out infinite;
+}
+
+.phase-indicator.phase-error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+  animation: phaseError 1s ease-in-out infinite alternate;
+}
+
+.phase-indicator.phase-error::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+  border-radius: 8px;
+  z-index: -1;
+  opacity: 0.5;
+  animation: pulseRed 2s ease-in-out infinite;
+}
+
+@keyframes pulseGreen {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes pulseRed {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Кнопка загрузки активная */
+.btn-upload:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
