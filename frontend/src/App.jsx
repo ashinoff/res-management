@@ -511,29 +511,26 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
   
   // Парсим фазы из деталей
   const getPhaseErrors = () => {
-    if (!parsedDetails) return { A: false, B: false, C: false };
-    
-    const phases = { A: false, B: false, C: false };
-    
-    // Ищем упоминания фаз в тексте ошибки
-    if (parsedDetails.overvoltage) {
-      ['A', 'B', 'C'].forEach(phase => {
-        if (parsedDetails.overvoltage[`phase_${phase}`]?.count > 0) {
-          phases[phase] = true;
-        }
-      });
-    }
-    
-    if (parsedDetails.undervoltage) {
-      ['A', 'B', 'C'].forEach(phase => {
-        if (parsedDetails.undervoltage[`phase_${phase}`]?.count > 0) {
-          phases[phase] = true;
-        }
-      });
-    }
-    
-    return phases;
-  };
+  const phases = { A: false, B: false, C: false };
+  
+  if (!parsedDetails) return phases;
+  
+  // Проверяем overvoltage
+  if (parsedDetails.overvoltage) {
+    if (parsedDetails.overvoltage.phase_A?.count > 0) phases.A = true;
+    if (parsedDetails.overvoltage.phase_B?.count > 0) phases.B = true;
+    if (parsedDetails.overvoltage.phase_C?.count > 0) phases.C = true;
+  }
+  
+  // Проверяем undervoltage
+  if (parsedDetails.undervoltage) {
+    if (parsedDetails.undervoltage.phase_A?.count > 0) phases.A = true;
+    if (parsedDetails.undervoltage.phase_B?.count > 0) phases.B = true;
+    if (parsedDetails.undervoltage.phase_C?.count > 0) phases.C = true;
+  }
+  
+  return phases;
+};
   
   const phaseErrors = getPhaseErrors();
   
@@ -901,23 +898,45 @@ function Notifications({ filterType }) {
     if (!errorDetails) return phases;
     
     try {
-      // Ищем упоминания фаз в тексте
-      const text = typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails);
-      if (text.includes('Фаза A') || text.includes('phase_A')) phases.A = true;
-      if (text.includes('Фаза B') || text.includes('phase_B')) phases.B = true;
-      if (text.includes('Фаза C') || text.includes('phase_C')) phases.C = true;
-      
-      // Если ни одна фаза не найдена, помечаем все
-      if (!phases.A && !phases.B && !phases.C) {
-        phases.A = phases.B = phases.C = true;
-      }
-    } catch (e) {
-      // По умолчанию все фазы с ошибкой
-      phases.A = phases.B = phases.C = true;
+    // Если это JSON строка с деталями
+      if (typeof errorDetails === 'string' && errorDetails.includes('details')) {
+        const parsed = JSON.parse(errorDetails);
+        if (parsed.details) {
+        // Проверяем overvoltage
+          if (parsed.details.overvoltage) {
+            if (parsed.details.overvoltage.phase_A?.count > 0) phases.A = true;
+            if (parsed.details.overvoltage.phase_B?.count > 0) phases.B = true;
+            if (parsed.details.overvoltage.phase_C?.count > 0) phases.C = true;
+          }
+          // Проверяем undervoltage
+          if (parsed.details.undervoltage) {
+            if (parsed.details.undervoltage.phase_A?.count > 0) phases.A = true;
+            if (parsed.details.undervoltage.phase_B?.count > 0) phases.B = true;
+            if (parsed.details.undervoltage.phase_C?.count > 0) phases.C = true;
+          }
+          return phases;
+        }
     }
+
+      // Иначе ищем в тексте
+    const text = typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails);
     
-    return phases;
-  }, []);
+    // Ищем конкретные упоминания фаз с ошибками
+    if (text.match(/[Фф]аза\s*A.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.A = true;
+    if (text.match(/[Фф]аза\s*B.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.B = true;
+    if (text.match(/[Фф]аза\s*C.*?(превышен|заниж|откл|наруш|ошиб)/i)) phases.C = true;
+    
+    // Или в обратном порядке
+    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*A/i)) phases.A = true;
+    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*B/i)) phases.B = true;
+    if (text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*C/i)) phases.C = true;
+    
+  } catch (e) {
+    console.error('Error parsing phase errors:', e);
+  }
+  
+  return phases;
+}, []);
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
