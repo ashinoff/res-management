@@ -647,6 +647,11 @@ function FileUpload({ selectedRes }) {
       // Создаем событие для обновления структуры
       window.dispatchEvent(new CustomEvent('structureUpdated'));
       window.dispatchEvent(new CustomEvent('notificationsUpdated'));
+
+      // Принудительно обновляем уведомления через 1 секунду
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('notificationsUpdated'));
+      }, 1000);
       
     } catch (error) {
       console.error('Upload error:', error);
