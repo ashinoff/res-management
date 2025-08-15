@@ -1683,14 +1683,18 @@ async function analyzeFile(filePath, type, originalFileName = null) {
 
             if (existingNotification) {
               console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
-              
+  
               // Это перепроверка!
               const notifData = JSON.parse(existingNotification.message);
-              
+  
+              // ВАЖНО: Всегда помечаем старое уведомление как прочитанное
+              await existingNotification.update({ isRead: true });
+              console.log('Marked ASKUE notification as read');
+  
               if (!result.has_errors) {
                 // Ошибки исправлены
                 console.log(`Recheck successful - errors fixed for PU ${fileName}`);
-                
+    
                 // Обновляем запись в истории
                 await CheckHistory.update({
                   recheckDate: new Date(),
@@ -1702,10 +1706,20 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     status: 'awaiting_recheck'
                   }
                 });
-                
-                // Помечаем уведомление как прочитанное
-                await existingNotification.update({ isRead: true });
-                
+    
+                // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
+                await Notification.update(
+                  { isRead: true },
+                  {
+                    where: {
+                      type: 'error',
+                      message: {
+                        [Op.like]: `%"puNumber":"${fileName}"%`
+                      }
+                    }
+                  }
+                );
+    
                 // Отправляем уведомление ответственному что проблема решена
                 await Notification.create({
                   fromUserId: 1, // Системное уведомление
@@ -1716,11 +1730,11 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                   message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
                   isRead: false
                 });
-                
+    
               } else {
-                // Ошибки НЕ исправлены - возвращаем в мероприятия
+                // Ошибки НЕ исправлены
                 console.log(`Recheck failed - errors still present for PU ${fileName}`);
-                
+    
                 // Обновляем запись в истории
                 await CheckHistory.update({
                   recheckDate: new Date(),
@@ -1732,10 +1746,7 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     status: 'awaiting_recheck'
                   }
                 });
-                
-                // Помечаем старое уведомление АСКУЭ как прочитанное
-                await existingNotification.update({ isRead: true });
-                
+    
                 // Создаем новое уведомление об ошибке для ответственных
                 errors.push({
                   puNumber: fileName,
