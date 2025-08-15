@@ -509,19 +509,14 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
     errorSummary = details?.errorDetails || 'Нет данных';
   }
   
-  // Парсим фазы из деталей - все зеленые по умолчанию!
-  const getPhaseErrors = () => {
-    const phases = { A: false, B: false, C: false };
-    
-    if (!parsedDetails) {
-      // Если нет деталей, парсим из текста ошибки
-      const text = errorSummary;
-      if (text.includes('Фаза A') || text.includes('phase_A')) phases.A = true;
-      if (text.includes('Фаза B') || text.includes('phase_B')) phases.B = true;
-      if (text.includes('Фаза C') || text.includes('phase_C')) phases.C = true;
-      return phases;
-    }
-    
+ // Парсим фазы из деталей - все зеленые по умолчанию!
+const getPhaseErrors = () => {
+  const phases = { A: false, B: false, C: false };
+  
+  // Анализируем и структурированные данные и текст
+  let textToAnalyze = errorSummary;
+  
+  if (parsedDetails) {
     // Проверяем overvoltage
     if (parsedDetails.overvoltage) {
       if (parsedDetails.overvoltage.phase_A?.count > 0) phases.A = true;
@@ -535,9 +530,22 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
       if (parsedDetails.undervoltage.phase_B?.count > 0) phases.B = true;
       if (parsedDetails.undervoltage.phase_C?.count > 0) phases.C = true;
     }
+  }
+  
+  // Всегда проверяем текст
+  if (textToAnalyze) {
+    if (textToAnalyze.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
+    if (textToAnalyze.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
+    if (textToAnalyze.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
     
-    return phases;
-  };
+    // Если написано "все фазы" или есть Uc
+    if (textToAnalyze.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн|Uc[><%]/i)) {
+      phases.A = phases.B = phases.C = true;
+    }
+  }
+  
+  return phases;
+};
   
   const phaseErrors = getPhaseErrors();
   
@@ -900,69 +908,71 @@ function Notifications({ filterType }) {
     input.click();
   };
 
-  // ИСПРАВЛЕННАЯ функция определения фаз
-  const getPhaseErrors = useCallback((errorDetails) => {
-    const phases = { A: false, B: false, C: false };
+// ИСПРАВЛЕННАЯ функция определения фаз
+const getPhaseErrors = useCallback((errorDetails) => {
+  const phases = { A: false, B: false, C: false };
+  
+  if (!errorDetails) return phases;
+  
+  try {
+    let data = null;
+    let textToAnalyze = '';
     
-    if (!errorDetails) return phases;
-    
-    try {
-      let data = null;
-      
-      // Пытаемся распарсить JSON
-      if (typeof errorDetails === 'string') {
-        try {
-          const parsed = JSON.parse(errorDetails);
-          data = parsed.details || parsed;
-        } catch {
-          // Если не JSON, работаем как с текстом
-          data = errorDetails;
-        }
-      } else {
-        data = errorDetails;
+    // Пытаемся распарсить JSON
+    if (typeof errorDetails === 'string') {
+      try {
+        const parsed = JSON.parse(errorDetails);
+        data = parsed.details || parsed;
+        textToAnalyze = parsed.summary || errorDetails;
+      } catch {
+        // Если не JSON, работаем как с текстом
+        textToAnalyze = errorDetails;
       }
-      
-      // Если есть структурированные данные
-      if (data && typeof data === 'object') {
-        // Проверяем overvoltage
-        if (data.overvoltage) {
-          if (data.overvoltage.phase_A?.count > 0) phases.A = true;
-          if (data.overvoltage.phase_B?.count > 0) phases.B = true;
-          if (data.overvoltage.phase_C?.count > 0) phases.C = true;
-        }
-        
-        // Проверяем undervoltage
-        if (data.undervoltage) {
-          if (data.undervoltage.phase_A?.count > 0) phases.A = true;
-          if (data.undervoltage.phase_B?.count > 0) phases.B = true;
-          if (data.undervoltage.phase_C?.count > 0) phases.C = true;
-        }
-      } else if (typeof data === 'string') {
-        // Если это текст, ищем упоминания фаз
-        const text = data;
-        
-        // Паттерны для поиска ошибок по фазам
-        if (text.match(/[Фф]аза\s*A.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
-            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*A/i)) {
-          phases.A = true;
-        }
-        
-        if (text.match(/[Фф]аза\s*B.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
-            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*B/i)) {
-          phases.B = true;
-        }
-        
-        if (text.match(/[Фф]аза\s*C.*?(превышен|заниж|откл|наруш|ошиб)/i) ||
-            text.match(/(превышен|заниж|откл|наруш|ошиб).*?[Фф]аза\s*C/i)) {
-          phases.C = true;
-        }
-      }
-    } catch (e) {
-      console.error('Error parsing phase errors:', e);
+    } else if (typeof errorDetails === 'object') {
+      data = errorDetails.details || errorDetails;
+      textToAnalyze = errorDetails.summary || JSON.stringify(errorDetails);
     }
     
-    return phases;
-  }, []);
+    // Если есть структурированные данные
+    if (data && typeof data === 'object') {
+      // Проверяем overvoltage
+      if (data.overvoltage) {
+        if (data.overvoltage.phase_A?.count > 0) phases.A = true;
+        if (data.overvoltage.phase_B?.count > 0) phases.B = true;
+        if (data.overvoltage.phase_C?.count > 0) phases.C = true;
+      }
+      
+      // Проверяем undervoltage
+      if (data.undervoltage) {
+        if (data.undervoltage.phase_A?.count > 0) phases.A = true;
+        if (data.undervoltage.phase_B?.count > 0) phases.B = true;
+        if (data.undervoltage.phase_C?.count > 0) phases.C = true;
+      }
+    }
+    
+    // Всегда проверяем текст на упоминания фаз
+    if (textToAnalyze) {
+      // Паттерны для поиска ошибок по фазам
+      if (textToAnalyze.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
+      if (textToAnalyze.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
+      if (textToAnalyze.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
+      
+      // Если написано "все фазы" или "трехфазное"
+      if (textToAnalyze.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн/i)) {
+        phases.A = phases.B = phases.C = true;
+      }
+      
+      // Если есть упоминание Uc (междуфазное напряжение) - обычно все фазы
+      if (textToAnalyze.match(/Uc[><%]/i) && !phases.A && !phases.B && !phases.C) {
+        phases.A = phases.B = phases.C = true;
+      }
+    }
+  } catch (e) {
+    console.error('Error parsing phase errors:', e);
+  }
+  
+  return phases;
+}, []);
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
@@ -1169,12 +1179,41 @@ function Notifications({ filterType }) {
                   {/* Показываем фазы в детальном окне */}
                   <div className="phase-indicators-large">
                     {(() => {
-                      const phaseErrors = getPhaseErrors(detailsNotification.data.details || detailsNotification.data.errorDetails);
+                      const errorData = detailsNotification.data.details || detailsNotification.data.errorDetails;
+                      const errorText = detailsNotification.data.errorDetails || '';
+        
+                      // Используем ту же логику что и везде
+                      const phases = { A: false, B: false, C: false };
+        
+                      // Проверяем структурированные данные если есть
+                      if (errorData && typeof errorData === 'object' && errorData.details) {
+                        const details = errorData.details;
+                        if (details.overvoltage) {
+                          if (details.overvoltage.phase_A?.count > 0) phases.A = true;
+                          if (details.overvoltage.phase_B?.count > 0) phases.B = true;
+                          if (details.overvoltage.phase_C?.count > 0) phases.C = true;
+                        }
+                        if (details.undervoltage) {
+                          if (details.undervoltage.phase_A?.count > 0) phases.A = true;
+                          if (details.undervoltage.phase_B?.count > 0) phases.B = true;
+                          if (details.undervoltage.phase_C?.count > 0) phases.C = true;
+                        }
+                      }
+        
+                      // Проверяем текст
+                      if (errorText.match(/[Фф]аза\s*A|phase[_\s]*A|фаз[еы]\s*A/i)) phases.A = true;
+                      if (errorText.match(/[Фф]аза\s*B|phase[_\s]*B|фаз[еы]\s*B/i)) phases.B = true;
+                      if (errorText.match(/[Фф]аза\s*C|phase[_\s]*C|фаз[еы]\s*C/i)) phases.C = true;
+        
+                      if (errorText.match(/все\s*фазы|всех\s*фаз|трехфазн|трёхфазн|3-х\s*фазн|Uc[><%]/i)) {
+                        phases.A = phases.B = phases.C = true;
+                      }
+        
                       return (
                         <>
-                          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-                          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-                          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+                          <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
+                          <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
+                          <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
                         </>
                       );
                     })()}
