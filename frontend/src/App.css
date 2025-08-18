@@ -417,7 +417,7 @@ button:disabled {
 /* Легенда статусов - ОБНОВЛЕНО */
 .status-legend {
   display: flex;
-  justify-content: space-between; /* Равномерное распределение */
+  justify-content: center; /* Центрируем */
   align-items: center;
   font-size: 14px;
   padding: 16px 20px;
@@ -428,45 +428,121 @@ button:disabled {
   position: sticky;
   top: 0;
   z-index: 100;
+  gap: 40px; /* Фиксированное расстояние между элементами */
 }
 
 .status-legend > div {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1; /* Равная ширина для всех элементов */
-  justify-content: center;
+  flex: 0 0 auto; /* Убираем flex: 1 */
+  white-space: nowrap; /* Предотвращаем перенос текста */
 }
 
-/* Фиксированная шапка таблицы */
+/* Фиксированная шапка таблицы - ИСПРАВЛЕНО */
 .structure-table {
   background: white;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible; /* Изменяем с hidden на visible для sticky */
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   position: relative;
 }
 
+/* Обертка для таблицы с прокруткой */
+.structure-table-wrapper {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.structure-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px; /* Минимальная ширина для предотвращения сжатия */
+}
+
 .structure-table thead {
   position: sticky;
-  top: 70px; /* Под легендой */
+  top: 80px; /* Увеличиваем отступ от легенды */
   z-index: 90;
   background: white;
 }
 
+/* Убираем дублирование стилей для th */
 .structure-table th {
   background-color: #f8f9fb;
-  padding: 16px;
+  padding: 16px 12px; /* Уменьшаем боковые отступы */
   text-align: left;
   font-weight: 600;
   color: #4a5568;
-  font-size: 14px;
+  font-size: 13px; /* Немного уменьшаем шрифт */
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 2px solid #e1e4e8;
-  position: relative;
 }
 
+/* Оптимизация ширины колонок */
+.structure-table td {
+  padding: 12px 10px; /* Уменьшаем отступы */
+  border-bottom: 1px solid #f1f3f5;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Специальные стили для колонок */
+.structure-table th:first-child,
+.structure-table td:first-child {
+  width: 40px; /* Чекбокс */
+}
+
+.structure-table th:nth-child(2),
+.structure-table td:nth-child(2) {
+  width: 140px; /* РЭС */
+  font-size: 13px;
+}
+
+.structure-table th:nth-child(3),
+.structure-table td:nth-child(3) {
+  width: 120px; /* ТП */
+  font-size: 13px;
+}
+
+.structure-table th:nth-child(4),
+.structure-table td:nth-child(4) {
+  width: 100px; /* ВЛ */
+  font-size: 13px;
+}
+
+/* Колонки с ПУ */
+.structure-table th:nth-child(5),
+.structure-table th:nth-child(6),
+.structure-table th:nth-child(7),
+.structure-table td:nth-child(5),
+.structure-table td:nth-child(6),
+.structure-table td:nth-child(7) {
+  width: 80px;
+}
+
+/* Дата обновления */
+.structure-table th:last-child,
+.structure-table td:last-child {
+  width: 120px;
+  font-size: 12px;
+}
+
+/* Контейнер структуры сети */
+.network-structure {
+  max-width: 100%;
+  padding-right: 20px; /* Добавляем отступ справа */
+}
+
+/* Корректировка отступов контента */
+.content {
+  flex: 1;
+  padding: 24px 20px; /* Уменьшаем боковые отступы */
+  overflow-y: auto;
+  background-color: #f5f6fa;
+}
 /* ===================================================== 
    КОМПАКТНЫЕ УВЕДОМЛЕНИЯ
    ===================================================== */
