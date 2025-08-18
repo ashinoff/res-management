@@ -399,52 +399,51 @@ function NetworkStructure({ selectedRes }) {
       </div>
       
       <div className="structure-table">
-        <div className="structure-table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                {user.role === 'admin' && (
-                  <th className="checkbox-column">
-                    <input 
-                      type="checkbox"
-                      checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                      onChange={handleSelectAll}
-                    />
-                  </th>
-                )}
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Начало</th>
-              <th>Середина</th>
-              <th>Конец</th>
-              <th>Дата обновления</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map(item => (
-              <tr key={item.id} className={selectedIds.includes(item.id) ? 'selected' : ''}>
-                {user.role === 'admin' && (
-                  <td className="checkbox-column">
-                    <input 
-                      type="checkbox"
-                      checked={selectedIds.includes(item.id)}
-                      onChange={() => handleSelectRow(item.id)}
-                    />
-                  </td>
-                )}
-                <td>{item.ResUnit?.name}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>{renderPuCell(item, 'start')}</td>
-                <td>{renderPuCell(item, 'middle')}</td>
-                <td>{renderPuCell(item, 'end')}</td>
-                <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  <table>
+    <thead>
+      <tr>
+        {user.role === 'admin' && (
+          <th className="checkbox-column">
+            <input 
+              type="checkbox"
+              checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+              onChange={handleSelectAll}
+            />
+          </th>
+        )}
+        <th>РЭС</th>
+        <th>ТП</th>
+        <th>ВЛ</th>
+        <th>Начало</th>
+        <th>Середина</th>
+        <th>Конец</th>
+        <th>Дата обновления</th>
+      </tr>
+    </thead>
+    <tbody>
+      {filteredData.map(item => (
+        <tr key={item.id} className={selectedIds.includes(item.id) ? 'selected' : ''}>
+          {user.role === 'admin' && (
+            <td className="checkbox-column">
+              <input 
+                type="checkbox"
+                checked={selectedIds.includes(item.id)}
+                onChange={() => handleSelectRow(item.id)}
+              />
+            </td>
+          )}
+          <td>{item.ResUnit?.name}</td>
+          <td>{item.tpName}</td>
+          <td>{item.vlName}</td>
+          <td>{renderPuCell(item, 'start')}</td>
+          <td>{renderPuCell(item, 'middle')}</td>
+          <td>{renderPuCell(item, 'end')}</td>
+          <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
     </div> 
       
       
