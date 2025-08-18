@@ -417,54 +417,60 @@ button:disabled {
 /* Легенда статусов - ОБНОВЛЕНО */
 .status-legend {
   display: flex;
-  justify-content: center; /* Центрируем */
+  justify-content: center;
   align-items: center;
   font-size: 14px;
   padding: 16px 20px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  margin-bottom: 20px;
+  margin-bottom: 0; /* Убираем отступ снизу */
   position: sticky;
   top: 0;
   z-index: 100;
-  gap: 40px; /* Фиксированное расстояние между элементами */
+  gap: 22px; /* Ровно 22px между элементами как ты просил */
 }
 
 .status-legend > div {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto; /* Убираем flex: 1 */
-  white-space: nowrap; /* Предотвращаем перенос текста */
+  white-space: nowrap;
 }
 
-/* Фиксированная шапка таблицы - ИСПРАВЛЕНО */
+/* Таблица - УПРОЩЕНО */
 .structure-table {
   background: white;
   border-radius: 12px;
-  overflow: visible; /* Изменяем с hidden на visible для sticky */
+  overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  position: relative;
+  margin-top: 0; /* Убираем отступ сверху */
 }
 
-/* Обертка для таблицы с прокруткой */
-.structure-table-wrapper {
-  overflow-x: auto;
-  overflow-y: visible;
+/* Заголовки таблицы прилипают под легендой */
+.structure-table thead {
+  position: sticky;
+  top: 56px; /* Высота легенды, подгони под реальную высоту */
+  z-index: 90;
+  background: white;
 }
 
+.structure-table th {
+  background-color: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+}
+
+/* Убираем лишнюю обертку */
 .structure-table table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 900px; /* Минимальная ширина для предотвращения сжатия */
-}
-
-.structure-table thead {
-  position: sticky;
-  top: 80px; /* Увеличиваем отступ от легенды */
-  z-index: 90;
-  background: white;
 }
 
 /* Убираем дублирование стилей для th */
