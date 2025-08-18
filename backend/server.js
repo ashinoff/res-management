@@ -854,11 +854,27 @@ app.post('/api/network/upload-full-structure',
 });
 
 // 7. ПОЛУЧЕНИЕ УВЕДОМЛЕНИЙ
+
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
-    const whereClause = req.user.role === 'admin' 
-      ? {}  // Админ видит ВСЕ
-      : { toUserId: req.user.id };  // Остальные только свои
+    let whereClause = {};
+    
+    if (req.user.role === 'admin') {
+      // Админ видит все уведомления
+      whereClause = {};
+    } else if (req.user.role === 'res_responsible') {
+      // res_responsible видит уведомления своего РЭС где toUserId = null или его ID
+      whereClause = {
+        resId: req.user.resId,
+        [Op.or]: [
+          { toUserId: null },
+          { toUserId: req.user.id }
+        ]
+      };
+    } else {
+      // uploader видит только свои персональные уведомления
+      whereClause = { toUserId: req.user.id };
+    }
     
     const notifications = await Notification.findAll({
       where: whereClause,
@@ -1819,28 +1835,9 @@ async function analyzeFile(filePath, type, originalFileName = null) {
 }
 
 // Создание уведомлений об ошибках
+// Создание уведомлений об ошибках
 async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
-  console.log(`Looking for users with res_responsible or admin role for RES ${resId}`);
-  
-  // Находим всех кто должен получить уведомления
-  const responsibles = await User.findAll({
-    where: {
-      [Op.or]: [
-        { role: 'admin' },  // Админы видят все
-        { 
-          resId,
-          role: 'res_responsible'  // Ответственные только своего РЭС
-        }
-      ]
-    }
-  });
-  
-  console.log(`Found ${responsibles.length} users to notify`);
-  if (responsibles.length === 0) {
-    console.log('WARNING: No users found to notify!');
-    return;
-  }
   
   for (const errorInfo of errors) {
     console.log(`Processing error for PU: ${errorInfo.puNumber}`);
@@ -1880,24 +1877,22 @@ async function createNotifications(fromUserId, resId, errors) {
       details: errorInfo.details  // Важно для определения фаз!
     };
     
-    console.log('Creating notifications with data:', errorData);
+    console.log('Creating notification with data:', errorData);
     
-    // Создаем уведомления для каждого ответственного
-    for (const responsible of responsibles) {
-      try {
-        const notification = await Notification.create({
-          fromUserId,
-          toUserId: responsible.id,
-          resId,
-          networkStructureId: networkStructure.id,
-          type: 'error',
-          message: JSON.stringify(errorData),
-          isRead: false
-        });
-        console.log(`Notification created for user ${responsible.fio} (id: ${responsible.id})`);
-      } catch (err) {
-        console.error(`Failed to create notification for user ${responsible.id}:`, err);
-      }
+    // СОЗДАЕМ ТОЛЬКО ОДНО УВЕДОМЛЕНИЕ БЕЗ ПРИВЯЗКИ К КОНКРЕТНОМУ ПОЛЬЗОВАТЕЛЮ!
+    try {
+      const notification = await Notification.create({
+        fromUserId,
+        toUserId: null, // НЕ привязываем к конкретному пользователю!
+        resId,
+        networkStructureId: networkStructure.id,
+        type: 'error',
+        message: JSON.stringify(errorData),
+        isRead: false
+      });
+      console.log(`Notification created for RES ${resId}`);
+    } catch (err) {
+      console.error(`Failed to create notification:`, err);
     }
   }
   
