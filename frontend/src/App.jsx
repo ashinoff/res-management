@@ -474,8 +474,8 @@ function NetworkStructure({ selectedRes }) {
                   onChange={(e) => setDeletePassword(e.target.value)}
                   placeholder="Пароль"
                   autoFocus
-                  autoComplete="new-password"    {/* ДОБАВЬ ЭТО */}
-                  name="delete-notification-password"  {/* И ЭТО */}
+                  autoComplete="new-password"    
+                  name="delete-notification-password"  
                 />
               </div>
             </div>
@@ -1341,8 +1341,8 @@ const getPhaseErrors = useCallback((errorDetails) => {
                   onChange={(e) => setDeletePassword(e.target.value)}
                   placeholder="Пароль"
                   autoFocus
-                  autoComplete="new-password"    {/* ДОБАВЬ ЭТО */}
-                  name="delete-notification-password"  {/* И ЭТО */}
+                  autoComplete="new-password"    
+                  name="delete-notification-password"  
                 />
               </div>
             </div>
