@@ -390,6 +390,13 @@ function NetworkStructure({ selectedRes }) {
           </button>
         )}
       
+      <div className="status-legend">
+        <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
+        <div><span className="status-box status-error"></span> Проверен с ошибками</div>
+        <div><span className="status-box status-unchecked"></span> Не проверен</div>
+        <div><span className="status-box status-pending"></span> Ожидает перепроверки</div>
+        <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
+      </div>
       
       <div className="structure-table">
         <table>
@@ -438,13 +445,7 @@ function NetworkStructure({ selectedRes }) {
         </table>
       </div>
       
-      <div className="status-legend">
-        <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
-        <div><span className="status-box status-error"></span> Проверен с ошибками</div>
-        <div><span className="status-box status-unchecked"></span> Не проверен</div>
-        <div><span className="status-box status-pending"></span> Ожидает перепроверки</div>
-        <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
-      </div>
+      
       
       <ErrorDetailsModal 
         isOpen={modalOpen}
