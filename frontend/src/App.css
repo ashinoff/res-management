@@ -294,9 +294,8 @@ button:disabled {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  margin-top: 0; /* БЕЗ отступа */
-  overflow: visible; /* Важно для sticky */
-  position: relative;
+  margin-top: 0;
+  overflow: visible;
 }
 
 
@@ -414,24 +413,26 @@ button:disabled {
   justify-content: center;
   align-items: center;
   font-size: 14px;
-  padding: 16px 20px;
+  padding: 7px 20px; /* Уменьшаем чтобы получить ровно 50px */
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  margin-bottom: 0; /* Убираем отступ */
+  margin-bottom: 0;
   position: sticky;
   top: 0;
   z-index: 100;
   gap: 22px;
+  height: 50px; /* ЖЕСТКО 50px */
+  box-sizing: border-box;
 }
 
 /* Таблица */
 /* Заголовки таблицы */
 .structure-table thead {
   position: sticky;
-  top: 58px; /* Высота легенды + 2px */
+  top: 50px; /* РОВНО высота легенды */
   z-index: 90;
-  background: white; /* Обязательно белый фон */
+  background: white;
 }
 
   /* Добавляем белый фон для перекрытия */
