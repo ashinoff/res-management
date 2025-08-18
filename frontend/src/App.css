@@ -447,7 +447,7 @@ button:disabled {
 /* Заголовки таблицы */
 .structure-table thead {
   position: sticky;
-  top: 55px;
+  top: 60px;
   z-index: 90;
   background: white;
 }
