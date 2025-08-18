@@ -180,6 +180,9 @@ button:disabled {
   transition: all 0.3s ease;
   font-size: 15px;
   font-weight: 500;
+  min-height: 50px; /* Фиксированная минимальная высота */
+  display: flex;
+  align-items: center;
 }
 
 .main-menu button:hover {
@@ -322,6 +325,16 @@ button:disabled {
   border-bottom: 1px solid #f1f3f5;
   text-align: center;
   vertical-align: middle;
+  white-space: nowrap; /* Предотвращаем переносы */
+}
+
+/* Специально для названий РЭС и ТП */
+.structure-table td:nth-child(2),
+.structure-table td:nth-child(3) {
+  font-size: 14px; /* Уменьшаем шрифт если нужно */
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .structure-table tr:hover {
@@ -336,6 +349,7 @@ button:disabled {
   justify-content: center;
   gap: 6px;
   cursor: pointer;
+  min-height: 60px; /* Добавляем минимальную высоту */
 }
 
 .status-box {
@@ -349,6 +363,7 @@ button:disabled {
   color: white;
   transition: all 0.3s ease;
   position: relative;
+  flex-shrink: 0; /* Предотвращаем сжатие */
 }
 
 .status-ok {
@@ -395,27 +410,61 @@ button:disabled {
   font-weight: 600;
 }
 
+.network-structure-wrapper {
+  position: relative;
+}
+
+/* Легенда статусов - ОБНОВЛЕНО */
 .status-legend {
-  margin-top: 24px;
   display: flex;
-  gap: 24px;
+  justify-content: space-between; /* Равномерное распределение */
+  align-items: center;
   font-size: 14px;
-  padding: 20px;
+  padding: 16px 20px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .status-legend > div {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1; /* Равная ширина для всех элементов */
+  justify-content: center;
 }
 
-.status-legend .status-box {
-  width: 24px;
-  height: 24px;
-  font-size: 10px;
+/* Фиксированная шапка таблицы */
+.structure-table {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  position: relative;
+}
+
+.structure-table thead {
+  position: sticky;
+  top: 70px; /* Под легендой */
+  z-index: 90;
+  background: white;
+}
+
+.structure-table th {
+  background-color: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+  position: relative;
 }
 
 /* ===================================================== 
