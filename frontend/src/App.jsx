@@ -389,7 +389,7 @@ function NetworkStructure({ selectedRes }) {
             🗑️ Удалить выбранные ({selectedIds.length})
           </button>
         )}
-      </div>
+      
       
       <div className="structure-table">
         <table>
