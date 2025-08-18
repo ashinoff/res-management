@@ -399,18 +399,19 @@ function NetworkStructure({ selectedRes }) {
       </div>
       
       <div className="structure-table">
-        <table>
-          <thead>
-            <tr>
-              {user.role === 'admin' && (
-                <th className="checkbox-column">
-                  <input 
-                    type="checkbox"
-                    checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                    onChange={handleSelectAll}
-                  />
-                </th>
-              )}
+        <div className="structure-table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                {user.role === 'admin' && (
+                  <th className="checkbox-column">
+                    <input 
+                      type="checkbox"
+                      checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                      onChange={handleSelectAll}
+                    />
+                  </th>
+                )}
               <th>РЭС</th>
               <th>ТП</th>
               <th>ВЛ</th>
