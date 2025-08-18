@@ -902,6 +902,7 @@ function Notifications({ filterType }) {
 
 // ИСПРАВЛЕННАЯ функция определения фаз
 / ИСПРАВЛЕННАЯ функция определения фаз - красим ТОЛЬКО явно указанные!
+// ИСПРАВЛЕННАЯ функция определения фаз - без регулярных выражений!
 const getPhaseErrors = useCallback((errorDetails) => {
   const phases = { A: false, B: false, C: false };
   
@@ -943,11 +944,9 @@ const getPhaseErrors = useCallback((errorDetails) => {
     // Проверяем текст ТОЛЬКО на явные упоминания конкретных фаз
     if (textToAnalyze) {
       // Только если явно написано "Фаза A" или "phase_A"
-      if (textToAnalyze.match(/Фаза\s*A|phase_A/)) phases.A = true;
-      if (textToAnalyze.match(/Фаза\s*B|phase_B/)) phases.B = true;
-      if (textToAnalyze.match(/Фаза\s*C|phase_C/)) phases.C = true;
-      
-      // НЕ красим все фазы при Uc - это междуфазное напряжение без указания конкретных фаз
+      if (textToAnalyze.indexOf('Фаза A') !== -1 || textToAnalyze.indexOf('phase_A') !== -1) phases.A = true;
+      if (textToAnalyze.indexOf('Фаза B') !== -1 || textToAnalyze.indexOf('phase_B') !== -1) phases.B = true;
+      if (textToAnalyze.indexOf('Фаза C') !== -1 || textToAnalyze.indexOf('phase_C') !== -1) phases.C = true;
     }
   } catch (e) {
     console.error('Error parsing phase errors:', e);
