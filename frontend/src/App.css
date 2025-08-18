@@ -421,11 +421,28 @@ button:disabled {
   position: sticky;
   top: 0;
   z-index: 100;
-  gap: 22px;
-  height: 50px;
+  
+  height: 70px;
   box-sizing: border-box;
 }
-
+/* Каждый элемент легенды */
+.status-legend > div {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Расстояние между квадратиком и текстом */
+  position: relative;
+  padding-left: 44px; /* 36px (ширина квадрата) + 8px (отступ) */
+}
+/* Квадратики позиционируем абсолютно */
+.status-legend .status-box {
+  position: absolute;
+  left: 0;
+  width: 36px;
+  height: 36px;
+}
+.status-legend > div:not(:last-child) {
+  margin-right: 60px; /* Это расстояние между КВАДРАТИКАМИ */
+}
 /* Таблица */
 /* Заголовки таблицы */
 .structure-table thead {
@@ -489,14 +506,13 @@ button:disabled {
 
 /* Контейнер структуры сети */
 .network-structure {
-  max-width: 100%;
-  padding-right: 20px; /* Добавляем отступ справа */
+  margin-top: 0; /* Убираем верхний отступ */
+  padding-top: 0; /* И тут тоже */
 }
-
 /* Корректировка отступов контента */
 .content {
   flex: 1;
-  padding: 24px 20px; /* Уменьшаем боковые отступы */
+  padding: 0 20px 24px 20px; /* Был padding: 24px 20px - убираем верхний */
   overflow-y: auto;
   background-color: #f5f6fa;
 }
