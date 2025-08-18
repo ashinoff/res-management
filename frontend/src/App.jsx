@@ -290,15 +290,16 @@ function NetworkStructure({ selectedRes }) {
         ids: selectedIds,
         password: deletePassword
       });
-      
+    
       alert(response.data.message);
       setShowDeleteModal(false);
       setDeletePassword('');
       setSelectedIds([]);
-      
+      setSearchTp(''); // Очищаем поле поиска!
+    
       // Автообновление
       await loadNetworkStructure();
-      
+    
     } catch (error) {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
@@ -365,16 +366,20 @@ function NetworkStructure({ selectedRes }) {
         <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
       )}
       
-      <div className="structure-controls">
-        <div className="search-box">
-          <input 
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-          />
-        </div>
+      <div className="search-box">
+        <input 
+          type="text"
+          placeholder="Поиск по ТП..."
+          value={searchTp}
+          onChange={(e) => setSearchTp(e.target.value)}
+          className="search-input"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+          name="network-search-tp"
+        />
+      </div>
         
         {user.role === 'admin' && selectedIds.length > 0 && (
           <button 
@@ -469,6 +474,8 @@ function NetworkStructure({ selectedRes }) {
                   onChange={(e) => setDeletePassword(e.target.value)}
                   placeholder="Пароль"
                   autoFocus
+                  autoComplete="new-password"    {/* ДОБАВЬ ЭТО */}
+                  name="delete-notification-password"  {/* И ЭТО */}
                 />
               </div>
             </div>
@@ -984,6 +991,11 @@ const getPhaseErrors = useCallback((errorDetails) => {
             value={searchTp}
             onChange={(e) => setSearchTp(e.target.value)}
             className="search-input"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            name="notifications-search-tp"
           />
         </div>
       </div>
@@ -1329,6 +1341,8 @@ const getPhaseErrors = useCallback((errorDetails) => {
                   onChange={(e) => setDeletePassword(e.target.value)}
                   placeholder="Пароль"
                   autoFocus
+                  autoComplete="new-password"    {/* ДОБАВЬ ЭТО */}
+                  name="delete-notification-password"  {/* И ЭТО */}
                 />
               </div>
             </div>
