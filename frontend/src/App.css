@@ -415,6 +415,7 @@ button:disabled {
 }
 
 /* Легенда статусов - ОБНОВЛЕНО */
+/* Легенда статусов */
 .status-legend {
   display: flex;
   justify-content: center;
@@ -424,35 +425,38 @@ button:disabled {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  margin-bottom: 0; /* Убираем отступ снизу */
+  margin-bottom: 0;
   position: sticky;
   top: 0;
   z-index: 100;
-  gap: 22px; /* Ровно 22px между элементами как ты просил */
+  gap: 22px;
 }
 
-.status-legend > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-/* Таблица - УПРОЩЕНО */
+/* Таблица */
 .structure-table {
   background: white;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  margin-top: 0; /* Убираем отступ сверху */
+  margin-top: 0;
 }
 
-/* Заголовки таблицы прилипают под легендой */
+.structure-table table {
+  width: 100%;
+  border-collapse: collapse;
+  position: relative;
+}
+
+/* ВАЖНО! Добавляем отступ для первой строки данных */
+.structure-table tbody tr:first-child td {
+  padding-top: 70px; /* Высота заголовка + отступ */
+}
+
+/* Заголовки таблицы */
 .structure-table thead {
   position: sticky;
-  top: 56px; /* Высота легенды, подгони под реальную высоту */
+  top: 60px; /* Позиция под легендой */
   z-index: 90;
-  background: white;
 }
 
 .structure-table th {
@@ -465,6 +469,22 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 2px solid #e1e4e8;
+  position: relative;
+  /* Добавляем белый фон для перекрытия */
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Альтернативный вариант - добавить псевдоэлемент */
+.structure-table thead::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e1e4e8;
+  z-index: 91;
 }
 
 /* Убираем лишнюю обертку */
