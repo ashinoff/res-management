@@ -444,7 +444,7 @@ function NetworkStructure({ selectedRes }) {
           </tbody>
         </table>
       </div>
-    </div> 
+     
       
       
       <ErrorDetailsModal 
