@@ -590,7 +590,8 @@ const getPhaseErrors = () => {
 
 function FileUpload({ selectedRes }) {
   const [selectedType, setSelectedType] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const { user } = useContext(AuthContext);
@@ -603,7 +604,7 @@ function FileUpload({ selectedRes }) {
   ];
 
   const handleFileSelect = (e) => {
-    setFile(e.target.files[0]);
+    setFiles(Array.from(e.target.files));
     setUploadResult(null);
   };
 
