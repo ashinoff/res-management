@@ -609,78 +609,111 @@ function FileUpload({ selectedRes }) {
   };
 
   const handleUpload = async () => {
-    if (!file || !selectedType) {
-      alert('Выберите тип файла и файл для загрузки');
-      return;
-    }
-
-    // Определяем resId
-    let resIdToUse;
-    if (user.role === 'admin') {
-      resIdToUse = selectedRes || user.resId || 1;
-    } else {
-      resIdToUse = user.resId;
-    }
-
-    if (!resIdToUse) {
-      alert('Ошибка: не определен РЭС для загрузки');
-      return;
-    }
-
-    setUploading(true);
-    setUploadResult(null);
+  if (!files.length || !selectedType) {
+    alert('Выберите тип файла и файлы для загрузки');
+    return;
+  }
+  
+  // Определяем resId
+  let resIdToUse;
+  if (user.role === 'admin') {
+    resIdToUse = selectedRes || user.resId || 1;
+  } else {
+    resIdToUse = user.resId;
+  }
+  
+  if (!resIdToUse) {
+    alert('Ошибка: не определен РЭС для загрузки');
+    return;
+  }
+  
+  setUploading(true);
+  setUploadResult(null);
+  setUploadProgress({ current: 0, total: files.length });
+  
+  const results = [];
+  const errors = [];
+  let duplicatesCount = 0;
+  let successCount = 0;
+  let problemsCount = 0;
+  
+  // Обрабатываем каждый файл
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    setUploadProgress({ current: i + 1, total: files.length });
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', selectedType);
     formData.append('resId', resIdToUse);
-
+    
     try {
       const response = await api.post('/api/upload/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      // Показываем результат
-      setUploadResult({
-        success: true,
-        processed: response.data.processed,
-        errors: response.data.errors,
-        details: response.data.details
-      });
-
-      // ПРОВЕРКа НА ДУБЛИКАТЫ:
+      // Проверка на дубликаты
       const duplicates = response.data.details?.filter(d => d.status === 'duplicate_error');
       if (duplicates && duplicates.length > 0) {
-        alert('⚠️ ' + duplicates[0].error);
-        return; // Выходим, не показываем обычное сообщение
-      }
-      
-      // Если были ошибки - покажем
-      if (response.data.errors > 0) {
-        alert(`Файл обработан! Найдено проблем: ${response.data.errors}`);
+        duplicatesCount++;
+        results.push({
+          fileName: file.name,
+          status: 'duplicate',
+          message: duplicates[0].error
+        });
       } else {
-        alert('Файл обработан успешно! Ошибок не найдено.');
+        // Подсчитываем результаты
+        if (response.data.errors > 0) {
+          problemsCount += response.data.errors;
+        } else {
+          successCount++;
+        }
+        
+        results.push({
+          fileName: file.name,
+          status: 'processed',
+          ...response.data
+        });
       }
-      
-      // Сбрасываем форму
-      setFile(null);
-      setSelectedType('');
-      
-      // Создаем событие для обновления структуры
-      window.dispatchEvent(new CustomEvent('structureUpdated'));
-      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
       
     } catch (error) {
-      console.error('Upload error:', error);
-      setUploadResult({
-        success: false,
-        error: error.response?.data?.error || 'Ошибка при загрузке файла'
+      errors.push({
+        fileName: file.name,
+        error: error.response?.data?.error || 'Ошибка загрузки'
       });
-      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    } finally {
-      setUploading(false);
     }
-  };
+  }
+  
+  // Показываем итоговый результат
+  setUploadResult({
+    success: errors.length === 0,
+    totalFiles: files.length,
+    successCount,
+    problemsCount,
+    duplicatesCount,
+    errorCount: errors.length,
+    results,
+    errors
+  });
+  
+  // Формируем итоговое сообщение
+  let message = `Обработано файлов: ${files.length}\n`;
+  if (successCount > 0) message += `✅ Без ошибок: ${successCount}\n`;
+  if (problemsCount > 0) message += `⚠️ С проблемами: ${problemsCount}\n`;
+  if (duplicatesCount > 0) message += `🔄 Дубликатов: ${duplicatesCount}\n`;
+  if (errors.length > 0) message += `❌ Ошибок загрузки: ${errors.length}`;
+  
+  alert(message);
+  
+  // Сбрасываем форму
+  setFiles([]);
+  setSelectedType('');
+  setUploading(false);
+  
+  // Создаем событие для обновления структуры
+  window.dispatchEvent(new CustomEvent('structureUpdated'));
+  window.dispatchEvent(new CustomEvent('notificationsUpdated'));
+};
 
   return (
     <div className="file-upload">
@@ -719,12 +752,26 @@ function FileUpload({ selectedRes }) {
             <input 
               type="file" 
               accept=".xlsx,.xls,.csv"
+              multiple
               onChange={handleFileSelect}
             />
-            {file && (
+            {files.length > 0 && (
               <div className="file-info">
-                <p>Выбран файл: <strong>{file.name}</strong></p>
-                <p className="pu-number">Номер ПУ: <strong>{file.name.split('.')[0]}</strong></p>
+                <p>Выбрано файлов: <strong>{files.length}</strong></p>
+                <div className="selected-files">
+                  {files.map((file, idx) => (
+                    <div key={idx} className="file-item">
+                      <span>{file.name}</span>
+                      <span className="pu-number">ПУ: {file.name.split('.')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {uploading && (
+              <div className="upload-progress">
+                Загружается файл {uploadProgress.current} из {uploadProgress.total}...
               </div>
             )}
           </div>
@@ -732,10 +779,10 @@ function FileUpload({ selectedRes }) {
         
         <button 
           onClick={handleUpload} 
-          disabled={uploading || !file || !selectedType}
+          disabled={uploading || !files.length || !selectedType}  // ИЗМЕНЕНО
           className="upload-btn"
         >
-          {uploading ? 'Загрузка и анализ...' : 'Загрузить и анализировать'}
+          {uploading ? `Загрузка ${uploadProgress.current}/${uploadProgress.total}...` : 'Загрузить и анализировать'}
         </button>
       </div>
       
