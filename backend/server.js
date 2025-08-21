@@ -1700,8 +1700,8 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             if (existingNotification) {
               console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
               
-              // ВАЖНО: Всегда помечаем старое уведомление как прочитанное
-              await existingNotification.update({ isRead: true });
+              // ВАЖНО: Удаляем из АСКУЭ
+              await existingNotification.destroy();
               console.log('Marked ASKUE notification as read');
               
               // Это перепроверка!
