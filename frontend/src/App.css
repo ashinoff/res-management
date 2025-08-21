@@ -1964,3 +1964,24 @@ tr.selected {
   font-size: 16px;
   font-weight: 500;
 }
+/* для массовой загрузки файлов */
+.selected-files {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.upload-progress {
+  padding: 12px;
+  background: #e6f4ff;
+  border-radius: 8px;
+  text-align: center;
+  margin: 16px 0;
+}
