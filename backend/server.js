@@ -1783,6 +1783,9 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             
             // Если есть ошибки и это НЕ перепроверка - добавляем для уведомлений
             if (result.has_errors && !existingNotification) {
+              // Флаг для определения, нужно ли создавать уведомление
+              let shouldCreateNotification = true;
+  
               // НОВОЕ: Проверяем, есть ли уже такая же ошибка
               const duplicateCheck = await Notification.findOne({
                 where: {
@@ -1808,20 +1811,22 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                     error: 'Данный файл ранее уже был использован! Ошибка не изменилась.'
                   });
       
-                  // НЕ добавляем в errors - не создаем новое уведомление
-                  continue; // или return если это не в цикле
+                  // Помечаем, что НЕ нужно создавать уведомление
+                  shouldCreateNotification = false;
                 }
               }
   
-              // Если не дубликат - добавляем как обычно
-              errors.push({
-                puNumber: fileName,
-                error: result.summary,
-                details: result.details,
-                networkStructureId: networkStructure.id,
-                resId: networkStructure.resId
-              });
-              console.log('Added error for notification:', fileName);
+              // Создаем уведомление только если это не дубликат
+              if (shouldCreateNotification) {
+                errors.push({
+                  puNumber: fileName,
+                  error: result.summary,
+                  details: result.details,
+                  networkStructureId: networkStructure.id,
+                  resId: networkStructure.resId
+                });
+                console.log('Added error for notification:', fileName);
+              }
             }
           } else {
             console.log(`WARNING: NetworkStructure not found for PU: ${fileName}`);
