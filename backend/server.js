@@ -944,8 +944,8 @@ app.post('/api/notifications/:id/complete-work',
         }
       );
       
-      // Помечаем старое уведомление как прочитанное
-      await notification.update({ isRead: true }, { transaction });
+      // УДАЛЯЕМ старое уведомление
+      await notification.destroy({ transaction });
       
       // Создаем новое уведомление для АСКУЭ
       const askueUsers = await User.findAll({
