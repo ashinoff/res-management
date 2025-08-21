@@ -646,6 +646,13 @@ function FileUpload({ selectedRes }) {
         errors: response.data.errors,
         details: response.data.details
       });
+
+      // ПРОВЕРКа НА ДУБЛИКАТЫ:
+      const duplicates = response.data.details?.filter(d => d.status === 'duplicate_error');
+      if (duplicates && duplicates.length > 0) {
+        alert('⚠️ ' + duplicates[0].error);
+        return; // Выходим, не показываем обычное сообщение
+      }
       
       // Если были ошибки - покажем
       if (response.data.errors > 0) {
