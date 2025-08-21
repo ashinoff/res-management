@@ -1783,6 +1783,37 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             
             // Если есть ошибки и это НЕ перепроверка - добавляем для уведомлений
             if (result.has_errors && !existingNotification) {
+              // НОВОЕ: Проверяем, есть ли уже такая же ошибка
+              const duplicateCheck = await Notification.findOne({
+                where: {
+                  type: 'error',
+                  isRead: false,
+                  message: {
+                    [Op.like]: `%"puNumber":"${fileName}"%`
+                  }
+                }
+              });
+  
+              if (duplicateCheck) {
+                const oldErrorData = JSON.parse(duplicateCheck.message);
+    
+                // Сравниваем текст ошибок
+                if (oldErrorData.errorDetails === result.summary) {
+                  console.log(`DUPLICATE: Identical error already exists for PU ${fileName}`);
+      
+                  // Добавляем в processed с пометкой о дубликате
+                  processed.push({
+                    puNumber: fileName,
+                    status: 'duplicate_error',
+                    error: 'Данный файл ранее уже был использован! Ошибка не изменилась.'
+                  });
+      
+                  // НЕ добавляем в errors - не создаем новое уведомление
+                  continue; // или return если это не в цикле
+                }
+              }
+  
+              // Если не дубликат - добавляем как обычно
               errors.push({
                 puNumber: fileName,
                 error: result.summary,
