@@ -721,6 +721,7 @@ function FileUpload({ selectedRes }) {
   if (successCount > 0) message += `✅ Без ошибок: ${successCount}\n`;
   if (problemsCount > 0) message += `⚠️ С проблемами: ${problemsCount}\n`;
   if (duplicatesCount > 0) message += `🔄 Дубликатов: ${duplicatesCount}\n`;
+  if (wrongPeriodCount > 0) message += `📅 Неверный период: ${wrongPeriodCount}\n`;
   if (errors.length > 0) message += `❌ Ошибок загрузки: ${errors.length}`;
   
   alert(message);
