@@ -636,6 +636,7 @@ function FileUpload({ selectedRes }) {
   let duplicatesCount = 0;
   let successCount = 0;
   let problemsCount = 0;
+  let wrongPeriodCount = 0;
   
   // Обрабатываем каждый файл
   for (let i = 0; i < files.length; i++) {
@@ -661,7 +662,19 @@ function FileUpload({ selectedRes }) {
           status: 'duplicate',
           message: duplicates[0].error
         });
-      } else {
+      } 
+      // ДОБАВЬ ПРОВЕРКУ НА НЕВЕРНЫЙ ПЕРИОД:
+      else if (response.data.details?.some(d => d.status === 'wrong_period')) {
+        const wrongPeriod = response.data.details.find(d => d.status === 'wrong_period');
+        wrongPeriodCount++;
+        results.push({
+          fileName: file.name,
+          status: 'wrong_period',
+          message: wrongPeriod.error
+        });
+      }
+      
+        else {
         // Подсчитываем результаты
         if (response.data.errors > 0) {
           problemsCount += response.data.errors;
@@ -684,6 +697,13 @@ function FileUpload({ selectedRes }) {
     }
   }
   
+  // Проверка на неверный период
+  const wrongPeriod = response.data.details?.filter(d => d.status === 'wrong_period');
+  if (wrongPeriod && wrongPeriod.length > 0) {
+    alert('❌ ' + wrongPeriod[0].error);
+    return;
+  }
+    
   // Показываем итоговый результат
   setUploadResult({
     success: errors.length === 0,
