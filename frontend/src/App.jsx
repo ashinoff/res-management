@@ -7,6 +7,7 @@
 import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
+import * as XLSX from 'xlsx';
 
 // =====================================================
 // НАСТРОЙКА API КЛИЕНТА
@@ -584,6 +585,7 @@ const getPhaseErrors = () => {
     </div>
   );
 }
+
 
 // =====================================================
 // КОМПОНЕНТ ЗАГРУЗКИ ФАЙЛОВ
@@ -1434,6 +1436,98 @@ const getPhaseErrors = useCallback((errorDetails) => {
       )}
     </div>
   );
+// В компоненте NetworkStructure добавь эту функцию
+const exportStructureToExcel = () => {
+  if (filteredData.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
+
+  // Подготавливаем данные
+  const exportData = filteredData.map(item => {
+    // Находим статусы для каждого ПУ
+    const getStatus = (puNumber, position) => {
+      if (!puNumber) return 'Пусто';
+      const status = item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position);
+      
+      switch(status?.status) {
+        case 'checked_ok': return 'Проверен ✓';
+        case 'checked_error': return 'Ошибка ✗';
+        case 'pending_recheck': return 'Ожидает перепроверки';
+        case 'not_checked': return 'Не проверен';
+        default: return 'Не проверен';
+      }
+    };
+
+    return {
+      'РЭС': item.ResUnit?.name || '',
+      'ТП': item.tpName || '',
+      'ВЛ': item.vlName || '',
+      'ПУ Начало': item.startPu || '-',
+      'Статус начала': getStatus(item.startPu, 'start'),
+      'ПУ Середина': item.middlePu || '-',
+      'Статус середины': getStatus(item.middlePu, 'middle'),
+      'ПУ Конец': item.endPu || '-',
+      'Статус конца': getStatus(item.endPu, 'end'),
+      'Последнее обновление': new Date(item.lastUpdate).toLocaleDateString('ru-RU')
+    };
+  });
+
+  // Создаем Excel файл
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  
+  // Устанавливаем ширину колонок
+  ws['!cols'] = [
+    { wch: 20 }, // РЭС
+    { wch: 15 }, // ТП
+    { wch: 15 }, // ВЛ
+    { wch: 15 }, // ПУ Начало
+    { wch: 20 }, // Статус начала
+    { wch: 15 }, // ПУ Середина
+    { wch: 20 }, // Статус середины
+    { wch: 15 }, // ПУ Конец
+    { wch: 20 }, // Статус конца
+    { wch: 20 }  // Последнее обновление
+  ];
+  
+  XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
+  
+  const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  
+  alert(`Структура сети экспортирована в файл: ${fileName}`);
+};
+
+// Добавь кнопку экспорта в JSX разметку NetworkStructure
+<div className="structure-controls">
+  <div className="search-box">
+    <input 
+      type="text"
+      placeholder="Поиск по ТП..."
+      value={searchTp}
+      onChange={(e) => setSearchTp(e.target.value)}
+      className="search-input"
+    />
+  </div>
+  
+  <button 
+    className="export-btn" 
+    onClick={exportStructureToExcel}
+  >
+    📊 Экспорт в Excel
+  </button>
+  
+  {user.role === 'admin' && selectedIds.length > 0 && (
+    <button 
+      className="delete-selected-btn"
+      onClick={() => setShowDeleteModal(true)}
+    >
+      🗑️ Удалить выбранные ({selectedIds.length})
+    </button>
+  )}
+</div>
+  
 }
 
 // =====================================================
@@ -1473,36 +1567,94 @@ function Reports() {
     }
   };
 
-  const exportToExcel = () => {
-    // Создаем данные для экспорта
-    const exportData = reportData.map(item => {
-      const base = {
-        'РЭС': item.resName,
-        'ТП': item.tpName,
-        'ВЛ': item.vlName,
-        'Позиция': item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец',
-        'Номер ПУ': item.puNumber,
-        'Ошибка': item.errorDetails,
-        'Дата обнаружения': new Date(item.errorDate).toLocaleDateString('ru-RU')
-      };
+ // Обновленная функция exportToExcel в компоненте Reports
+const exportToExcel = () => {
+  if (filteredData.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
 
-      if (reportType === 'pending_askue' || reportType === 'completed') {
-        base['Комментарий РЭС'] = item.resComment;
-        base['Дата завершения мероприятий'] = new Date(item.workCompletedDate).toLocaleDateString('ru-RU');
-      }
+  // Подготавливаем данные для экспорта
+  const exportData = filteredData.map(item => {
+    const base = {
+      'РЭС': item.resName || '',
+      'ТП': item.tpName || '',
+      'ВЛ': item.vlName || '',
+      'Позиция': item.position === 'start' ? 'Начало' : 
+                 item.position === 'middle' ? 'Середина' : 'Конец',
+      'Номер ПУ': item.puNumber || '',
+      'Ошибка': item.errorDetails || '',
+      'Дата обнаружения': formatDate(item.errorDate)
+    };
 
-      if (reportType === 'completed') {
-        base['Дата перепроверки'] = new Date(item.recheckDate).toLocaleDateString('ru-RU');
-        base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
-      }
+    // Добавляем дополнительные поля в зависимости от типа отчета
+    if (reportType === 'pending_askue' || reportType === 'completed') {
+      base['Комментарий РЭС'] = item.resComment || '';
+      base['Дата завершения мероприятий'] = formatDate(item.workCompletedDate);
+    }
 
-      return base;
-    });
+    if (reportType === 'completed') {
+      base['Дата перепроверки'] = formatDate(item.recheckDate);
+      base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
+    }
 
-    // Здесь бы использовать библиотеку для экспорта в Excel
-    console.log('Export data:', exportData);
-    alert('Функция экспорта будет реализована позже');
-  };
+    return base;
+  });
+
+  // Создаем новую книгу Excel
+  const wb = XLSX.utils.book_new();
+  
+  // Создаем лист с данными
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  
+  // Устанавливаем ширину колонок
+  const columnWidths = [
+    { wch: 20 }, // РЭС
+    { wch: 15 }, // ТП
+    { wch: 15 }, // ВЛ
+    { wch: 12 }, // Позиция
+    { wch: 15 }, // Номер ПУ
+    { wch: 50 }, // Ошибка
+    { wch: 18 }, // Дата обнаружения
+  ];
+  
+  if (reportType === 'pending_askue' || reportType === 'completed') {
+    columnWidths.push({ wch: 40 }); // Комментарий РЭС
+    columnWidths.push({ wch: 25 }); // Дата завершения мероприятий
+  }
+  
+  if (reportType === 'completed') {
+    columnWidths.push({ wch: 18 }); // Дата перепроверки
+    columnWidths.push({ wch: 15 }); // Результат
+  }
+  
+  ws['!cols'] = columnWidths;
+  
+  // Добавляем лист в книгу
+  const sheetName = getReportTitle();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  
+  // Генерируем имя файла
+  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.xlsx`;
+  
+  // Сохраняем файл
+  XLSX.writeFile(wb, fileName);
+  
+  // Показываем уведомление
+  alert(`Отчет успешно экспортирован в файл: ${fileName}`);
+};
+
+// Вспомогательная функция для форматирования даты
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
 
   const getReportTitle = () => {
     switch (reportType) {
