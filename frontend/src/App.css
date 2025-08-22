@@ -180,7 +180,7 @@ button:disabled {
   transition: all 0.3s ease;
   font-size: 15px;
   font-weight: 500;
-  min-height: 50px; /* Фиксированная минимальная высота */
+  min-height: 60px; /* Фиксированная минимальная высота */
   display: flex;
   align-items: center;
 }
