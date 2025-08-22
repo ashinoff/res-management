@@ -663,7 +663,7 @@ function FileUpload({ selectedRes }) {
           message: duplicates[0].error
         });
       } 
-      // ДОБАВЬ ПРОВЕРКУ НА НЕВЕРНЫЙ ПЕРИОД:
+      // Проверка на неверный период
       else if (response.data.details?.some(d => d.status === 'wrong_period')) {
         const wrongPeriod = response.data.details.find(d => d.status === 'wrong_period');
         wrongPeriodCount++;
@@ -673,8 +673,7 @@ function FileUpload({ selectedRes }) {
           message: wrongPeriod.error
         });
       }
-      
-        else {
+      else {
         // Подсчитываем результаты
         if (response.data.errors > 0) {
           problemsCount += response.data.errors;
@@ -697,13 +696,6 @@ function FileUpload({ selectedRes }) {
     }
   }
   
-  // Проверка на неверный период
-  const wrongPeriod = response.data.details?.filter(d => d.status === 'wrong_period');
-  if (wrongPeriod && wrongPeriod.length > 0) {
-    alert('❌ ' + wrongPeriod[0].error);
-    return;
-  }
-    
   // Показываем итоговый результат
   setUploadResult({
     success: errors.length === 0,
@@ -711,6 +703,7 @@ function FileUpload({ selectedRes }) {
     successCount,
     problemsCount,
     duplicatesCount,
+    wrongPeriodCount,
     errorCount: errors.length,
     results,
     errors
