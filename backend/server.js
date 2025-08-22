@@ -1741,14 +1741,14 @@ async function analyzeFile(filePath, type, originalFileName = null) {
                       console.error('Error deleting file:', err);
                     }
       
-                    return {
+                    return resolve({
                       processed: [{
                         puNumber: fileName,
                         status: 'wrong_period',
                         error: `Неверный период! Требуется журнал с ${requiredDate.toLocaleDateString('ru-RU')}, а загружен файл с данными за ${lastMonth}`
-                      }],
+                       }],
                       errors: []
-                    };
+                    });
                   }
                 }
               }
