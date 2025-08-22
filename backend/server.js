@@ -1706,6 +1706,54 @@ async function analyzeFile(filePath, type, originalFileName = null) {
               
               // Это перепроверка!
               const notifData = JSON.parse(existingNotification.message);
+
+              // ВОТ СЮДА ВСТАВЛЯЙ ПРОВЕРКУ ПЕРИОДА:
+              const requiredDate = new Date(notifData.checkFromDate);
+              const requiredMonth = requiredDate.getMonth() + 1; // 0-11 -> 1-12
+
+              // Проверяем период в ошибке
+              if (result.has_errors) {
+                const errorText = result.summary;
+  
+                // Мапа месяцев
+                const monthMap = {
+                  'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
+                  'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
+                };
+  
+                // Ищем месяцы в тексте ошибки
+                const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
+                const foundMonths = errorText.match(monthPattern);
+  
+                if (foundMonths && foundMonths.length > 0) {
+                  const lastMonth = foundMonths[foundMonths.length - 1];
+                  const errorMonth = monthMap[lastMonth];
+    
+                  if (errorMonth < requiredMonth - 1) {
+                    console.log(`PERIOD MISMATCH: Required from month ${requiredMonth}, but error is from month ${errorMonth}`);
+      
+                    await existingNotification.update({ isRead: true });
+      
+                    // Удаляем файл
+                    try {
+                      fs.unlinkSync(filePath);
+                    } catch (err) {
+                      console.error('Error deleting file:', err);
+                    }
+      
+                    return {
+                      processed: [{
+                        puNumber: fileName,
+                        status: 'wrong_period',
+                        error: `Неверный период! Требуется журнал с ${requiredDate.toLocaleDateString('ru-RU')}, а загружен файл с данными за ${lastMonth}`
+                      }],
+                      errors: []
+                    };
+                  }
+                }
+              }
+              // КОНЕЦ ПРОВЕРКИ ПЕРИОДА
+
               
               if (!result.has_errors) {
                 // Ошибки исправлены
