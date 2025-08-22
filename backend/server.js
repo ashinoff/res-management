@@ -1288,6 +1288,46 @@ app.delete('/api/notifications/:id',
     }
 });
 
+// роут ДЛЯ ОТЧЕТОВ эксель
+app.get('/api/reports/export-history', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const history = await CheckHistory.findAll({
+        include: [ResUnit, NetworkStructure],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      const data = history.map(h => ({
+        'ID': h.id,
+        'РЭС': h.ResUnit?.name,
+        'ТП': h.tpName,
+        'ВЛ': h.vlName,
+        'ПУ': h.puNumber,
+        'Позиция': h.position === 'start' ? 'Начало' : h.position === 'middle' ? 'Середина' : 'Конец',
+        'Первоначальная ошибка': h.initialError,
+        'Дата обнаружения': h.initialCheckDate,
+        'Комментарий РЭС': h.resComment || '-',
+        'Дата выполнения работ': h.workCompletedDate || '-',
+        'Дата перепроверки': h.recheckDate || '-',
+        'Результат': h.recheckResult === 'ok' ? 'Исправлено' : h.recheckResult === 'error' ? 'Не исправлено' : 'Ожидает',
+        'Статус': h.status === 'completed' ? 'Завершено' : h.status === 'awaiting_recheck' ? 'Ожидает перепроверки' : 'Ожидает работ'
+      }));
+      
+      res.json({
+        success: true,
+        data: data,
+        count: data.length
+      });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
+
+
 // =====================================================
 // УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
 // =====================================================
