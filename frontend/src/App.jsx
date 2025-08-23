@@ -78,7 +78,7 @@ function LoginForm({ onLogin }) {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2>Вход в систему контроля уровня напряжения в сетях 0,4 кВ</h2>
+        <h2>Вход в систему контроля уровня напряжения</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Логин</label>
