@@ -1748,50 +1748,79 @@ async function analyzeFile(filePath, type, originalFileName = null) {
               const notifData = JSON.parse(existingNotification.message);
 
               // ВОТ СЮДА ВСТАВЛЯЙ ПРОВЕРКУ ПЕРИОДА:
-              const requiredDate = new Date(notifData.checkFromDate);
-              const requiredMonth = requiredDate.getMonth() + 1; // 0-11 -> 1-12
+             const requiredDate = new Date(notifData.checkFromDate);
+             const requiredMonth = requiredDate.getMonth() + 1; // 0-11 -> 1-12
+             const requiredYear = requiredDate.getFullYear();
 
-              // Проверяем период в ошибке
-              if (result.has_errors) {
-                const errorText = result.summary;
+             // Проверяем период в ошибке
+             if (result.has_errors) {
+               const errorText = result.summary;
   
-                // Мапа месяцев
-                const monthMap = {
-                  'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
-                  'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
-                };
+               // Мапа месяцев
+               const monthMap = {
+                 'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
+                 'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
+               };
   
-                // Ищем месяцы в тексте ошибки
-                const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
-                const foundMonths = errorText.match(monthPattern);
+               // Ищем месяцы в тексте ошибки (например: "Мар-Май")
+               const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
+               const foundMonths = errorText.match(monthPattern);
   
-                if (foundMonths && foundMonths.length > 0) {
-                  const lastMonth = foundMonths[foundMonths.length - 1];
-                  const errorMonth = monthMap[lastMonth];
+               if (foundMonths && foundMonths.length > 0) {
+                 // Берем ПОСЛЕДНИЙ месяц из диапазона (например, из "Мар-Май" берем "Май")
+                 const lastErrorMonth = foundMonths[foundMonths.length - 1];
+                 const lastErrorMonthNum = monthMap[lastErrorMonth];
     
-                  if (errorMonth < requiredMonth - 1) {
-                    console.log(`PERIOD MISMATCH: Required from month ${requiredMonth}, but error is from month ${errorMonth}`);
+                 // ВАЖНО: Проверяем, что последний месяц ошибки МЕНЬШЕ требуемого месяца
+                 // Например: если требуется с августа (8), а ошибки до мая (5), то 5 < 8 - НЕ ПОДХОДИТ
+                 if (lastErrorMonthNum < requiredMonth) {
+                   console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
       
-                    await existingNotification.update({ isRead: true });
+                   // Удаляем файл
+                   try {
+                     fs.unlinkSync(filePath);
+                   } catch (err) {
+                     console.error('Error deleting file:', err);
+                   }
       
-                    // Удаляем файл
-                    try {
-                      fs.unlinkSync(filePath);
-                    } catch (err) {
-                      console.error('Error deleting file:', err);
-                    }
+                   return resolve({
+                     processed: [{
+                       puNumber: fileName,
+                       status: 'wrong_period',
+                       error: `❌ Неверный период! Требуется журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}, а в загруженном файле данные только до ${lastErrorMonth}. Необходимо выгрузить журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату!`
+                     }],
+                     errors: []
+                   });
+                 }
+    
+                 // Дополнительная проверка: если есть первый месяц в диапазоне
+                 if (foundMonths.length >= 2) {
+                   const firstErrorMonth = foundMonths[0];
+                   const firstErrorMonthNum = monthMap[firstErrorMonth];
       
-                    return resolve({
-                      processed: [{
-                        puNumber: fileName,
-                        status: 'wrong_period',
-                        error: `Неверный период! Требуется журнал с ${requiredDate.toLocaleDateString('ru-RU')}, а загружен файл с данными за ${lastMonth}`
+                   // Проверяем что требуемый месяц попадает в диапазон ошибок
+                   if (requiredMonth > lastErrorMonthNum) {
+                     console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
+        
+                     return resolve({
+                       processed: [{
+                         puNumber: fileName,
+                         status: 'wrong_period', 
+                         error: `❌ Неверный период! В файле есть ошибки за ${firstErrorMonth}-${lastErrorMonth}, но требуется журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}. Выгрузите полный журнал событий с ${requiredDate.toLocaleDateString('ru-RU')}!`
                        }],
-                      errors: []
-                    });
-                  }
-                }
-              }
+                       errors: []
+                     });
+                   }
+                 }
+               }
+             }
+
+// Вспомогательная функция для получения названия месяца
+function getMonthName(monthNum) {
+  const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  return months[monthNum] || '';
+}
               // КОНЕЦ ПРОВЕРКИ ПЕРИОДА
 
               
