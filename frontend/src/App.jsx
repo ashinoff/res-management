@@ -896,23 +896,32 @@ function Notifications({ filterType }) {
     }
 
     try {
-      await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, {
-        comment,
-        checkFromDate
-      });
+      const formData = new FormData();
+    formData.append('comment', comment);
+    formData.append('checkFromDate', checkFromDate);
     
-      alert('Мероприятия отмечены как выполненные');
-      setShowCompleteModal(false);
-      setComment('');
-      setSelectedNotification(null);
+    // Добавляем файлы
+    attachedFiles.forEach(file => {
+      formData.append('attachments', file);
+    });
       
-      // Автообновление
-      await loadNotifications();
-      
-    } catch (error) {
-      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    }
-  };
+          
+      await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  
+    alert('Мероприятия отмечены как выполненные');
+    setShowCompleteModal(false);
+    setComment('');
+    setAttachedFiles([]);
+    setSelectedNotification(null);
+    
+    await loadNotifications();
+    
+  } catch (error) {
+    alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+  }
+};
 
   const handleDeleteNotification = async () => {
     try {
@@ -1378,6 +1387,32 @@ const getPhaseErrors = useCallback((errorDetails) => {
                 />
               </div>
             </div>
+          <div className="form-group">
+            <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
+            <input
+              type="file"
+              multiple
+              accept="image/*,application/pdf"
+              onChange={(e) => {
+                const files = Array.from(e.target.files).slice(0, 5);
+                setAttachedFiles(files);
+              }}
+            />
+            {attachedFiles.length > 0 && (
+              <div className="attached-files-list">
+                <p>Выбрано файлов: {attachedFiles.length}</p>
+                {attachedFiles.map((file, idx) => (
+                  <div key={idx} className="attached-file-item">
+                    {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+
+
             
             <div className="modal-footer">
               <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
