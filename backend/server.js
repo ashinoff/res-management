@@ -2037,7 +2037,7 @@ function getMonthName(monthNum) {
                 });
               }
             }
-            
+          }
             // Добавляем в processed
             processed.push({
               puNumber: fileName,
