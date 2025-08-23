@@ -296,6 +296,7 @@ button:disabled {
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   margin-top: -2px; /* УБИРАЕМ ДЫРКУ! */
   overflow: visible;
+   width: 100%;
 }
 
 
@@ -461,6 +462,7 @@ button:disabled {
 .structure-table table {
   width: 100%;
   border-collapse: collapse;
+   table-layout: auto;
 }
 
 /* Специальные стили для колонок */
@@ -471,7 +473,7 @@ button:disabled {
 
 .structure-table th:nth-child(2),
 .structure-table td:nth-child(2) {
-  width: 140px; /* РЭС */
+  min-width: 120px; /* РЭС */
   font-size: 13px;
 }
 
@@ -508,6 +510,7 @@ button:disabled {
 .network-structure {
   margin-top: 0; /* Убираем верхний отступ */
   padding-top: 0; /* И тут тоже */
+   width: 100%;
 }
 /* Корректировка отступов контента */
 .content {
@@ -515,6 +518,8 @@ button:disabled {
   padding: 0 20px 24px 20px; /* Был padding: 24px 20px - убираем верхний */
   overflow-y: auto;
   background-color: #f5f6fa;
+  max-width: 100%; /* Добавьте это */
+  width: 100%; /* Добавьте это */
 }
 /* ===================================================== 
    КОМПАКТНЫЕ УВЕДОМЛЕНИЯ
