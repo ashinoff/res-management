@@ -1879,60 +1879,65 @@ async function analyzeFile(filePath, type, originalFileName = null) {
             });
 
             if (existingNotification) {
-              console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
-              
-              // ВАЖНО: Удаляем из АСКУЭ
-              await existingNotification.destroy();
-              console.log('Marked ASKUE notification as read');
-              
-              // Это перепроверка!
-              const notifData = JSON.parse(existingNotification.message);
-
-              // ВОТ СЮДА ВСТАВЛЯЙ ПРОВЕРКУ ПЕРИОДА:
-             const requiredDate = new Date(notifData.checkFromDate);
-             const requiredMonth = requiredDate.getMonth() + 1; // 0-11 -> 1-12
-             const requiredYear = requiredDate.getFullYear();
-
-             // Проверяем период в ошибке
-             if (result.has_errors) {
-               const errorText = result.summary;
+  console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
   
-               // Мапа месяцев
-               const monthMap = {
-                 'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
-                 'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
-               };
+  // НЕ УДАЛЯЕМ СРАЗУ! Сначала проверяем период
+  const notifData = JSON.parse(existingNotification.message);
   
-               // Ищем месяцы в тексте ошибки (например: "Мар-Май")
-               const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
-               const foundMonths = errorText.match(monthPattern);
+  // ПРОВЕРКА ПЕРИОДА:
+  const requiredDate = new Date(notifData.checkFromDate);
+  const requiredMonth = requiredDate.getMonth() + 1;
+  const requiredYear = requiredDate.getFullYear();
   
-               if (foundMonths && foundMonths.length > 0) {
-                 // Берем ПОСЛЕДНИЙ месяц из диапазона (например, из "Мар-Май" берем "Май")
-                 const lastErrorMonth = foundMonths[foundMonths.length - 1];
-                 const lastErrorMonthNum = monthMap[lastErrorMonth];
+  // Проверяем период в ошибке
+  if (result.has_errors) {
+    const errorText = result.summary;
     
-                 // ВАЖНО: Проверяем, что последний месяц ошибки МЕНЬШЕ требуемого месяца
-                 // Например: если требуется с августа (8), а ошибки до мая (5), то 5 < 8 - НЕ ПОДХОДИТ
-                 if (lastErrorMonthNum < requiredMonth) {
-                   console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
+    // Мапа месяцев
+    const monthMap = {
+      'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
+      'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
+    };
+    
+    // Ищем месяцы в тексте ошибки (например: "Мар-Май")
+    const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
+    const foundMonths = errorText.match(monthPattern);
+    
+    if (foundMonths && foundMonths.length > 0) {
+      // Берем ПОСЛЕДНИЙ месяц из диапазона (например, из "Мар-Май" берем "Май")
+      const lastErrorMonth = foundMonths[foundMonths.length - 1];
+      const lastErrorMonthNum = monthMap[lastErrorMonth];
       
-                   // Удаляем файл
-                   try {
-                     fs.unlinkSync(filePath);
-                   } catch (err) {
-                     console.error('Error deleting file:', err);
-                   }
-      
-                   return resolve({
-                     processed: [{
-                       puNumber: fileName,
-                       status: 'wrong_period',
-                       error: `❌ Неверный период! Требуется журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}, а в загруженном файле данные только до ${lastErrorMonth}. Необходимо выгрузить журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату!`
-                     }],
-                     errors: []
-                   });
-                 }
+      // ВАЖНО: Проверяем, что последний месяц ошибки МЕНЬШЕ требуемого месяца
+      // Например: если требуется с августа (8), а ошибки до мая (5), то 5 < 8 - НЕ ПОДХОДИТ
+      if (lastErrorMonthNum < requiredMonth) {
+        console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
+        
+        // НЕ УДАЛЯЕМ УВЕДОМЛЕНИЕ ПРИ НЕВЕРНОМ ПЕРИОДЕ!
+        // await existingNotification.destroy(); // НЕ УДАЛЯЕМ!
+        
+        // Удаляем файл
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          console.error('Error deleting file:', err);
+        }
+        
+        return resolve({
+          processed: [{
+            puNumber: fileName,
+            status: 'wrong_period',
+            error: `❌ Неверный период! Требуется журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}, а в загруженном файле данные только до ${lastErrorMonth}. Необходимо выгрузить журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату!`
+          }],
+          errors: []
+        });
+      }
+    }
+  }
+  
+  // УДАЛЯЕМ УВЕДОМЛЕНИЕ ТОЛЬКО ЕСЛИ ПЕРИОД ПРАВИЛЬНЫЙ!
+  await existingNotification.destroy();
+  console.log('Marked ASKUE notification as read');
     
                  // Дополнительная проверка: если есть первый месяц в диапазоне
                  if (foundMonths.length >= 2) {
