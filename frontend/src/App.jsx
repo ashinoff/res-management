@@ -1578,7 +1578,11 @@ function Reports() {
   );
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
   const [searchTp, setSearchTp] = useState('');
-
+  
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  
   useEffect(() => {
     loadReports();
   }, [reportType, dateFrom, dateTo]);
@@ -1601,7 +1605,17 @@ function Reports() {
       setLoading(false);
     }
   };
+// Функция для открытия просмотра файлов
+const viewAttachments = (attachments) => {
+  if (attachments && attachments.length > 0) {
+    setSelectedFiles(attachments);
+    setCurrentFileIndex(0);
+    setShowFileViewer(true);
+  }
+};
 
+
+  
  // Обновленная функция exportToExcel в компоненте Reports
 const exportToExcel = () => {
   if (filteredData.length === 0) {
@@ -1766,58 +1780,72 @@ const formatDate = (dateString) => {
       </div>
       
       <div className="report-table">
-        <table>
-          <thead>
-            <tr>
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Позиция</th>
-              <th>Номер ПУ</th>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-              {(reportType === 'pending_askue' || reportType === 'completed') && (
-                <>
-                  <th>Комментарий РЭС</th>
-                  <th>Дата завершения мероприятий</th>
-                </>
-              )}
-              {reportType === 'completed' && (
-                <>
-                  <th>Дата перепроверки</th>
-                  <th>Результат</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((item, idx) => (
-              <tr key={idx}>
-                <td>{item.resName}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
-                <td>{item.puNumber}</td>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-                {(reportType === 'pending_askue' || reportType === 'completed') && (
-                  <>
-                    <td>{item.resComment}</td>
-                    <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                  </>
+  <table>
+    <thead>
+      <tr>
+        <th>РЭС</th>
+        <th>ТП</th>
+        <th>ВЛ</th>
+        <th>Позиция</th>
+        <th>Номер ПУ</th>
+        <th>Ошибка</th>
+        <th>Дата обнаружения</th>
+        {(reportType === 'pending_askue' || reportType === 'completed') && (
+          <>
+            <th>Комментарий РЭС</th>
+            <th>Дата завершения мероприятий</th>
+          </>
+        )}
+        {reportType === 'completed' && (
+          <>
+            <th>Дата перепроверки</th>
+            <th>Результат</th>
+            <th>Файлы</th> {/* НОВАЯ КОЛОНКА */}
+          </>
+        )}
+      </tr>
+    </thead>
+    <tbody>
+      {filteredData.map((item, idx) => (
+        <tr key={idx}>
+          <td>{item.resName}</td>
+          <td>{item.tpName}</td>
+          <td>{item.vlName}</td>
+          <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
+          <td>{item.puNumber}</td>
+          <td className="error-cell">{item.errorDetails}</td>
+          <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+          {(reportType === 'pending_askue' || reportType === 'completed') && (
+            <>
+              <td>{item.resComment}</td>
+              <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+            </>
+          )}
+          {reportType === 'completed' && (
+            <>
+              <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
+              <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
+                {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+              </td>
+              <td>
+                {item.attachments && item.attachments.length > 0 ? (
+                  <button 
+                    className="btn-view-files"
+                    onClick={() => viewAttachments(item.attachments)}
+                  >
+                    📎 {item.attachments.length} файл(ов)
+                  </button>
+                ) : (
+                  <span className="no-files">—</span>
                 )}
-                {reportType === 'completed' && (
-                  <>
-                    <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
-                    <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
-                      {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </td>
+            </>
+          )}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
         
         {filteredData.length === 0 && (
           <div className="no-data">
@@ -1828,7 +1856,16 @@ const formatDate = (dateString) => {
     </div>
   );
 }
-
+// компонент просмотра файлов в конец Reports
+{showFileViewer && (
+  <FileViewer 
+    files={selectedFiles}
+    currentIndex={currentFileIndex}
+    onClose={() => setShowFileViewer(false)}
+    onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
+    onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
+  />
+)}
 // =====================================================
 // КОМПОНЕНТ НАСТРОЕК С УПРАВЛЕНИЕМ ПОЛЬЗОВАТЕЛЯМИ
 // =====================================================
