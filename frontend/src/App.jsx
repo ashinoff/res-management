@@ -1581,6 +1581,9 @@ function Reports() {
   
   // Функция для открытия просмотра файлов
   const viewAttachments = (attachments) => {
+    
+    console.log('Viewing attachments:', attachments);
+    
     if (attachments && attachments.length > 0) {
       setSelectedFiles(attachments);
       setCurrentFileIndex(0);
@@ -2660,6 +2663,9 @@ function MaintenanceSettings() {
 // Компонент для просмотра файлов
 // =====================================================
 function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
+  console.log('FileViewer files:', files);
+  console.log('Current file:', files[currentIndex]);
+  
   const currentFile = files[currentIndex];
   const url = currentFile.url.toLowerCase();
   const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif');
