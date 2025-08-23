@@ -361,6 +361,69 @@ function NetworkStructure({ selectedRes }) {
     !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
   );
   
+  // Функция экспорта в Excel
+  const exportStructureToExcel = () => {
+    if (filteredData.length === 0) {
+      alert('Нет данных для экспорта');
+      return;
+    }
+
+    // Подготавливаем данные
+    const exportData = filteredData.map(item => {
+      // Находим статусы для каждого ПУ
+      const getStatus = (puNumber, position) => {
+        if (!puNumber) return 'Пусто';
+        const status = item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position);
+        
+        switch(status?.status) {
+          case 'checked_ok': return 'Проверен ✓';
+          case 'checked_error': return 'Ошибка ✗';
+          case 'pending_recheck': return 'Ожидает перепроверки';
+          case 'not_checked': return 'Не проверен';
+          default: return 'Не проверен';
+        }
+      };
+
+      return {
+        'РЭС': item.ResUnit?.name || '',
+        'ТП': item.tpName || '',
+        'ВЛ': item.vlName || '',
+        'ПУ Начало': item.startPu || '-',
+        'Статус начала': getStatus(item.startPu, 'start'),
+        'ПУ Середина': item.middlePu || '-',
+        'Статус середины': getStatus(item.middlePu, 'middle'),
+        'ПУ Конец': item.endPu || '-',
+        'Статус конца': getStatus(item.endPu, 'end'),
+        'Последнее обновление': new Date(item.lastUpdate).toLocaleDateString('ru-RU')
+      };
+    });
+
+    // Создаем Excel файл
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Устанавливаем ширину колонок
+    ws['!cols'] = [
+      { wch: 20 }, // РЭС
+      { wch: 15 }, // ТП
+      { wch: 15 }, // ВЛ
+      { wch: 15 }, // ПУ Начало
+      { wch: 20 }, // Статус начала
+      { wch: 15 }, // ПУ Середина
+      { wch: 20 }, // Статус середины
+      { wch: 15 }, // ПУ Конец
+      { wch: 20 }, // Статус конца
+      { wch: 20 }  // Последнее обновление
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
+    
+    const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    
+    alert(`Структура сети экспортирована в файл: ${fileName}`);
+  };
+  
   return (
     <div className="network-structure">
       <h2>Структура сети</h2>
@@ -368,20 +431,28 @@ function NetworkStructure({ selectedRes }) {
         <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
       )}
       
-      <div className="search-box">
-        <input 
-          type="text"
-          placeholder="Поиск по ТП..."
-          value={searchTp}
-          onChange={(e) => setSearchTp(e.target.value)}
-          className="search-input"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck="false"
-          name="network-search-tp"
-        />
-      </div>
+      <div className="structure-controls">
+        <div className="search-box">
+          <input 
+            type="text"
+            placeholder="Поиск по ТП..."
+            value={searchTp}
+            onChange={(e) => setSearchTp(e.target.value)}
+            className="search-input"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            name="network-search-tp"
+          />
+        </div>
+        
+        <button 
+          className="export-btn" 
+          onClick={exportStructureToExcel}
+        >
+          📊 Экспорт в Excel
+        </button>
         
         {user.role === 'admin' && selectedIds.length > 0 && (
           <button 
@@ -391,6 +462,7 @@ function NetworkStructure({ selectedRes }) {
             🗑️ Удалить выбранные ({selectedIds.length})
           </button>
         )}
+      </div>
       
       <div className="status-legend">
         <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
@@ -446,8 +518,6 @@ function NetworkStructure({ selectedRes }) {
           </tbody>
         </table>
       </div>
-     
-      
       
       <ErrorDetailsModal 
         isOpen={modalOpen}
@@ -849,7 +919,7 @@ function Notifications({ filterType }) {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsNotification, setDetailsNotification] = useState(null);
   const [uploadingPu, setUploadingPu] = useState(null);
-  const [attachedFiles, setAttachedFiles] = useState([]);
+  const [attachedFiles, setAttachedFiles] = useState([]); // ДОБАВЛЕНО!
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
@@ -890,7 +960,7 @@ function Notifications({ filterType }) {
   }, [loadNotifications]);
 
   const handleCompleteWork = async () => {
-    const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
+    const wordCount = comment.trim().split(' ').filter(word => word.length > 0).length;
     if (wordCount < 5) {
       alert('Комментарий должен содержать не менее 5 слов');
       return;
@@ -898,31 +968,30 @@ function Notifications({ filterType }) {
 
     try {
       const formData = new FormData();
-    formData.append('comment', comment);
-    formData.append('checkFromDate', checkFromDate);
-    
-    // Добавляем файлы
-    attachedFiles.forEach(file => {
-      formData.append('attachments', file);
-    });
+      formData.append('comment', comment);
+      formData.append('checkFromDate', checkFromDate);
       
-          
+      // Добавляем файлы
+      attachedFiles.forEach(file => {
+        formData.append('attachments', file);
+      });
+      
       await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  
-    alert('Мероприятия отмечены как выполненные');
-    setShowCompleteModal(false);
-    setComment('');
-    setAttachedFiles([]);
-    setSelectedNotification(null);
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
     
-    await loadNotifications();
-    
-  } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-  }
-};
+      alert('Мероприятия отмечены как выполненные');
+      setShowCompleteModal(false);
+      setComment('');
+      setAttachedFiles([]);
+      setSelectedNotification(null);
+      
+      await loadNotifications();
+      
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+    }
+  };
 
   const handleDeleteNotification = async () => {
     try {
@@ -990,60 +1059,58 @@ function Notifications({ filterType }) {
     input.click();
   };
 
-// ИСПРАВЛЕННАЯ функция определения фаз
-// ИСПРАВЛЕННАЯ функция определения фаз - красим ТОЛЬКО явно указанные!
-// ИСПРАВЛЕННАЯ функция определения фаз - без регулярных выражений!
-const getPhaseErrors = useCallback((errorDetails) => {
-  const phases = { A: false, B: false, C: false };
-  
-  if (!errorDetails) return phases;
-  
-  try {
-    let data = null;
-    let textToAnalyze = '';
+  // ИСПРАВЛЕННАЯ функция определения фаз - без регулярных выражений!
+  const getPhaseErrors = useCallback((errorDetails) => {
+    const phases = { A: false, B: false, C: false };
     
-    // Пытаемся распарсить JSON
-    if (typeof errorDetails === 'string') {
-      try {
-        const parsed = JSON.parse(errorDetails);
-        data = parsed.details || parsed;
-        textToAnalyze = parsed.summary || errorDetails;
-      } catch {
-        textToAnalyze = errorDetails;
-      }
-    } else if (typeof errorDetails === 'object') {
-      data = errorDetails.details || errorDetails;
-      textToAnalyze = errorDetails.summary || JSON.stringify(errorDetails);
-    }
+    if (!errorDetails) return phases;
     
-    // Проверяем структурированные данные ТОЛЬКО если есть конкретные фазы
-    if (data && typeof data === 'object') {
-      if (data.overvoltage) {
-        if (data.overvoltage.phase_A && data.overvoltage.phase_A.count > 0) phases.A = true;
-        if (data.overvoltage.phase_B && data.overvoltage.phase_B.count > 0) phases.B = true;
-        if (data.overvoltage.phase_C && data.overvoltage.phase_C.count > 0) phases.C = true;
+    try {
+      let data = null;
+      let textToAnalyze = '';
+      
+      // Пытаемся распарсить JSON
+      if (typeof errorDetails === 'string') {
+        try {
+          const parsed = JSON.parse(errorDetails);
+          data = parsed.details || parsed;
+          textToAnalyze = parsed.summary || errorDetails;
+        } catch {
+          textToAnalyze = errorDetails;
+        }
+      } else if (typeof errorDetails === 'object') {
+        data = errorDetails.details || errorDetails;
+        textToAnalyze = errorDetails.summary || JSON.stringify(errorDetails);
       }
       
-      if (data.undervoltage) {
-        if (data.undervoltage.phase_A && data.undervoltage.phase_A.count > 0) phases.A = true;
-        if (data.undervoltage.phase_B && data.undervoltage.phase_B.count > 0) phases.B = true;
-        if (data.undervoltage.phase_C && data.undervoltage.phase_C.count > 0) phases.C = true;
+      // Проверяем структурированные данные ТОЛЬКО если есть конкретные фазы
+      if (data && typeof data === 'object') {
+        if (data.overvoltage) {
+          if (data.overvoltage.phase_A && data.overvoltage.phase_A.count > 0) phases.A = true;
+          if (data.overvoltage.phase_B && data.overvoltage.phase_B.count > 0) phases.B = true;
+          if (data.overvoltage.phase_C && data.overvoltage.phase_C.count > 0) phases.C = true;
+        }
+        
+        if (data.undervoltage) {
+          if (data.undervoltage.phase_A && data.undervoltage.phase_A.count > 0) phases.A = true;
+          if (data.undervoltage.phase_B && data.undervoltage.phase_B.count > 0) phases.B = true;
+          if (data.undervoltage.phase_C && data.undervoltage.phase_C.count > 0) phases.C = true;
+        }
       }
+      
+      // Проверяем текст ТОЛЬКО на явные упоминания конкретных фаз
+      if (textToAnalyze) {
+        // Только если явно написано "Фаза A" или "phase_A"
+        if (textToAnalyze.indexOf('Фаза A') !== -1 || textToAnalyze.indexOf('phase_A') !== -1) phases.A = true;
+        if (textToAnalyze.indexOf('Фаза B') !== -1 || textToAnalyze.indexOf('phase_B') !== -1) phases.B = true;
+        if (textToAnalyze.indexOf('Фаза C') !== -1 || textToAnalyze.indexOf('phase_C') !== -1) phases.C = true;
+      }
+    } catch (e) {
+      console.error('Error parsing phase errors:', e);
     }
     
-    // Проверяем текст ТОЛЬКО на явные упоминания конкретных фаз
-    if (textToAnalyze) {
-      // Только если явно написано "Фаза A" или "phase_A"
-      if (textToAnalyze.indexOf('Фаза A') !== -1 || textToAnalyze.indexOf('phase_A') !== -1) phases.A = true;
-      if (textToAnalyze.indexOf('Фаза B') !== -1 || textToAnalyze.indexOf('phase_B') !== -1) phases.B = true;
-      if (textToAnalyze.indexOf('Фаза C') !== -1 || textToAnalyze.indexOf('phase_C') !== -1) phases.C = true;
-    }
-  } catch (e) {
-    console.error('Error parsing phase errors:', e);
-  }
-  
-  return phases;
-}, []);
+    return phases;
+  }, []);
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
@@ -1090,79 +1157,79 @@ const getPhaseErrors = useCallback((errorDetails) => {
             className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
           >
             {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
-{notif.type === 'error' && (() => {
-  try {
-    const data = JSON.parse(notif.message);
-    const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
-    
-    return (
-      <div className="notification-narrow-content">
-        <div className="notification-phases">
-          <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-          <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-          <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-        </div>
-        
-        <div className="notification-narrow-info">
-          <div className="notification-tp">{data.tpName}</div>
-          <div className="notification-narrow-details">
-            <span className="label">РЭС:</span> {data.resName} | 
-            <span className="label"> ТП:</span> {data.tpName} | 
-            <span className="label"> ВЛ:</span> {data.vlName} | 
-            <span className="label"> Позиция:</span> {
-              data.position === 'start' ? 'Начало' : 
-              data.position === 'middle' ? 'Середина' : 'Конец'
-            }
-          </div>
-          <div className="notification-pu-number">
-            ПУ №: <strong>{data.puNumber}</strong>
-          </div>
-        </div>
-        
-        <div className="notification-narrow-actions">
-          <button 
-            className="btn-details-light"
-            onClick={() => {
-              setDetailsNotification({ ...notif, data });
-              setShowDetailsModal(true);
-            }}
-            title="Подробности"
-          >
-            🔍
-          </button>
-          
-          {user.role === 'res_responsible' && (
-            <button 
-              className="btn-complete"
-              onClick={() => {
-                setSelectedNotification({ id: notif.id, data });
-                setShowCompleteModal(true);
-              }}
-              title="Выполнить мероприятия"
-            >
-              ✅
-            </button>
-          )}
-          
-          {user.role === 'admin' && (
-            <button
-              className="btn-delete"
-              onClick={() => {
-                setDeleteNotificationId(notif.id);
-                setShowDeleteModal(true);
-              }}
-              title="Удалить"
-            >
-              🗑️
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  } catch (e) {
-    return <div className="error-text">Ошибка отображения</div>;
-  }
-})()}
+            {notif.type === 'error' && (() => {
+              try {
+                const data = JSON.parse(notif.message);
+                const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
+                
+                return (
+                  <div className="notification-narrow-content">
+                    <div className="notification-phases">
+                      <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+                      <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+                      <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+                    </div>
+                    
+                    <div className="notification-narrow-info">
+                      <div className="notification-tp">{data.tpName}</div>
+                      <div className="notification-narrow-details">
+                        <span className="label">РЭС:</span> {data.resName} | 
+                        <span className="label"> ТП:</span> {data.tpName} | 
+                        <span className="label"> ВЛ:</span> {data.vlName} | 
+                        <span className="label"> Позиция:</span> {
+                          data.position === 'start' ? 'Начало' : 
+                          data.position === 'middle' ? 'Середина' : 'Конец'
+                        }
+                      </div>
+                      <div className="notification-pu-number">
+                        ПУ №: <strong>{data.puNumber}</strong>
+                      </div>
+                    </div>
+                    
+                    <div className="notification-narrow-actions">
+                      <button 
+                        className="btn-details-light"
+                        onClick={() => {
+                          setDetailsNotification({ ...notif, data });
+                          setShowDetailsModal(true);
+                        }}
+                        title="Подробности"
+                      >
+                        🔍
+                      </button>
+                      
+                      {user.role === 'res_responsible' && (
+                        <button 
+                          className="btn-complete"
+                          onClick={() => {
+                            setSelectedNotification({ id: notif.id, data });
+                            setShowCompleteModal(true);
+                          }}
+                          title="Выполнить мероприятия"
+                        >
+                          ✅
+                        </button>
+                      )}
+                      
+                      {user.role === 'admin' && (
+                        <button
+                          className="btn-delete"
+                          onClick={() => {
+                            setDeleteNotificationId(notif.id);
+                            setShowDeleteModal(true);
+                          }}
+                          title="Удалить"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              } catch (e) {
+                return <div className="error-text">Ошибка отображения</div>;
+              }
+            })()}
             
             {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
             {notif.type === 'pending_askue' && (() => {
@@ -1254,38 +1321,38 @@ const getPhaseErrors = useCallback((errorDetails) => {
                 <>
                   {/* Показываем фазы в детальном окне */}
                   <div className="phase-indicators-large">
-  {(() => {
-    const phases = { A: false, B: false, C: false };
-    
-    // Проверяем только явные упоминания фаз
-    if (detailsNotification.data.details && typeof detailsNotification.data.details === 'object') {
-      const details = detailsNotification.data.details;
-      if (details.overvoltage) {
-        if (details.overvoltage.phase_A && details.overvoltage.phase_A.count > 0) phases.A = true;
-        if (details.overvoltage.phase_B && details.overvoltage.phase_B.count > 0) phases.B = true;
-        if (details.overvoltage.phase_C && details.overvoltage.phase_C.count > 0) phases.C = true;
-      }
-      if (details.undervoltage) {
-        if (details.undervoltage.phase_A && details.undervoltage.phase_A.count > 0) phases.A = true;
-        if (details.undervoltage.phase_B && details.undervoltage.phase_B.count > 0) phases.B = true;
-        if (details.undervoltage.phase_C && details.undervoltage.phase_C.count > 0) phases.C = true;
-      }
-    }
-    
-    const errorText = detailsNotification.data.errorDetails || '';
-    if (errorText.indexOf('Фаза A') !== -1 || errorText.indexOf('phase_A') !== -1) phases.A = true;
-    if (errorText.indexOf('Фаза B') !== -1 || errorText.indexOf('phase_B') !== -1) phases.B = true;
-    if (errorText.indexOf('Фаза C') !== -1 || errorText.indexOf('phase_C') !== -1) phases.C = true;
-    
-    return (
-      <>
-        <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
-        <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
-        <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
-      </>
-    );
-  })()}
-</div>
+                    {(() => {
+                      const phases = { A: false, B: false, C: false };
+                      
+                      // Проверяем только явные упоминания фаз
+                      if (detailsNotification.data.details && typeof detailsNotification.data.details === 'object') {
+                        const details = detailsNotification.data.details;
+                        if (details.overvoltage) {
+                          if (details.overvoltage.phase_A && details.overvoltage.phase_A.count > 0) phases.A = true;
+                          if (details.overvoltage.phase_B && details.overvoltage.phase_B.count > 0) phases.B = true;
+                          if (details.overvoltage.phase_C && details.overvoltage.phase_C.count > 0) phases.C = true;
+                        }
+                        if (details.undervoltage) {
+                          if (details.undervoltage.phase_A && details.undervoltage.phase_A.count > 0) phases.A = true;
+                          if (details.undervoltage.phase_B && details.undervoltage.phase_B.count > 0) phases.B = true;
+                          if (details.undervoltage.phase_C && details.undervoltage.phase_C.count > 0) phases.C = true;
+                        }
+                      }
+                      
+                      const errorText = detailsNotification.data.errorDetails || '';
+                      if (errorText.indexOf('Фаза A') !== -1 || errorText.indexOf('phase_A') !== -1) phases.A = true;
+                      if (errorText.indexOf('Фаза B') !== -1 || errorText.indexOf('phase_B') !== -1) phases.B = true;
+                      if (errorText.indexOf('Фаза C') !== -1 || errorText.indexOf('phase_C') !== -1) phases.C = true;
+                      
+                      return (
+                        <>
+                          <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
+                          <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
+                          <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
+                        </>
+                      );
+                    })()}
+                  </div>
                   
                   <div className="detail-row">
                     <strong>РЭС:</strong> {detailsNotification.data.resName}
@@ -1351,83 +1418,82 @@ const getPhaseErrors = useCallback((errorDetails) => {
       )}
 
       {/* Модальное окно для выполнения мероприятий */}
-{showCompleteModal && selectedNotification && (
-  <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
-    <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
-      <div className="modal-header">
-        <h3>Отметить выполнение мероприятий</h3>
-        <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
-      </div>
-      
-      <div className="modal-body">
-        <div className="work-info">
-          <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
-          <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
-          <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
-        </div>
-        
-        <div className="form-group">
-          <label>Что было выполнено? (минимум 5 слов)</label>
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Опишите выполненные работы..."
-            rows={4}
-          />
-          <small className="word-count">
-            Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
-          </small>
-        </div>
-        
-        <div className="form-group">
-          <label>Журнал событий требуется с даты:</label>
-          <input
-            type="date"
-            value={checkFromDate}
-            onChange={(e) => setCheckFromDate(e.target.value)}
-          />
-        </div>
-        
-        {/* ЭТОТ БЛОК ДОЛЖЕН БЫТЬ ВНУТРИ modal-body! */}
-        <div className="form-group">
-          <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
-          <input
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            onChange={(e) => {
-              const files = Array.from(e.target.files).slice(0, 5);
-              setAttachedFiles(files);
-            }}
-          />
-          {attachedFiles.length > 0 && (
-            <div className="attached-files-list">
-              <p>Выбрано файлов: {attachedFiles.length}</p>
-              {attachedFiles.map((file, idx) => (
-                <div key={idx} className="attached-file-item">
-                  {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                </div>
-              ))}
+      {showCompleteModal && selectedNotification && (
+        <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
+          <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Отметить выполнение мероприятий</h3>
+              <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
             </div>
-          )}
+            
+            <div className="modal-body">
+              <div className="work-info">
+                <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
+                <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
+                <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
+              </div>
+              
+              <div className="form-group">
+                <label>Что было выполнено? (минимум 5 слов)</label>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Опишите выполненные работы..."
+                  rows={4}
+                />
+                <small className="word-count">
+                  Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
+                </small>
+              </div>
+              
+              <div className="form-group">
+                <label>Журнал событий требуется с даты:</label>
+                <input
+                  type="date"
+                  value={checkFromDate}
+                  onChange={(e) => setCheckFromDate(e.target.value)}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files).slice(0, 5);
+                    setAttachedFiles(files);
+                  }}
+                />
+                {attachedFiles.length > 0 && (
+                  <div className="attached-files-list">
+                    <p>Выбрано файлов: {attachedFiles.length}</p>
+                    {attachedFiles.map((file, idx) => (
+                      <div key={idx} className="attached-file-item">
+                        {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="confirm-btn" 
+                onClick={handleCompleteWork}
+                disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
+              >
+                Подтвердить выполнение
+              </button>
+            </div>
+          </div>
         </div>
-      </div> {/* Закрываем modal-body */}
-      
-      <div className="modal-footer">
-        <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
-          Отмена
-        </button>
-        <button 
-          className="confirm-btn" 
-          onClick={handleCompleteWork}
-          disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
-        >
-          Подтвердить выполнение
-        </button>
-      </div>
-    </div> {/* Закрываем modal-content */}
-  </div> {/* Закрываем modal-backdrop */}
-)}
+      )}
       
       {/* Модальное окно для удаления */}
       {showDeleteModal && (
@@ -1470,98 +1536,6 @@ const getPhaseErrors = useCallback((errorDetails) => {
       )}
     </div>
   );
-// В компоненте NetworkStructure добавь эту функцию
-const exportStructureToExcel = () => {
-  if (filteredData.length === 0) {
-    alert('Нет данных для экспорта');
-    return;
-  }
-
-  // Подготавливаем данные
-  const exportData = filteredData.map(item => {
-    // Находим статусы для каждого ПУ
-    const getStatus = (puNumber, position) => {
-      if (!puNumber) return 'Пусто';
-      const status = item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position);
-      
-      switch(status?.status) {
-        case 'checked_ok': return 'Проверен ✓';
-        case 'checked_error': return 'Ошибка ✗';
-        case 'pending_recheck': return 'Ожидает перепроверки';
-        case 'not_checked': return 'Не проверен';
-        default: return 'Не проверен';
-      }
-    };
-
-    return {
-      'РЭС': item.ResUnit?.name || '',
-      'ТП': item.tpName || '',
-      'ВЛ': item.vlName || '',
-      'ПУ Начало': item.startPu || '-',
-      'Статус начала': getStatus(item.startPu, 'start'),
-      'ПУ Середина': item.middlePu || '-',
-      'Статус середины': getStatus(item.middlePu, 'middle'),
-      'ПУ Конец': item.endPu || '-',
-      'Статус конца': getStatus(item.endPu, 'end'),
-      'Последнее обновление': new Date(item.lastUpdate).toLocaleDateString('ru-RU')
-    };
-  });
-
-  // Создаем Excel файл
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  
-  // Устанавливаем ширину колонок
-  ws['!cols'] = [
-    { wch: 20 }, // РЭС
-    { wch: 15 }, // ТП
-    { wch: 15 }, // ВЛ
-    { wch: 15 }, // ПУ Начало
-    { wch: 20 }, // Статус начала
-    { wch: 15 }, // ПУ Середина
-    { wch: 20 }, // Статус середины
-    { wch: 15 }, // ПУ Конец
-    { wch: 20 }, // Статус конца
-    { wch: 20 }  // Последнее обновление
-  ];
-  
-  XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
-  
-  const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-  XLSX.writeFile(wb, fileName);
-  
-  alert(`Структура сети экспортирована в файл: ${fileName}`);
-};
-
-// Добавь кнопку экспорта в JSX разметку NetworkStructure
-<div className="structure-controls">
-  <div className="search-box">
-    <input 
-      type="text"
-      placeholder="Поиск по ТП..."
-      value={searchTp}
-      onChange={(e) => setSearchTp(e.target.value)}
-      className="search-input"
-    />
-  </div>
-  
-  <button 
-    className="export-btn" 
-    onClick={exportStructureToExcel}
-  >
-    📊 Экспорт в Excel
-  </button>
-  
-  {user.role === 'admin' && selectedIds.length > 0 && (
-    <button 
-      className="delete-selected-btn"
-      onClick={() => setShowDeleteModal(true)}
-    >
-      🗑️ Удалить выбранные ({selectedIds.length})
-    </button>
-  )}
-</div>
-  
 }
 
 // =====================================================
@@ -1604,105 +1578,104 @@ function Reports() {
       setLoading(false);
     }
   };
-// Функция для открытия просмотра файлов
-const viewAttachments = (attachments) => {
-  if (attachments && attachments.length > 0) {
-    setSelectedFiles(attachments);
-    setCurrentFileIndex(0);
-    setShowFileViewer(true);
-  }
-};
-
-
   
- // Обновленная функция exportToExcel в компоненте Reports
-const exportToExcel = () => {
-  if (filteredData.length === 0) {
-    alert('Нет данных для экспорта');
-    return;
-  }
+  // Функция для открытия просмотра файлов
+  const viewAttachments = (attachments) => {
+    if (attachments && attachments.length > 0) {
+      setSelectedFiles(attachments);
+      setCurrentFileIndex(0);
+      setShowFileViewer(true);
+    }
+  };
+  
+  // Обновленная функция exportToExcel в компоненте Reports
+  const exportToExcel = () => {
+    if (filteredData.length === 0) {
+      alert('Нет данных для экспорта');
+      return;
+    }
 
-  // Подготавливаем данные для экспорта
-  const exportData = filteredData.map(item => {
-    const base = {
-      'РЭС': item.resName || '',
-      'ТП': item.tpName || '',
-      'ВЛ': item.vlName || '',
-      'Позиция': item.position === 'start' ? 'Начало' : 
-                 item.position === 'middle' ? 'Середина' : 'Конец',
-      'Номер ПУ': item.puNumber || '',
-      'Ошибка': item.errorDetails || '',
-      'Дата обнаружения': formatDate(item.errorDate)
-    };
+    // Подготавливаем данные для экспорта
+    const exportData = filteredData.map(item => {
+      const base = {
+        'РЭС': item.resName || '',
+        'ТП': item.tpName || '',
+        'ВЛ': item.vlName || '',
+        'Позиция': item.position === 'start' ? 'Начало' : 
+                   item.position === 'middle' ? 'Середина' : 'Конец',
+        'Номер ПУ': item.puNumber || '',
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate)
+      };
 
-    // Добавляем дополнительные поля в зависимости от типа отчета
+      // Добавляем дополнительные поля в зависимости от типа отчета
+      if (reportType === 'pending_askue' || reportType === 'completed') {
+        base['Комментарий РЭС'] = item.resComment || '';
+        base['Дата завершения мероприятий'] = formatDate(item.workCompletedDate);
+      }
+
+      if (reportType === 'completed') {
+        base['Дата перепроверки'] = formatDate(item.recheckDate);
+        base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
+      }
+
+      return base;
+    });
+
+    // Создаем новую книгу Excel
+    const wb = XLSX.utils.book_new();
+    
+    // Создаем лист с данными
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Устанавливаем ширину колонок
+    const columnWidths = [
+      { wch: 20 }, // РЭС
+      { wch: 15 }, // ТП
+      { wch: 15 }, // ВЛ
+      { wch: 12 }, // Позиция
+      { wch: 15 }, // Номер ПУ
+      { wch: 50 }, // Ошибка
+      { wch: 18 }, // Дата обнаружения
+    ];
+    
     if (reportType === 'pending_askue' || reportType === 'completed') {
-      base['Комментарий РЭС'] = item.resComment || '';
-      base['Дата завершения мероприятий'] = formatDate(item.workCompletedDate);
+      columnWidths.push({ wch: 40 }); // Комментарий РЭС
+      columnWidths.push({ wch: 25 }); // Дата завершения мероприятий
     }
-
+    
     if (reportType === 'completed') {
-      base['Дата перепроверки'] = formatDate(item.recheckDate);
-      base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
+      columnWidths.push({ wch: 18 }); // Дата перепроверки
+      columnWidths.push({ wch: 15 }); // Результат
     }
+    
+    ws['!cols'] = columnWidths;
+    
+    // Добавляем лист в книгу
+    const sheetName = getReportTitle();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    
+    // Генерируем имя файла
+    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    
+    // Сохраняем файл
+    XLSX.writeFile(wb, fileName);
+    
+    // Показываем уведомление
+    alert(`Отчет успешно экспортирован в файл: ${fileName}`);
+  };
 
-    return base;
-  });
-
-  // Создаем новую книгу Excel
-  const wb = XLSX.utils.book_new();
-  
-  // Создаем лист с данными
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  
-  // Устанавливаем ширину колонок
-  const columnWidths = [
-    { wch: 20 }, // РЭС
-    { wch: 15 }, // ТП
-    { wch: 15 }, // ВЛ
-    { wch: 12 }, // Позиция
-    { wch: 15 }, // Номер ПУ
-    { wch: 50 }, // Ошибка
-    { wch: 18 }, // Дата обнаружения
-  ];
-  
-  if (reportType === 'pending_askue' || reportType === 'completed') {
-    columnWidths.push({ wch: 40 }); // Комментарий РЭС
-    columnWidths.push({ wch: 25 }); // Дата завершения мероприятий
-  }
-  
-  if (reportType === 'completed') {
-    columnWidths.push({ wch: 18 }); // Дата перепроверки
-    columnWidths.push({ wch: 15 }); // Результат
-  }
-  
-  ws['!cols'] = columnWidths;
-  
-  // Добавляем лист в книгу
-  const sheetName = getReportTitle();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  
-  // Генерируем имя файла
-  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-  
-  // Сохраняем файл
-  XLSX.writeFile(wb, fileName);
-  
-  // Показываем уведомление
-  alert(`Отчет успешно экспортирован в файл: ${fileName}`);
-};
-
-// Вспомогательная функция для форматирования даты
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  return new Date(dateString).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
+  // Вспомогательная функция для форматирования даты
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const getReportTitle = () => {
     switch (reportType) {
@@ -1779,79 +1752,88 @@ const formatDate = (dateString) => {
       </div>
       
       <div className="report-table">
-  <table>
-    <thead>
-      <tr>
-        <th>РЭС</th>
-        <th>ТП</th>
-        <th>ВЛ</th>
-        <th>Позиция</th>
-        <th>Номер ПУ</th>
-        <th>Ошибка</th>
-        <th>Дата обнаружения</th>
-        {(reportType === 'pending_askue' || reportType === 'completed') && (
-          <>
-            <th>Комментарий РЭС</th>
-            <th>Дата завершения мероприятий</th>
-          </>
-        )}
-        {reportType === 'completed' && (
-          <>
-            <th>Дата перепроверки</th>
-            <th>Результат</th>
-            <th>Файлы</th> {/* НОВАЯ КОЛОНКА */}
-          </>
-        )}
-      </tr>
-    </thead>
-    <tbody>
-      {filteredData.map((item, idx) => (
-        <tr key={idx}>
-          <td>{item.resName}</td>
-          <td>{item.tpName}</td>
-          <td>{item.vlName}</td>
-          <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
-          <td>{item.puNumber}</td>
-          <td className="error-cell">{item.errorDetails}</td>
-          <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-          {(reportType === 'pending_askue' || reportType === 'completed') && (
-            <>
-              <td>{item.resComment}</td>
-              <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-            </>
-          )}
-          {reportType === 'completed' && (
-            <>
-              <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
-              <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
-                {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-              </td>
-              <td>
-                {item.attachments && item.attachments.length > 0 ? (
-                  <button 
-                    className="btn-view-files"
-                    onClick={() => viewAttachments(item.attachments)}
-                  >
-                    📎 {item.attachments.length} файл(ов)
-                  </button>
-                ) : (
-                  <span className="no-files">—</span>
+        <table>
+          <thead>
+            <tr>
+              <th>РЭС</th>
+              <th>ТП</th>
+              <th>ВЛ</th>
+              <th>Позиция</th>
+              <th>Номер ПУ</th>
+              <th>Ошибка</th>
+              <th>Дата обнаружения</th>
+              {(reportType === 'pending_askue' || reportType === 'completed') && (
+                <>
+                  <th>Комментарий РЭС</th>
+                  <th>Дата завершения мероприятий</th>
+                </>
+              )}
+              {reportType === 'completed' && (
+                <>
+                  <th>Дата перепроверки</th>
+                  <th>Результат</th>
+                  <th>Файлы</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((item, idx) => (
+              <tr key={idx}>
+                <td>{item.resName}</td>
+                <td>{item.tpName}</td>
+                <td>{item.vlName}</td>
+                <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
+                <td>{item.puNumber}</td>
+                <td className="error-cell">{item.errorDetails}</td>
+                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                {(reportType === 'pending_askue' || reportType === 'completed') && (
+                  <>
+                    <td>{item.resComment}</td>
+                    <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                  </>
                 )}
-              </td>
-            </>
-          )}
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-        
-        {filteredData.length === 0 && (
-          <div className="no-data">
-            <p>Нет данных для отображения за выбранный период</p>
-          </div>
-        )}
+                {reportType === 'completed' && (
+                  <>
+                    <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
+                    <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
+                      {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+                    </td>
+                    <td>
+                      {item.attachments && item.attachments.length > 0 ? (
+                        <button 
+                          className="btn-view-files"
+                          onClick={() => viewAttachments(item.attachments)}
+                        >
+                          📎 {item.attachments.length} файл(ов)
+                        </button>
+                      ) : (
+                        <span className="no-files">—</span>
+                      )}
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+      
+      {filteredData.length === 0 && (
+        <div className="no-data">
+          <p>Нет данных для отображения за выбранный период</p>
+        </div>
+      )}
+      
+      {showFileViewer && (
+        <FileViewer 
+          files={selectedFiles}
+          currentIndex={currentFileIndex}
+          onClose={() => setShowFileViewer(false)}
+          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
+          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
+        />
+      )}
     </div>
   );
 }
@@ -2667,8 +2649,12 @@ function MaintenanceSettings() {
 // =====================================================
 // ОСНОВНОЕ ПРИЛОЖЕНИЕ
 // =====================================================
+
+// =====================================================
 // Компонент для просмотра файлов
+// =====================================================
 function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
+  const currentFile = files[currentIndex];
   const url = currentFile.url.toLowerCase();
   const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif');
   const isPdf = url.endsWith('.pdf');
@@ -2739,6 +2725,9 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
     </div>
   );
 }
+
+// экспорт файлов
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeSection, setActiveSection] = useState('structure');
