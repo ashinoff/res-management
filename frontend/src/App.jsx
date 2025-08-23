@@ -1014,7 +1014,7 @@ function Notifications({ filterType }) {
   };
 
   // Функция загрузки файла прямо из уведомления АСКУЭ
-  const handleFileUpload = async (puNumber) => {
+  const handleFileUpload = async (puNumber, notificationData) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls,.csv';
@@ -1036,6 +1036,7 @@ function Notifications({ filterType }) {
       formData.append('file', file);
       formData.append('type', 'rim_single'); // По умолчанию РИМ
       formData.append('resId', user.resId);
+      formData.append('requiredPeriod', notificationData.checkFromDate);
       
       try {
         await api.post('/api/upload/analyze', formData, {
@@ -1043,6 +1044,8 @@ function Notifications({ filterType }) {
         });
         
         alert('Файл успешно загружен и обработан!');
+        await loadNotifications();
+        window.dispatchEvent(new CustomEvent('structureUpdated'));
         
         // Обновляем уведомления
         await loadNotifications();
@@ -1250,7 +1253,7 @@ function Notifications({ filterType }) {
                       <div className="notification-buttons">
                         <button 
                           className="btn-upload"
-                          onClick={() => handleFileUpload(data.puNumber)}
+                          onClick={() => handleFileUpload(data.puNumber, data)}
                           disabled={uploadingPu === data.puNumber}
                           title="Загрузить файл"
                         >
