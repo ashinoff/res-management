@@ -431,7 +431,7 @@ const CheckHistory = sequelize.define('CheckHistory', {
   status: {
     type: DataTypes.ENUM('awaiting_work', 'awaiting_recheck', 'completed'),
     defaultValue: 'awaiting_work'
-  }
+  },
    // НОВОЕ ПОЛЕ для хранения прикрепленных файлов
     attachments: {
       type: DataTypes.JSON,  // Будем хранить массив объектов с url и public_id
