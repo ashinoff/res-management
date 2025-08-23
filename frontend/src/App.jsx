@@ -1421,7 +1421,7 @@ const getPhaseErrors = useCallback((errorDetails) => {
               <button 
                 className="confirm-btn" 
                 onClick={handleCompleteWork}
-                disabled={comment.trim().split(/\s+/).filter(w => w.length > 0).length < 5}
+                disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
               >
                 Подтвердить выполнение
               </button>
