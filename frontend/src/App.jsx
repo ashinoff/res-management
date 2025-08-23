@@ -1837,16 +1837,8 @@ function Reports() {
     </div>
   );
 }
-// компонент просмотра файлов в конец Reports
-{showFileViewer && (
-  <FileViewer 
-    files={selectedFiles}
-    currentIndex={currentFileIndex}
-    onClose={() => setShowFileViewer(false)}
-    onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
-    onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
-  />
-)}
+
+
 // =====================================================
 // КОМПОНЕНТ НАСТРОЕК С УПРАВЛЕНИЕМ ПОЛЬЗОВАТЕЛЯМИ
 // =====================================================
