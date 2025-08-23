@@ -1896,17 +1896,170 @@ function Settings() {
         >
           🔧 Обслуживание
         </button>
+        <button 
+          className={activeTab === 'files' ? 'active' : ''}
+          onClick={() => setActiveTab('files')}
+        >
+          📎 Управление файлами
+        </button>
       </div>
       
       <div className="settings-content">
         {activeTab === 'structure' && <StructureSettings />}
         {activeTab === 'users' && <UserSettings />}
         {activeTab === 'maintenance' && <MaintenanceSettings />}
+        {activeTab === 'files' && <FileManagement />}
       </div>
     </div>
   );
 }
-
+// Новый подкомпонент управления файлами
+function FileManagement() {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  
+  useEffect(() => {
+    loadFiles();
+  }, []);
+  
+  const loadFiles = async () => {
+    try {
+      const response = await api.get('/api/admin/files');
+      setFiles(response.data.files);
+    } catch (error) {
+      console.error('Error loading files:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleDeleteFile = async () => {
+    try {
+      await api.delete(`/api/admin/files/${selectedFile.public_id}`, {
+        data: { password: deletePassword }
+      });
+      
+      alert('Файл удален успешно');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setSelectedFile(null);
+      loadFiles();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const getTotalSize = () => {
+    const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
+    return (totalBytes / 1024 / 1024).toFixed(2);
+  };
+  
+  if (loading) return <div className="loading">Загрузка...</div>;
+  
+  return (
+    <div className="settings-section">
+      <h3>📎 Управление загруженными файлами</h3>
+      
+      <div className="file-stats">
+        <div className="stat-card">
+          <h4>Всего файлов</h4>
+          <p className="stat-value">{files.length}</p>
+        </div>
+        <div className="stat-card">
+          <h4>Общий размер</h4>
+          <p className="stat-value">{getTotalSize()} MB</p>
+        </div>
+      </div>
+      
+      <div className="files-grid">
+        {files.map((file, idx) => (
+          <div key={idx} className="file-card">
+            {file.url.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+              <img src={file.url} alt={file.original_name} className="file-thumbnail" />
+            ) : (
+              <div className="file-icon">📄</div>
+            )}
+            
+            <div className="file-info">
+              <p className="file-name">{file.original_name}</p>
+              <p className="file-meta">
+                РЭС: {file.resName}<br/>
+                ТП: {file.tpName}<br/>
+                ПУ: {file.puNumber}<br/>
+                Дата: {new Date(file.uploadDate).toLocaleDateString('ru-RU')}
+              </p>
+            </div>
+            
+            <div className="file-actions">
+              <a 
+                href={file.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="btn-icon"
+                title="Открыть"
+              >
+                👁️
+              </a>
+              <button 
+                onClick={() => {
+                  setSelectedFile(file);
+                  setShowDeleteModal(true);
+                }}
+                className="btn-icon danger"
+                title="Удалить"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Модальное окно удаления */}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления файла</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить файл:</p>
+              <p><strong>{selectedFile?.original_name}</strong></p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDeleteFile}
+                disabled={!deletePassword}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 // Подкомпонент настроек структуры
 function StructureSettings() {
   const [file, setFile] = useState(null);
@@ -2512,7 +2665,78 @@ function MaintenanceSettings() {
 // =====================================================
 // ОСНОВНОЕ ПРИЛОЖЕНИЕ
 // =====================================================
-
+// Компонент для просмотра файлов
+function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
+  const currentFile = files[currentIndex];
+  const isImage = currentFile.url.match(/\.(jpg|jpeg|png|gif)$/i);
+  const isPdf = currentFile.url.match(/\.pdf$/i);
+  
+  return (
+    <div className="modal-backdrop file-viewer-backdrop" onClick={onClose}>
+      <div className="file-viewer-container" onClick={e => e.stopPropagation()}>
+        <div className="file-viewer-header">
+          <h3>Просмотр файлов ({currentIndex + 1} из {files.length})</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        
+        <div className="file-viewer-content">
+          {isImage ? (
+            <img 
+              src={currentFile.url} 
+              alt={currentFile.original_name}
+              className="file-viewer-image"
+            />
+          ) : isPdf ? (
+            <div className="pdf-viewer">
+              <iframe 
+                src={currentFile.url} 
+                width="100%" 
+                height="600px"
+                title={currentFile.original_name}
+              />
+              <a 
+                href={currentFile.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="pdf-download-link"
+              >
+                📥 Открыть PDF в новой вкладке
+              </a>
+            </div>
+          ) : (
+            <div className="file-not-supported">
+              <p>Предпросмотр недоступен</p>
+              <a 
+                href={currentFile.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="download-link"
+              >
+                📥 Скачать файл
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="file-viewer-info">
+          <p><strong>Имя файла:</strong> {currentFile.original_name}</p>
+          <p><strong>Загружен:</strong> {new Date(currentFile.uploaded_at).toLocaleString('ru-RU')}</p>
+        </div>
+        
+        {files.length > 1 && (
+          <div className="file-viewer-navigation">
+            <button onClick={onPrev} className="nav-btn">
+              ← Предыдущий
+            </button>
+            <button onClick={onNext} className="nav-btn">
+              Следующий →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeSection, setActiveSection] = useState('structure');
