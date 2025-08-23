@@ -1910,12 +1910,8 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
       const lastErrorMonthNum = monthMap[lastErrorMonth];
       
       // ВАЖНО: Проверяем, что последний месяц ошибки МЕНЬШЕ требуемого месяца
-      // Например: если требуется с августа (8), а ошибки до мая (5), то 5 < 8 - НЕ ПОДХОДИТ
       if (lastErrorMonthNum < requiredMonth) {
         console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
-        
-        // НЕ УДАЛЯЕМ УВЕДОМЛЕНИЕ ПРИ НЕВЕРНОМ ПЕРИОДЕ!
-        // await existingNotification.destroy(); // НЕ УДАЛЯЕМ!
         
         // Удаляем файл
         try {
@@ -1933,34 +1929,100 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
           errors: []
         });
       }
+      
+      // Дополнительная проверка: если есть первый месяц в диапазоне
+      if (foundMonths.length >= 2) {
+        const firstErrorMonth = foundMonths[0];
+        const firstErrorMonthNum = monthMap[firstErrorMonth];
+        
+        // Проверяем что требуемый месяц попадает в диапазон ошибок
+        if (requiredMonth > lastErrorMonthNum) {
+          console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
+          
+          return resolve({
+            processed: [{
+              puNumber: fileName,
+              status: 'wrong_period', 
+              error: `❌ Неверный период! В файле есть ошибки за ${firstErrorMonth}-${lastErrorMonth}, но требуется журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}. Выгрузите полный журнал событий с ${requiredDate.toLocaleDateString('ru-RU')}!`
+            }],
+            errors: []
+          });
+        }
+      }
     }
   }
   
   // УДАЛЯЕМ УВЕДОМЛЕНИЕ ТОЛЬКО ЕСЛИ ПЕРИОД ПРАВИЛЬНЫЙ!
   await existingNotification.destroy();
   console.log('Marked ASKUE notification as read');
+  
+  // Обработка результата перепроверки
+  if (!result.has_errors) {
+    // Ошибки исправлены
+    console.log(`Recheck successful - errors fixed for PU ${fileName}`);
     
-                 // Дополнительная проверка: если есть первый месяц в диапазоне
-                 if (foundMonths.length >= 2) {
-                   const firstErrorMonth = foundMonths[0];
-                   const firstErrorMonthNum = monthMap[firstErrorMonth];
-      
-                   // Проверяем что требуемый месяц попадает в диапазон ошибок
-                   if (requiredMonth > lastErrorMonthNum) {
-                     console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
-        
-                     return resolve({
-                       processed: [{
-                         puNumber: fileName,
-                         status: 'wrong_period', 
-                         error: `❌ Неверный период! В файле есть ошибки за ${firstErrorMonth}-${lastErrorMonth}, но требуется журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}. Выгрузите полный журнал событий с ${requiredDate.toLocaleDateString('ru-RU')}!`
-                       }],
-                       errors: []
-                     });
-                   }
-                 }
-               }
-             }
+    // Обновляем запись в истории
+    await CheckHistory.update({
+      recheckDate: new Date(),
+      recheckResult: 'ok',
+      status: 'completed'
+    }, {
+      where: {
+        puNumber: fileName,
+        status: 'awaiting_recheck'
+      }
+    });
+    
+    // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
+    await Notification.update(
+      { isRead: true },
+      {
+        where: {
+          type: 'error',
+          message: {
+            [Op.like]: `%"puNumber":"${fileName}"%`
+          }
+        }
+      }
+    );
+    
+    // Отправляем уведомление ответственному что проблема решена
+    await Notification.create({
+      fromUserId: 1, // Системное уведомление
+      toUserId: notifData.completedBy,
+      resId: networkStructure.resId,
+      networkStructureId: networkStructure.id,
+      type: 'success',
+      message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
+      isRead: false
+    });
+    
+  } else {
+    // Ошибки НЕ исправлены - возвращаем в мероприятия
+    console.log(`Recheck failed - errors still present for PU ${fileName}`);
+    
+    // Обновляем запись в истории
+    await CheckHistory.update({
+      recheckDate: new Date(),
+      recheckResult: 'error',
+      status: 'completed'
+    }, {
+      where: {
+        puNumber: fileName,
+        status: 'awaiting_recheck'
+      }
+    });
+    
+    // Создаем новое уведомление об ошибке для ответственных
+    errors.push({
+      puNumber: fileName,
+      error: result.summary,
+      details: result.details,
+      networkStructureId: networkStructure.id,
+      resId: networkStructure.resId
+    });
+  }
+} // <-- Закрываем if (existingNotification)
 
 // Вспомогательная функция для получения названия месяца
 function getMonthName(monthNum) {
@@ -1968,82 +2030,13 @@ function getMonthName(monthNum) {
                   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   return months[monthNum] || '';
 }
-              // КОНЕЦ ПРОВЕРКИ ПЕРИОДА
 
-              
-              if (!result.has_errors) {
-                // Ошибки исправлены
-                console.log(`Recheck successful - errors fixed for PU ${fileName}`);
-                
-                // Обновляем запись в истории
-                await CheckHistory.update({
-                  recheckDate: new Date(),
-                  recheckResult: 'ok',
-                  status: 'completed'
-                }, {
-                  where: {
-                    puNumber: fileName,
-                    status: 'awaiting_recheck'
-                  }
-                });
-                
-                // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
-                await Notification.update(
-                  { isRead: true },
-                  {
-                    where: {
-                      type: 'error',
-                      message: {
-                        [Op.like]: `%"puNumber":"${fileName}"%`
-                      }
-                    }
-                  }
-                );
-                
-                // Отправляем уведомление ответственному что проблема решена
-                await Notification.create({
-                  fromUserId: 1, // Системное уведомление
-                  toUserId: notifData.completedBy,
-                  resId: networkStructure.resId,
-                  networkStructureId: networkStructure.id,
-                  type: 'success',
-                  message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
-                  isRead: false
-                });
-                
-              } else {
-                // Ошибки НЕ исправлены - возвращаем в мероприятия
-                console.log(`Recheck failed - errors still present for PU ${fileName}`);
-                
-                // Обновляем запись в истории
-                await CheckHistory.update({
-                  recheckDate: new Date(),
-                  recheckResult: 'error',
-                  status: 'completed'
-                }, {
-                  where: {
-                    puNumber: fileName,
-                    status: 'awaiting_recheck'
-                  }
-                });
-                
-                // Создаем новое уведомление об ошибке для ответственных
-                errors.push({
-                  puNumber: fileName,
-                  error: result.summary,
-                  details: result.details,
-                  networkStructureId: networkStructure.id,
-                  resId: networkStructure.resId
-                });
-              }
-            }
-          }
-            // Добавляем в processed
-            processed.push({
-              puNumber: fileName,
-              status: result.has_errors ? 'checked_error' : 'checked_ok',
-              error: result.has_errors ? result.summary : null
-            });
+// Добавляем в processed
+processed.push({
+  puNumber: fileName,
+  status: result.has_errors ? 'checked_error' : 'checked_ok',
+  error: result.has_errors ? result.summary : null
+});
             
             // Если есть ошибки и это НЕ перепроверка - добавляем для уведомлений
             if (result.has_errors && !existingNotification) {
