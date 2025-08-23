@@ -1351,85 +1351,83 @@ const getPhaseErrors = useCallback((errorDetails) => {
       )}
 
       {/* Модальное окно для выполнения мероприятий */}
-      {showCompleteModal && selectedNotification && (
-        <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
-          <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Отметить выполнение мероприятий</h3>
-              <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="work-info">
-                <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
-                <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
-                <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
-              </div>
-              
-              <div className="form-group">
-                <label>Что было выполнено? (минимум 5 слов)</label>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Опишите выполненные работы..."
-                  rows={4}
-                />
-                <small className="word-count">
-                  Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
-                </small>
-              </div>
-              
-              <div className="form-group">
-                <label>Журнал событий требуется с даты:</label>
-                <input
-                  type="date"
-                  value={checkFromDate}
-                  onChange={(e) => setCheckFromDate(e.target.value)}
-                />
-              </div>
-            </div>
-          <div className="form-group">
-            <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
-            <input
-              type="file"
-              multiple
-              accept="image/*,application/pdf"
-              onChange={(e) => {
-                const files = Array.from(e.target.files).slice(0, 5);
-                setAttachedFiles(files);
-              }}
-            />
-            {attachedFiles.length > 0 && (
-              <div className="attached-files-list">
-                <p>Выбрано файлов: {attachedFiles.length}</p>
-                {attachedFiles.map((file, idx) => (
-                  <div key={idx} className="attached-file-item">
-                    {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+{showCompleteModal && selectedNotification && (
+  <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
+    <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Отметить выполнение мероприятий</h3>
+        <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
+      </div>
+      
+      <div className="modal-body">
+        <div className="work-info">
+          <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
+          <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
+          <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
         </div>
-
-
-
-            
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="confirm-btn" 
-                onClick={handleCompleteWork}
-                disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
-              >
-                Подтвердить выполнение
-              </button>
-            </div>
-          </div>
+        
+        <div className="form-group">
+          <label>Что было выполнено? (минимум 5 слов)</label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Опишите выполненные работы..."
+            rows={4}
+          />
+          <small className="word-count">
+            Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
+          </small>
         </div>
-      )}
+        
+        <div className="form-group">
+          <label>Журнал событий требуется с даты:</label>
+          <input
+            type="date"
+            value={checkFromDate}
+            onChange={(e) => setCheckFromDate(e.target.value)}
+          />
+        </div>
+        
+        {/* ЭТОТ БЛОК ДОЛЖЕН БЫТЬ ВНУТРИ modal-body! */}
+        <div className="form-group">
+          <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
+          <input
+            type="file"
+            multiple
+            accept="image/*,application/pdf"
+            onChange={(e) => {
+              const files = Array.from(e.target.files).slice(0, 5);
+              setAttachedFiles(files);
+            }}
+          />
+          {attachedFiles.length > 0 && (
+            <div className="attached-files-list">
+              <p>Выбрано файлов: {attachedFiles.length}</p>
+              {attachedFiles.map((file, idx) => (
+                <div key={idx} className="attached-file-item">
+                  {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div> {/* Закрываем modal-body */}
+      
+      <div className="modal-footer">
+        <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
+          Отмена
+        </button>
+        <button 
+          className="confirm-btn" 
+          onClick={handleCompleteWork}
+          disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
+        >
+          Подтвердить выполнение
+        </button>
+      </div>
+    </div> {/* Закрываем modal-content */}
+  </div> {/* Закрываем modal-backdrop */}
+)}
       
       {/* Модальное окно для удаления */}
       {showDeleteModal && (
