@@ -713,42 +713,46 @@ function FileUpload({ selectedRes }) {
   let wrongPeriodCount = 0;
   
   // Обрабатываем каждый файл
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    setUploadProgress({ current: i + 1, total: files.length });
+for (let i = 0; i < files.length; i++) {
+  const file = files[i];
+  setUploadProgress({ current: i + 1, total: files.length });
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', selectedType);
+  formData.append('resId', resIdToUse);
+  
+  try {
+    const response = await api.post('/api/upload/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', selectedType);
-    formData.append('resId', resIdToUse);
+    // Проверка на разные статусы
+    const firstDetail = response.data.details?.[0];
     
-    try {
-      const response = await api.post('/api/upload/analyze', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      // Проверка на дубликаты
-      const duplicates = response.data.details?.filter(d => d.status === 'duplicate_error');
-      if (duplicates && duplicates.length > 0) {
+    if (firstDetail) {
+      if (firstDetail.status === 'duplicate_error') {
         duplicatesCount++;
         results.push({
           fileName: file.name,
           status: 'duplicate',
-          message: duplicates[0].error
+          message: firstDetail.error
         });
-      } 
-      // Проверка на неверный период
-      else if (response.data.details?.some(d => d.status === 'wrong_period')) {
-        const wrongPeriod = response.data.details.find(d => d.status === 'wrong_period');
+      } else if (firstDetail.status === 'wrong_period') {
         wrongPeriodCount++;
         results.push({
           fileName: file.name,
           status: 'wrong_period',
-          message: wrongPeriod.error
+          message: firstDetail.error
         });
-      }
-      else {
-        // Подсчитываем результаты
+      } else if (firstDetail.status === 'not_in_structure') {
+        results.push({
+          fileName: file.name,
+          status: 'not_found',
+          message: 'ПУ не найден в структуре сети'
+        });
+      } else {
+        // Обычная обработка
         if (response.data.errors > 0) {
           problemsCount += response.data.errors;
         } else {
@@ -761,14 +765,15 @@ function FileUpload({ selectedRes }) {
           ...response.data
         });
       }
-      
-    } catch (error) {
-      errors.push({
-        fileName: file.name,
-        error: error.response?.data?.error || 'Ошибка загрузки'
-      });
     }
+    
+  } catch (error) {
+    errors.push({
+      fileName: file.name,
+      error: error.response?.data?.error || 'Ошибка загрузки'
+    });
   }
+}
   
   // Показываем итоговый результат
   setUploadResult({
@@ -1015,53 +1020,65 @@ function Notifications({ filterType }) {
 
   // Функция загрузки файла прямо из уведомления АСКУЭ
   const handleFileUpload = async (puNumber, notificationData) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls,.csv';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
     
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    // Проверяем имя файла
+    const fileName = file.name.split('.')[0];
+    if (fileName !== puNumber) {
+      alert(`Имя файла должно быть ${puNumber}.xls или ${puNumber}.xlsx`);
+      return;
+    }
+    
+    setUploadingPu(puNumber);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', 'rim_single');
+    formData.append('resId', user.resId);
+    formData.append('requiredPeriod', notificationData.checkFromDate);
+    
+    try {
+      const response = await api.post('/api/upload/analyze', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       
-      // Проверяем имя файла
-      const fileName = file.name.split('.')[0];
-      if (fileName !== puNumber) {
-        alert(`Имя файла должно быть ${puNumber}.xls или ${puNumber}.xlsx`);
-        return;
+      // ПРОВЕРЯЕМ РЕЗУЛЬТАТ!
+      if (response.data.details && response.data.details.length > 0) {
+        const firstResult = response.data.details[0];
+        
+        // Проверяем статус
+        if (firstResult.status === 'wrong_period') {
+          // Показываем ошибку периода
+          alert(firstResult.error);
+          // НЕ обновляем уведомления, чтобы можно было попробовать снова
+          return;
+        } else if (firstResult.status === 'duplicate_error') {
+          // Показываем ошибку дубликата
+          alert(firstResult.error);
+          return;
+        }
       }
       
-      setUploadingPu(puNumber);
+      // Если все ок
+      alert('Файл успешно загружен и обработан!');
+      await loadNotifications();
+      window.dispatchEvent(new CustomEvent('structureUpdated'));
       
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'rim_single'); // По умолчанию РИМ
-      formData.append('resId', user.resId);
-      formData.append('requiredPeriod', notificationData.checkFromDate);
-      
-      try {
-        await api.post('/api/upload/analyze', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        
-        alert('Файл успешно загружен и обработан!');
-        await loadNotifications();
-        window.dispatchEvent(new CustomEvent('structureUpdated'));
-        
-        // Обновляем уведомления
-        await loadNotifications();
-        
-        // Обновляем структуру
-        window.dispatchEvent(new CustomEvent('structureUpdated'));
-        
-      } catch (error) {
-        alert('Ошибка загрузки: ' + (error.response?.data?.error || error.message));
-      } finally {
-        setUploadingPu(null);
-      }
-    };
-    
-    input.click();
+    } catch (error) {
+      alert('Ошибка загрузки: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploadingPu(null);
+    }
   };
+  
+  input.click();
+};
 
   // ИСПРАВЛЕННАЯ функция определения фаз - без регулярных выражений!
   const getPhaseErrors = useCallback((errorDetails) => {
