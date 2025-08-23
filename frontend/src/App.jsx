@@ -78,7 +78,7 @@ function LoginForm({ onLogin }) {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2>Вход в систему РЭС</h2>
+        <h2>Вход в систему контроля уровня напряжения в сетях 0,4 кВ</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Логин</label>
@@ -122,7 +122,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
     { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
     { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
-    { id: 'documents', label: '📄 Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
@@ -131,7 +131,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
 
   return (
     <nav className="main-menu">
-      <h3>Меню РЭС</h3>
+      <h3>Меню</h3>
       {visibleItems.map(item => (
         <button
           key={item.id}
@@ -3030,7 +3030,7 @@ export default function App() {
         <div className="main-content">
           <header className="app-header">
             <div className="header-left">
-              <h1>Система управления РЭС</h1>
+              <h1>Система контроля уровня напрежения в сетях 0,4 кВ</h1>
               {user.role === 'admin' && (
                 <select 
                   value={selectedRes || ''}
