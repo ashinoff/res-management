@@ -122,6 +122,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
     { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
     { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
+    { id: 'documents', label: '📄 Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
@@ -2738,6 +2739,193 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
   );
 }
 
+// =====================================================
+// КОМПОНЕНТ ЗАГРУЖЕННЫХ ДОКУМЕНТОВ
+// =====================================================
+
+function UploadedDocuments() {
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const { user } = useContext(AuthContext);
+  
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+  
+  const loadDocuments = async () => {
+    try {
+      const response = await api.get('/api/documents/list');
+      setDocuments(response.data);
+    } catch (error) {
+      console.error('Error loading documents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleViewFile = (files) => {
+    setSelectedFiles(files);
+    setCurrentFileIndex(0);
+    setShowFileViewer(true);
+  };
+  
+  const handleDeleteFile = async () => {
+    try {
+      await api.delete(`/api/documents/${selectedFile.recordId}/${selectedFile.fileIndex}`, {
+        data: { password: deletePassword }
+      });
+      
+      alert('Файл удален успешно');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setSelectedFile(null);
+      loadDocuments();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  if (loading) return <div className="loading">Загрузка документов...</div>;
+  
+  return (
+    <div className="uploaded-documents">
+      <h2>📄 Загруженные документы</h2>
+      
+      <div className="documents-info">
+        <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
+      </div>
+      
+      <div className="documents-table">
+        <table>
+          <thead>
+            <tr>
+              <th>ТП</th>
+              <th>ВЛ</th>
+              <th>ПУ №</th>
+              <th>Загрузил</th>
+              <th>Дата загрузки</th>
+              <th>Комментарий</th>
+              <th>Статус</th>
+              <th>Файлы</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {documents.map((doc) => (
+              <tr key={doc.id}>
+                <td>{doc.tpName}</td>
+                <td>{doc.vlName}</td>
+                <td><strong>{doc.puNumber}</strong></td>
+                <td>{doc.uploadedBy}</td>
+                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                <td className="comment-cell">{doc.resComment}</td>
+                <td>
+                  <span className={`status-badge status-${doc.status}`}>
+                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
+                  </span>
+                </td>
+                <td>
+                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
+                </td>
+                <td>
+                  <div className="action-buttons">
+                    {doc.attachments && doc.attachments.length > 0 && (
+                      <button 
+                        className="btn-view"
+                        onClick={() => handleViewFile(doc.attachments)}
+                        title="Просмотреть"
+                      >
+                        👁️
+                      </button>
+                    )}
+                    {user.role === 'admin' && doc.attachments && doc.attachments.map((file, idx) => (
+                      <button 
+                        key={idx}
+                        className="btn-delete-small"
+                        onClick={() => {
+                          setSelectedFile({ ...file, recordId: doc.id, fileIndex: idx });
+                          setShowDeleteModal(true);
+                        }}
+                        title={`Удалить ${file.original_name}`}
+                      >
+                        🗑️
+                      </button>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {documents.length === 0 && (
+        <div className="no-data">
+          <p>Пока нет загруженных документов</p>
+        </div>
+      )}
+      
+      {/* Модальное окно удаления */}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления файла</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить файл:</p>
+              <p><strong>{selectedFile?.original_name}</strong></p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDeleteFile}
+                disabled={!deletePassword}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Просмотрщик файлов */}
+      {showFileViewer && (
+        <FileViewer 
+          files={selectedFiles}
+          currentIndex={currentFileIndex}
+          onClose={() => setShowFileViewer(false)}
+          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
+          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
+        />
+      )}
+    </div>
+  );
+}
+
+
 // экспорт файлов
 
 export default function App() {
@@ -2810,22 +2998,24 @@ export default function App() {
   }
 
   const renderContent = () => {
-    switch (activeSection) {
-      case 'structure':
-        return <NetworkStructure selectedRes={selectedRes} />;
-      case 'upload':
-        return <FileUpload selectedRes={selectedRes} />;
-      case 'tech_pending':
-        return <Notifications filterType="error" />;
-      case 'askue_pending':
-        return <Notifications filterType="pending_askue" />;
-      case 'reports':
-        return <Reports />;
-      case 'settings':
-        return <Settings />;
-      default:
-        return <NetworkStructure selectedRes={selectedRes} />;
-    }
+     switch (activeSection) {
+    case 'structure':
+      return <NetworkStructure selectedRes={selectedRes} />;
+    case 'upload':
+      return <FileUpload selectedRes={selectedRes} />;
+    case 'tech_pending':
+      return <Notifications filterType="error" />;
+    case 'askue_pending':
+      return <Notifications filterType="pending_askue" />;
+    case 'documents':
+      return <UploadedDocuments />; // НОВОЕ!
+    case 'reports':
+      return <Reports />;
+    case 'settings':
+      return <Settings />;
+    default:
+      return <NetworkStructure selectedRes={selectedRes} />;
+  }
   };
 
   return (
