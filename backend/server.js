@@ -458,6 +458,7 @@ UploadHistory.belongsTo(User, { foreignKey: 'userId' });
 UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
+CheckHistory.belongsTo(User, { as: 'uploadedByUser', foreignKey: 'resId' });
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -2255,6 +2256,90 @@ async function initializeDatabase() {
     process.exit(1);
   }
 }
+
+
+// API для получения документов
+app.get('/api/documents/list', authenticateToken, async (req, res) => {
+  try {
+    let whereClause = {};
+    
+    // Фильтрация по РЭС для не-админов
+    if (req.user.role !== 'admin') {
+      whereClause.resId = req.user.resId;
+    }
+    
+    const documents = await CheckHistory.findAll({
+      where: {
+        ...whereClause,
+        attachments: {
+          [Op.ne]: []
+        }
+      },
+      include: [
+        ResUnit,
+        {
+          model: User,
+          
+        }
+      ],
+      order: [['workCompletedDate', 'DESC']]
+    });
+    
+    const formattedDocs = documents.map(doc => ({
+      id: doc.id,
+      tpName: doc.tpName,
+      vlName: doc.vlName,
+      puNumber: doc.puNumber,
+      uploadedBy: doc.ResUnit?.name || 'Неизвестно',
+      workCompletedDate: doc.workCompletedDate,
+      resComment: doc.resComment,
+      status: doc.status,
+      attachments: doc.attachments || []
+    }));
+    
+    res.json(formattedDocs);
+  } catch (error) {
+    console.error('Get documents error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API для удаления конкретного файла из записи
+app.delete('/api/documents/:recordId/:fileIndex', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      const { recordId, fileIndex } = req.params;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      const record = await CheckHistory.findByPk(recordId);
+      if (!record) {
+        return res.status(404).json({ error: 'Запись не найдена' });
+      }
+      
+      const fileToDelete = record.attachments[parseInt(fileIndex)];
+      if (!fileToDelete) {
+        return res.status(404).json({ error: 'Файл не найден' });
+      }
+      
+      // Удаляем из Cloudinary
+      await cloudinary.uploader.destroy(fileToDelete.public_id);
+      
+      // Удаляем из массива
+      const newAttachments = record.attachments.filter((_, idx) => idx !== parseInt(fileIndex));
+      await record.update({ attachments: newAttachments });
+      
+      res.json({ success: true, message: 'Файл удален' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
 
 // Запуск сервера
 initializeDatabase().then(() => {
