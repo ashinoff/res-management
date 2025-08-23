@@ -987,7 +987,7 @@ app.post('/api/notifications/:id/complete-work',
         initialCheckDate: notification.createdAt,
         resComment: comment,
         workCompletedDate: new Date(),
-        status: 'awaiting_recheck'
+        status: 'awaiting_recheck',
         attachments: attachments
       }, { transaction });
       
