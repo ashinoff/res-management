@@ -541,9 +541,9 @@ const getPhaseErrors = () => {
   
   // Проверяем текст только на явные упоминания
   if (errorSummary) {
-    if (errorSummary.match(/Фаза\s*A|phase_A/)) phases.A = true;
-    if (errorSummary.match(/Фаза\s*B|phase_B/)) phases.B = true;
-    if (errorSummary.match(/Фаза\s*C|phase_C/)) phases.C = true;
+    if (errorSummary.indexOf('Фаза A') !== -1 || errorSummary.indexOf('phase_A') !== -1) phases.A = true;
+    if (errorSummary.indexOf('Фаза B') !== -1 || errorSummary.indexOf('phase_B') !== -1) phases.B = true;
+    if (errorSummary.indexOf('Фаза C') !== -1 || errorSummary.indexOf('phase_C') !== -1) phases.C = true;
   }
   
   return phases;
@@ -1273,9 +1273,9 @@ const getPhaseErrors = useCallback((errorDetails) => {
     }
     
     const errorText = detailsNotification.data.errorDetails || '';
-    if (errorText.match(/Фаза\s*A|phase_A/)) phases.A = true;
-    if (errorText.match(/Фаза\s*B|phase_B/)) phases.B = true;
-    if (errorText.match(/Фаза\s*C|phase_C/)) phases.C = true;
+    if (errorText.indexOf('Фаза A') !== -1 || errorText.indexOf('phase_A') !== -1) phases.A = true;
+    if (errorText.indexOf('Фаза B') !== -1 || errorText.indexOf('phase_B') !== -1) phases.B = true;
+    if (errorText.indexOf('Фаза C') !== -1 || errorText.indexOf('phase_C') !== -1) phases.C = true;
     
     return (
       <>
@@ -1375,7 +1375,7 @@ const getPhaseErrors = useCallback((errorDetails) => {
                   rows={4}
                 />
                 <small className="word-count">
-                  Слов: {comment.trim().split(/\s+/).filter(w => w.length > 0).length} из 5
+                  Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
                 </small>
               </div>
               
@@ -1529,7 +1529,7 @@ const exportStructureToExcel = () => {
   
   XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
   
-  const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.xlsx`;
+  const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
   XLSX.writeFile(wb, fileName);
   
   alert(`Структура сети экспортирована в файл: ${fileName}`);
@@ -1685,7 +1685,7 @@ const exportToExcel = () => {
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   
   // Генерируем имя файла
-  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.xlsx`;
+  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
   
   // Сохраняем файл
   XLSX.writeFile(wb, fileName);
