@@ -1901,6 +1901,9 @@ function FileManagement() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   
   useEffect(() => {
     loadFiles();
@@ -2040,6 +2043,18 @@ function FileManagement() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+  {/* Просмотрщик файлов */}
+      {showFileViewer && (
+        <FileViewer 
+          files={selectedFiles}
+          currentIndex={currentFileIndex}
+          onClose={() => setShowFileViewer(false)}
+          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
+          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
+        />
       )}
     </div>
   );
