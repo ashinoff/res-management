@@ -28,18 +28,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* Удалите старый градиент и добавьте новые стили */
+  position: relative;
+  overflow: hidden;
 }
 
 .login-box {
-  background: white;
+  background: rgba(255, 255, 255, 0.95); /* Немного прозрачности */
+  backdrop-filter: blur(10px); /* Эффект размытия */
   padding: 48px;
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   width: 100%;
   max-width: 420px;
   transform: translateY(0);
   transition: transform 0.3s ease;
+  position: relative; /* Важно! */
+  z-index: 3; /* Поверх градиента */
 }
 
 .login-box:hover {
@@ -2386,4 +2391,36 @@ tr.selected {
 
 .btn-delete-small:hover {
   background: #e53e3e;
+}
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Фоновое изображение - замените URL на свое */
+  background-image: url('/images/login-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Градиент от прозрачного к темно-синему */
+  filter: brightness(0.7);
+  z-index: 1;
+}
+.login-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Диагональный градиент от прозрачного к темно-синему */
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0) 0%,
+    rgba(28, 43, 81, 0.4) 30%,
+    rgba(28, 43, 81, 0.7) 60%,
+    rgba(28, 43, 81, 0.95) 100%
+  );
+  z-index: 2;
 }
