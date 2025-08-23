@@ -2015,7 +2015,19 @@ function FileManagement() {
               <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              {/* ... */}
+              <p>Вы собираетесь удалить файл:</p>
+              <p><strong>{selectedFile?.original_name}</strong></p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
@@ -2033,7 +2045,7 @@ function FileManagement() {
         </div>
       )}
       
-      {/* Просмотрщик файлов - ДОЛЖЕН БЫТЬ ЗДЕСЬ, ВНУТРИ return! */}
+      {/* Просмотрщик файлов */}
       {showFileViewer && (
         <FileViewer 
           files={selectedFiles}
@@ -2043,8 +2055,8 @@ function FileManagement() {
           onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
         />
       )}
-    </div>  {/* Это закрывающий div от settings-section */}
-  );  {/* Это закрытие return */}
+    </div>
+  );
 }
 // Подкомпонент настроек структуры
 function StructureSettings() {
