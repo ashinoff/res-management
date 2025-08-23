@@ -32,6 +32,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { Sequelize, DataTypes, Op } = require('sequelize');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 // =====================================================
 // КОНФИГУРАЦИЯ И ИНИЦИАЛИЗАЦИЯ
@@ -69,6 +71,37 @@ app.get('/', (req, res) => {
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
+// Конфигурация Cloudinary - автоматически использует CLOUDINARY_URL из .env
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Настройка хранилища для multer
+const cloudinaryStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'res-management', // папка в Cloudinary
+    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+    transformation: [{ width: 1920, height: 1920, crop: 'limit', quality: 'auto' }],
+    // Генерируем уникальное имя файла
+    public_id: (req, file) => {
+      const timestamp = Date.now();
+      const originalName = file.originalname.split('.')[0];
+      return `${req.body.type || 'attachment'}_${timestamp}_${originalName}`;
+    }
+  }
+});
+
+// Создаем новый upload middleware для Cloudinary
+const uploadToCloud = multer({ 
+  storage: cloudinaryStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB максимум
+  }
+});
+
 
 // =====================================================
 // ПОДКЛЮЧЕНИЕ К БД (PostgreSQL на Render)
@@ -399,6 +432,12 @@ const CheckHistory = sequelize.define('CheckHistory', {
     type: DataTypes.ENUM('awaiting_work', 'awaiting_recheck', 'completed'),
     defaultValue: 'awaiting_work'
   }
+   // НОВОЕ ПОЛЕ для хранения прикрепленных файлов
+    attachments: {
+      type: DataTypes.JSON,  // Будем хранить массив объектов с url и public_id
+      defaultValue: []
+  }
+
 });
 
 // =====================================================
@@ -897,7 +936,8 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
 // 8. ВЫПОЛНЕНИЕ МЕРОПРИЯТИЙ
 app.post('/api/notifications/:id/complete-work', 
   authenticateToken, 
-  checkRole(['res_responsible']), 
+  checkRole(['res_responsible']),
+  uploadToCloud.array('attachments', 5), // Позволяем загрузить до 5 файлов
   async (req, res) => {
     const transaction = await sequelize.transaction();
     
@@ -909,6 +949,21 @@ app.post('/api/notifications/:id/complete-work',
       if (wordCount < 5) {
         return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
       }
+      // Обрабатываем загруженные файлы
+      const attachments = [];
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          attachments.push({
+            url: file.path, // Cloudinary URL
+            public_id: file.filename, // Cloudinary public_id для удаления
+            original_name: file.originalname,
+            size: file.size,
+            uploaded_at: new Date()
+          });
+        }
+        console.log(`Uploaded ${attachments.length} files to Cloudinary`);
+      }
+
       
       // Находим уведомление
       const notification = await Notification.findByPk(req.params.id);
@@ -933,6 +988,7 @@ app.post('/api/notifications/:id/complete-work',
         resComment: comment,
         workCompletedDate: new Date(),
         status: 'awaiting_recheck'
+        attachments: attachments
       }, { transaction });
       
       // Обновляем статус ПУ на pending_recheck
@@ -984,6 +1040,17 @@ app.post('/api/notifications/:id/complete-work',
       res.json({ success: true, message: 'Мероприятия отмечены как выполненные' });
       
     } catch (error) {
+       // Если ошибка - удаляем загруженные файлы из Cloudinary
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          try {
+            await cloudinary.uploader.destroy(file.filename);
+          } catch (err) {
+            console.error('Error deleting file from Cloudinary:', err);
+          }
+        }
+      }
+      
       await transaction.rollback();
       console.error('Complete work error:', error);
       res.status(500).json({ error: error.message });
@@ -1325,7 +1392,79 @@ app.get('/api/reports/export-history',
       res.status(500).json({ error: error.message });
     }
 });
+// Получение всех файлов
+app.get('/api/admin/files', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const records = await CheckHistory.findAll({
+        where: {
+          attachments: {
+            [Op.ne]: []
+          }
+        },
+        include: [ResUnit],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Собираем все файлы с информацией
+      const files = [];
+      records.forEach(record => {
+        record.attachments.forEach(file => {
+          files.push({
+            ...file,
+            recordId: record.id,
+            resName: record.ResUnit?.name,
+            tpName: record.tpName,
+            puNumber: record.puNumber,
+            uploadDate: record.workCompletedDate
+          });
+        });
+      });
+      
+      res.json({ files, total: files.length });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
 
+// Удаление файла
+app.delete('/api/admin/files/:public_id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      // Удаляем из Cloudinary
+      await cloudinary.uploader.destroy(req.params.public_id);
+      
+      // Удаляем из БД
+      const records = await CheckHistory.findAll({
+        where: {
+          attachments: {
+            [Op.contains]: [{public_id: req.params.public_id}]
+          }
+        }
+      });
+      
+      for (const record of records) {
+        const newAttachments = record.attachments.filter(
+          file => file.public_id !== req.params.public_id
+        );
+        await record.update({ attachments: newAttachments });
+      }
+      
+      res.json({ success: true, message: 'Файл удален' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
 
 
 // =====================================================
