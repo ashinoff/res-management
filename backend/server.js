@@ -2269,21 +2269,17 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
     }
     
     const documents = await CheckHistory.findAll({
-      where: {
-        ...whereClause,
-        attachments: {
-          [Op.ne]: []
-        }
-      },
-      include: [
-        ResUnit,
-        {
-          model: User,
-          
-        }
-      ],
-      order: [['workCompletedDate', 'DESC']]
-    });
+  where: {
+    ...whereClause,
+    attachments: {
+      [Op.ne]: []
+    }
+  },
+  include: [
+    ResUnit  // Оставляем только ResUnit
+  ],
+  order: [['workCompletedDate', 'DESC']]
+});
     
     const formattedDocs = documents.map(doc => ({
       id: doc.id,
