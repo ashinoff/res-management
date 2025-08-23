@@ -2014,3 +2014,29 @@ tr.selected {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
 }
+/* Стили для файлов прикреп */
+.attached-files-list {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f7fafc;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.attached-file-item {
+  padding: 4px 0;
+  color: #4a5568;
+}
+
+.file-preview {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.file-preview:hover {
+  transform: scale(1.05);
+}
