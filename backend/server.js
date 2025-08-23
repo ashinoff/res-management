@@ -1924,7 +1924,10 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
           processed: [{
             puNumber: fileName,
             status: 'wrong_period',
-            error: `❌ Неверный период! Требуется журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}, а в загруженном файле данные только до ${lastErrorMonth}. Необходимо выгрузить журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату!`
+            error: `❌ Неверный период! 
+            Требуется: журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату
+            Загружен: данные до ${lastErrorMonth} ${requiredYear}
+            Необходимо выгрузить полный журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}!``
           }],
           errors: []
         });
@@ -1943,7 +1946,10 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
             processed: [{
               puNumber: fileName,
               status: 'wrong_period', 
-              error: `❌ Неверный период! В файле есть ошибки за ${firstErrorMonth}-${lastErrorMonth}, но требуется журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}. Выгрузите полный журнал событий с ${requiredDate.toLocaleDateString('ru-RU')}!`
+              error: `❌ Неверный период! 
+              Требуется: журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату
+              Загружен: данные до ${lastErrorMonth} ${requiredYear}
+              Необходимо выгрузить полный журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
             }],
             errors: []
           });
