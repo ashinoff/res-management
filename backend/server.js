@@ -714,7 +714,7 @@ app.post('/api/upload/analyze',
   async (req, res) => {
     let uploadRecord;
     try {
-      const { type } = req.body;
+      const { type, requiredPeriod } = req.body;
       const userId = req.user.id;
       
       // Берем resId из body (если есть) или из токена пользователя
@@ -746,7 +746,8 @@ app.post('/api/upload/analyze',
       const analysisResult = await analyzeFile(
         req.file.path, 
         type, 
-        req.file.originalname  // передаем оригинальное имя
+        req.file.originalname, // передаем оригинальное имя
+        requiredPeriod
       );
       
       console.log('Analysis result:', {
@@ -1716,7 +1717,7 @@ app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), asyn
 // =====================================================
 
 // Анализ файлов через Python скрипты
-async function analyzeFile(filePath, type, originalFileName = null) {
+async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null) {
   return new Promise((resolve, reject) => {
     let scriptPath;
     
