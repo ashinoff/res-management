@@ -1312,7 +1312,8 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
           resComment: h.resComment,
           workCompletedDate: h.workCompletedDate,
           recheckDate: h.recheckDate,
-          recheckResult: h.recheckResult
+          recheckResult: h.recheckResult,
+          attachments: h.attachments || []
         }));
         break;
     }
