@@ -456,10 +456,6 @@ button:disabled {
   top: 70px;
   z-index: 90;
   background: white;
-}
-
-  /* Добавляем белый фон для перекрытия */
-  background: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
@@ -467,7 +463,7 @@ button:disabled {
 .structure-table table {
   width: 100%;
   border-collapse: collapse;
-   table-layout: auto;
+  table-layout: auto;
 }
 
 /* Специальные стили для колонок */
