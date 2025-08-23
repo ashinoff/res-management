@@ -849,6 +849,7 @@ function Notifications({ filterType }) {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsNotification, setDetailsNotification] = useState(null);
   const [uploadingPu, setUploadingPu] = useState(null);
+  const [attachedFiles, setAttachedFiles] = useState([]);
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
@@ -1978,7 +1979,10 @@ function FileManagement() {
       <div className="files-grid">
         {files.map((file, idx) => (
           <div key={idx} className="file-card">
-            {file.url.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+            {(file.url.toLowerCase().endsWith('.jpg') || 
+              file.url.toLowerCase().endsWith('.jpeg') || 
+              file.url.toLowerCase().endsWith('.png') || 
+              file.url.toLowerCase().endsWith('.gif')) ? (
               <img src={file.url} alt={file.original_name} className="file-thumbnail" />
             ) : (
               <div className="file-icon">📄</div>
@@ -2667,9 +2671,9 @@ function MaintenanceSettings() {
 // =====================================================
 // Компонент для просмотра файлов
 function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
-  const currentFile = files[currentIndex];
-  const isImage = currentFile.url.match(/\.(jpg|jpeg|png|gif)$/i);
-  const isPdf = currentFile.url.match(/\.pdf$/i);
+  const url = currentFile.url.toLowerCase();
+  const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif');
+  const isPdf = url.endsWith('.pdf');
   
   return (
     <div className="modal-backdrop file-viewer-backdrop" onClick={onClose}>
