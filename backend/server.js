@@ -2274,17 +2274,15 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
     }
     
     const documents = await CheckHistory.findAll({
-  where: {
-    ...whereClause,
-    attachments: {
-      [Op.ne]: []
-    }
-  },
-  include: [
-    ResUnit  // Оставляем только ResUnit
-  ],
-  order: [['workCompletedDate', 'DESC']]
-});
+      where: {
+        ...whereClause,
+        attachments: {
+          [Op.ne]: []  // Только записи с файлами
+        }
+      },
+      include: [ResUnit],
+      order: [['workCompletedDate', 'DESC']]
+    });
     
     const formattedDocs = documents.map(doc => ({
       id: doc.id,
@@ -2305,7 +2303,47 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
   }
 });
 
-// API для удаления конкретного файла из записи
+// API для управления файлами
+app.get('/api/admin/files', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const records = await CheckHistory.findAll({
+        where: {
+          attachments: {
+            [Op.ne]: []
+          }
+        },
+        include: [ResUnit],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Собираем все файлы
+      const files = [];
+      records.forEach(record => {
+        if (record.attachments && Array.isArray(record.attachments)) {
+          record.attachments.forEach(file => {
+            files.push({
+              ...file,
+              recordId: record.id,
+              resName: record.ResUnit?.name,
+              tpName: record.tpName,
+              puNumber: record.puNumber,
+              uploadDate: record.workCompletedDate || record.createdAt
+            });
+          });
+        }
+      });
+      
+      res.json({ files, total: files.length });
+    } catch (error) {
+      console.error('Error in /api/admin/files:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// API для удаления файла из документа
 app.delete('/api/documents/:recordId/:fileIndex', 
   authenticateToken, 
   checkRole(['admin']), 
@@ -2340,7 +2378,6 @@ app.delete('/api/documents/:recordId/:fileIndex',
       res.status(500).json({ error: error.message });
     }
 });
-
 
 // Запуск сервера
 initializeDatabase().then(() => {
