@@ -1909,47 +1909,43 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
     const foundMonths = errorText.match(monthPattern);
     
     if (foundMonths && foundMonths.length > 0) {
-      // Берем ПОСЛЕДНИЙ месяц из диапазона (например, из "Мар-Май" берем "Май")
-      const lastErrorMonth = foundMonths[foundMonths.length - 1];
-      const lastErrorMonthNum = monthMap[lastErrorMonth];
+  // Объявляем переменные в начале блока, чтобы они были видны везде
+  const lastErrorMonth = foundMonths[foundMonths.length - 1];
+  const lastErrorMonthNum = monthMap[lastErrorMonth];
+  
+  // Первая проверка
+  if (lastErrorMonthNum < requiredMonth) {
+    console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
+    
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error('Error deleting file:', err);
+    }
+    
+    return resolve({
+      processed: [{
+        puNumber: fileName,
+        status: 'wrong_period',
+        error: `❌ Неверный период! Требуется журнал событий с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату. Необходимо выгрузить полный журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
+      }],
+      errors: []
+    });
+  }
+  
+  // Дополнительная проверка: если есть диапазон месяцев
+  if (foundMonths.length >= 2) {
+    const firstErrorMonth = foundMonths[0];
+    const firstErrorMonthNum = monthMap[firstErrorMonth];
+    
+    // Теперь lastErrorMonth и lastErrorMonthNum видны здесь!
+    if (requiredMonth > lastErrorMonthNum) {
+      console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
       
-      // ВАЖНО: Проверяем, что последний месяц ошибки МЕНЬШЕ требуемого месяца
-      if (lastErrorMonthNum < requiredMonth) {
-        console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
-        
-        // Удаляем файл
-        try {
-          fs.unlinkSync(filePath);
-        } catch (err) {
-          console.error('Error deleting file:', err);
-        }
-        
-        return resolve({
-          processed: [{
-            puNumber: fileName,
-            status: 'wrong_period',
-            error: `❌ Неверный период! 
-            Требуется: журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату
-            Загружен: данные до ${lastErrorMonth} ${requiredYear}
-            Необходимо выгрузить полный журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}!``
-          }],
-          errors: []
-        });
-      }
-      
-      // Дополнительная проверка: если есть первый месяц в диапазоне
-      if (foundMonths.length >= 2) {
-        const firstErrorMonth = foundMonths[0];
-        const firstErrorMonthNum = monthMap[firstErrorMonth];
-        
-        // Проверяем что требуемый месяц попадает в диапазон ошибок
-        if (requiredMonth > lastErrorMonthNum) {
-          console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
-          
-          return resolve({
-            processed: [{
-              puNumber: fileName,
-              status: 'wrong_period', 
+      return resolve({
+        processed: [{
+          puNumber: fileName,
+          status: 'wrong_period', 
               error: `❌ Неверный период! 
               Требуется: журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату
               Загружен: данные до ${lastErrorMonth} ${requiredYear}
