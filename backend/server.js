@@ -964,6 +964,7 @@ app.post('/api/notifications/:id/complete-work',
           });
         }
         console.log(`Uploaded ${attachments.length} files to Cloudinary`);
+        console.log('Attachments data:', JSON.stringify(attachments, null, 2));
       }
 
       
@@ -992,7 +993,7 @@ app.post('/api/notifications/:id/complete-work',
         status: 'awaiting_recheck',
         attachments: attachments
       }, { transaction });
-      
+      console.log('CheckHistory created with attachments:', attachments.length);
       // Обновляем статус ПУ на pending_recheck
       await PuStatus.update(
         { status: 'pending_recheck' },
@@ -1409,6 +1410,7 @@ app.get('/api/admin/files',
         },
         include: [ResUnit],
         order: [['createdAt', 'DESC']]
+        console.log('Found records with attachments:', records.length);
       });
       
       // Собираем все файлы с информацией
@@ -1425,9 +1427,10 @@ app.get('/api/admin/files',
           });
         });
       });
-      
+      console.log('Total files found:', files.length);
       res.json({ files, total: files.length });
     } catch (error) {
+      console.error('Error in /api/admin/files:', error);
       res.status(500).json({ error: error.message });
     }
 });
