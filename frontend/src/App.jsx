@@ -1927,7 +1927,9 @@ function FileManagement() {
   
   const loadFiles = async () => {
     try {
+      console.log('Loading files...');
       const response = await api.get('/api/admin/files');
+      console.log('Files response:', response.data);
       setFiles(response.data.files);
     } catch (error) {
       console.error('Error loading files:', error);
