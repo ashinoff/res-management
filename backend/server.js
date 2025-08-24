@@ -1408,26 +1408,27 @@ app.get('/api/admin/files',
             [Op.ne]: []
           }
         },
-        include: [ResUnit],
+        include: [ResUnit], // Убрали неправильный include User
         order: [['createdAt', 'DESC']]
-        console.log('Found records with attachments:', records.length);
       });
       
       // Собираем все файлы с информацией
       const files = [];
       records.forEach(record => {
-        record.attachments.forEach(file => {
-          files.push({
-            ...file,
-            recordId: record.id,
-            resName: record.ResUnit?.name,
-            tpName: record.tpName,
-            puNumber: record.puNumber,
-            uploadDate: record.workCompletedDate
+        if (record.attachments && Array.isArray(record.attachments)) {
+          record.attachments.forEach(file => {
+            files.push({
+              ...file,
+              recordId: record.id,
+              resName: record.ResUnit?.name,
+              tpName: record.tpName,
+              puNumber: record.puNumber,
+              uploadDate: record.workCompletedDate || record.createdAt
+            });
           });
-        });
+        }
       });
-      console.log('Total files found:', files.length);
+      
       res.json({ files, total: files.length });
     } catch (error) {
       console.error('Error in /api/admin/files:', error);
