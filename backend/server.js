@@ -2274,16 +2274,16 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
     }
     
     const documents = await CheckHistory.findAll({
-      where: {
-        ...whereClause,
-        attachments: {
-          [Op.ne]: []  // Только записи с файлами
-        }
-      },
+      where: whereClause,
       include: [ResUnit],
       order: [['workCompletedDate', 'DESC']]
     });
-    
+    // Фильтруем после получения
+const documentsWithFiles = documents.filter(doc => 
+  doc.attachments && 
+  Array.isArray(doc.attachments) && 
+  doc.attachments.length > 0
+);
     const formattedDocs = documents.map(doc => ({
       id: doc.id,
       tpName: doc.tpName,
@@ -2310,15 +2310,17 @@ app.get('/api/admin/files',
   async (req, res) => {
     try {
       const records = await CheckHistory.findAll({
-        where: {
-          attachments: {
-            [Op.ne]: []
-          }
-        },
+        
         include: [ResUnit],
         order: [['createdAt', 'DESC']]
       });
-      
+
+      // Фильтруем в JS
+const recordsWithFiles = records.filter(record => 
+  record.attachments && 
+  Array.isArray(record.attachments) && 
+  record.attachments.length > 0
+);
       // Собираем все файлы
       const files = [];
       records.forEach(record => {
