@@ -1396,45 +1396,7 @@ app.get('/api/reports/export-history',
       res.status(500).json({ error: error.message });
     }
 });
-// Получение всех файлов
-app.get('/api/admin/files', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  async (req, res) => {
-    try {
-      const records = await CheckHistory.findAll({
-        where: {
-          attachments: {
-            [Op.ne]: []
-          }
-        },
-        include: [ResUnit], // Убрали неправильный include User
-        order: [['createdAt', 'DESC']]
-      });
-      
-      // Собираем все файлы с информацией
-      const files = [];
-      records.forEach(record => {
-        if (record.attachments && Array.isArray(record.attachments)) {
-          record.attachments.forEach(file => {
-            files.push({
-              ...file,
-              recordId: record.id,
-              resName: record.ResUnit?.name,
-              tpName: record.tpName,
-              puNumber: record.puNumber,
-              uploadDate: record.workCompletedDate || record.createdAt
-            });
-          });
-        }
-      });
-      
-      res.json({ files, total: files.length });
-    } catch (error) {
-      console.error('Error in /api/admin/files:', error);
-      res.status(500).json({ error: error.message });
-    }
-});
+
 
 // Удаление файла
 app.delete('/api/admin/files/:public_id', 
@@ -2303,27 +2265,28 @@ const documentsWithFiles = documents.filter(doc =>
   }
 });
 
-// API для управления файлами
+// API для управления файлами 
 app.get('/api/admin/files', 
   authenticateToken, 
   checkRole(['admin']), 
   async (req, res) => {
     try {
+      // Получаем ВСЕ записи без проблемного where
       const records = await CheckHistory.findAll({
-        
         include: [ResUnit],
         order: [['createdAt', 'DESC']]
       });
-
-      // Фильтруем в JS
-const recordsWithFiles = records.filter(record => 
-  record.attachments && 
-  Array.isArray(record.attachments) && 
-  record.attachments.length > 0
-);
+      
+      // Фильтруем в JavaScript
+      const recordsWithFiles = records.filter(record => 
+        record.attachments && 
+        Array.isArray(record.attachments) && 
+        record.attachments.length > 0
+      );
+      
       // Собираем все файлы
       const files = [];
-      records.forEach(record => {
+      recordsWithFiles.forEach(record => {
         if (record.attachments && Array.isArray(record.attachments)) {
           record.attachments.forEach(file => {
             files.push({
@@ -2343,7 +2306,7 @@ const recordsWithFiles = records.filter(record =>
       console.error('Error in /api/admin/files:', error);
       res.status(500).json({ error: error.message });
     }
-});
+  });
 
 // API для удаления файла из документа
 app.delete('/api/documents/:recordId/:fileIndex', 
