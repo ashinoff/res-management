@@ -2336,9 +2336,16 @@ app.delete('/api/documents/:recordId/:fileIndex',
       
       // Удаляем из массива
       const newAttachments = record.attachments.filter((_, idx) => idx !== parseInt(fileIndex));
-      await record.update({ attachments: newAttachments });
       
-      res.json({ success: true, message: 'Файл удален' });
+      // ЕСЛИ ФАЙЛОВ БОЛЬШЕ НЕТ - УДАЛЯЕМ ВСЮ ЗАПИСЬ
+      if (newAttachments.length === 0) {
+        await record.destroy();
+        res.json({ success: true, message: 'Запись полностью удалена' });
+      } else {
+        await record.update({ attachments: newAttachments });
+        res.json({ success: true, message: 'Файл удален' });
+      }
+      
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
