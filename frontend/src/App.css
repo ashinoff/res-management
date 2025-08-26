@@ -156,7 +156,7 @@ button:disabled {
 /* Главное меню */
 .main-menu {
   width: 260px;
-  background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+  background: linear-gradient(180deg, #0c4a6e 0%, #2d3748 100%);
   color: white;
   padding: 24px;
   overflow-y: auto;
@@ -197,9 +197,9 @@ button:disabled {
 }
 
 .main-menu button.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #2d3748 0%, #0c4a6e 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 12px 12px rgba(102, 126, 234, 0.3);
 }
 
 /* Основной контент */
@@ -476,18 +476,21 @@ button:disabled {
 .structure-table td:nth-child(2) {
   min-width: 120px; /* РЭС */
   font-size: 13px;
+text-align: left;
 }
 
 .structure-table th:nth-child(3),
 .structure-table td:nth-child(3) {
   width: 120px; /* ТП */
   font-size: 13px;
+text-align: left;
 }
 
 .structure-table th:nth-child(4),
 .structure-table td:nth-child(4) {
   width: 100px; /* ВЛ */
   font-size: 13px;
+text-align: left;
 }
 
 /* Колонки с ПУ */
@@ -498,6 +501,7 @@ button:disabled {
 .structure-table td:nth-child(6),
 .structure-table td:nth-child(7) {
   width: 80px;
+text-align: center;
 }
 
 /* Дата обновления */
@@ -505,6 +509,7 @@ button:disabled {
 .structure-table td:last-child {
   width: 120px;
   font-size: 12px;
+text-align: left;
 }
 
 /* Контейнер структуры сети */
@@ -1076,7 +1081,8 @@ button:disabled {
 }
 
 .settings-section {
-  max-width: 800px;
+  max-width: 100%;
+  padding: 0 20px;
 }
 
 .settings-section h3 {
@@ -1222,10 +1228,11 @@ button:disabled {
 .role-badge {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: 20px;
+  padding: 10px 12px;
+  border-radius: 0px;
   font-size: 13px;
   font-weight: 500;
+  min-width: 140px;
 }
 
 .role-badge.role-admin {
@@ -1691,8 +1698,9 @@ button:disabled {
 }
 
 .report-table td {
-  padding: 16px;
-  border-bottom: 1px solid #f1f3f5;
+  
+vertical-align: middle !important;  /* Центр по вертикали */
+  padding: 12px 16px;      /* Равные отступы сверху и снизу */
 }
 
 .report-table tr:hover {
@@ -2339,7 +2347,7 @@ tr.selected {
 .status-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 20px;
+  border-radius: 0px;
   font-size: 13px;
   font-weight: 500;
 }
@@ -2347,11 +2355,13 @@ tr.selected {
 .status-badge.status-completed {
   background: #d4f8e8;
   color: #065f46;
+padding: 16px 19px;
 }
 
 .status-badge.status-awaiting_recheck {
   background: #fef3c7;
   color: #92400e;
+padding: 16px 12px;
 }
 
 .file-count {
@@ -2361,7 +2371,7 @@ tr.selected {
 
 .btn-view {
   padding: 4px 8px;
-  background: #4299e1;
+  background: #dbeafe;
   color: white;
   border: none;
   border-radius: 4px;
@@ -2419,4 +2429,229 @@ tr.selected {
     rgba(28, 43, 81, 0.95) 100%
   );
   z-index: 2;
+}
+.report-table th:nth-child(5),  /* Заголовок */
+.report-table td:nth-child(5) {  /* Ячейки */
+  display: none;
+}
+/* ===================================================== 
+   СТАТУСЫ В ТАБЛИЦЕ ОТЧЕТОВ
+   ===================================================== */
+
+/* Зеленый статус "Исправлено" */
+.report-table .status-ok {
+  background: #d4f8e8;
+  color: #065f46;
+  padding: 4px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-block;
+  margin: 0 auto;
+  width: fit-content;
+
+}
+
+/* Красный статус "Не исправлено" */
+.report-table .status-error {
+  background: #fee;
+  color: #c53030;
+  padding: 4px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-block;
+  margin: 0 auto;
+  width: fit-content;
+}
+.report-table .status-ok,
+.report-table .status-error {
+  background: #d4f8e8;
+  color: #065f46;
+  padding: 6px 16px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 500;
+  display: block;          /* Изменено с inline-block */
+  margin: 0 auto;          /* Центрирует блок */
+  width: fit-content;      /* Ширина по содержимому */
+}
+/* Зеленый статус "Исправлено" */
+.report-table .status-ok {
+  background: #d4f8e8;
+  color: #065f46;
+  border: 1px solid #6ee7b7;  /* Тонкая рамка для четкости */
+}
+/* Красный статус "Не исправлено" */
+.report-table .status-error {
+  background: #fee;
+  color: #c53030;
+  border: 1px solid #fca5a5;  /* Тонкая рамка для четкости */
+}
+.report-table td:nth-child(11) {
+  vertical-align: middle !important;
+  text-align: center;
+}
+.report-table td.status-ok,
+.report-table td.status-error {
+  vertical-align: middle !important;  /* Как у остальных ячеек */
+  padding-top: 16px !important;       /* Такой же отступ сверху */
+  padding-bottom: 16px !important;    /* И снизу */
+}
+/* Увеличиваем высоту блоков статуса */
+.report-table span.status-ok,
+.report-table span.status-error {
+  padding: 12px 24px;  /* Было 6px 16px - увеличили вдвое */
+  display: inline-block;
+}
+/* Эффект при наведении */
+.report-table .status-ok:hover {
+  background: #bbf7d0;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+.report-table .status-error:hover {
+  background: #fecaca;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+/* Тень для объема */
+.report-table .status-ok,
+.report-table .status-error {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ===================================================== 
+   КНОПКА ФАЙЛОВ В ТАБЛИЦЕ ОТЧЕТОВ - BADGE СТИЛЬ
+   ===================================================== */
+
+.report-table .btn-view-files {
+  display: inline-block;
+  padding: 24px 14px;         /* Увеличенные отступы для ширины */
+  border-radius: 0px;        /* Скругленные края как у статусов */
+  font-size: 13px;            
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+
+  
+  /* Нежно-синий цвет */
+  background: #dbeafe;        
+  color: #1e40af;            
+  border: 1px solid #93c5fd; 
+  
+  /* Убираем стандартные стили кнопки */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  
+  /* Убираем стандартные отступы кнопки */
+  margin: 0;
+  width: auto;
+  text-transform: none;
+}
+
+/* Эффект при наведении */
+.report-table .btn-view-files:hover {
+  background: #bfdbfe;        
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(59, 130, 246, 0.2);
+}
+
+/* Эффект при нажатии */
+.report-table .btn-view-files:active {
+  transform: translateY(0);
+}
+.report-table th:nth-child(8),  /* Заголовок "Комментарий РЭС" */
+.report-table td:nth-child(8) {  /* Ячейки с комментариями */
+  display: none;
+}
+/* Кликабельные статусы */
+.report-table .status-ok.clickable,
+.report-table .status-error.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.report-table .status-ok.clickable:hover,
+.report-table .status-error.clickable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Модальное окно комментария */
+.comment-modal {
+  max-width: 600px;
+}
+
+.comment-info {
+  background: #f7fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.comment-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.comment-content {
+  padding: 16px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border: 1px solid #e1e4e8;
+}
+
+.comment-content h4 {
+  margin-bottom: 12px;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.comment-content p {
+  color: #4a5568;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Подсказка при наведении */
+.report-table .clickable::after {
+  content: "Клик для деталей";
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d3748;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.report-table .clickable:hover::after {
+  opacity: 1;
+}
+
+.report-table td {
+  position: relative;
+}
+/* Убираем правый отступ у РЭС */
+.structure-table th:nth-child(2),
+.structure-table td:nth-child(2) {
+  padding-right: 10px;
+}
+
+/* И добавляем отрицательный margin к ТП */
+.structure-table th:nth-child(3),
+.structure-table td:nth-child(3) {
+  padding-left: 0px;
+  margin-left: 0px;  /* Подберите нужное значение */
 }
