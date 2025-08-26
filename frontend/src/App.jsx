@@ -1,3093 +1,2657 @@
-// =====================================================
-// УЛУЧШЕННЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
-// Файл: src/App.jsx
-// Версия с исправленными фазами и загрузкой из АСКУЭ
-// =====================================================
+/* =====================================================
+   ПРОФЕССИОНАЛЬНЫЕ СТИЛИ ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
+   Файл: src/App.css
+   Версия с правильной подсветкой фаз
+   ===================================================== */
 
-import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
-import axios from 'axios';
-import './App.css';
-import * as XLSX from 'xlsx';
-
-// =====================================================
-// НАСТРОЙКА API КЛИЕНТА
-// =====================================================
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  timeout: 60000
-});
-
-// Добавляем токен к каждому запросу
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Обработка ошибок авторизации
-api.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/';
-    }
-    return Promise.reject(error);
-  }
-);
-
-// =====================================================
-// КОНТЕКСТ АВТОРИЗАЦИИ
-// =====================================================
-
-const AuthContext = createContext(null);
-
-// =====================================================
-// КОМПОНЕНТ АВТОРИЗАЦИИ
-// =====================================================
-
-function LoginForm({ onLogin }) {
-  const [credentials, setCredentials] = useState({ login: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    try {
-      const response = await api.post('/api/auth/login', credentials);
-      localStorage.setItem('token', response.data.token);
-      onLogin(response.data.user);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка входа');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="login-container">
-      <div className="login-box">
-        <h2>Вход в систему контроля уровня напряжения</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Логин</label>
-            <input
-              type="text"
-              value={credentials.login}
-              onChange={(e) => setCredentials({...credentials, login: e.target.value})}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Пароль</label>
-            <input
-              type="password"
-              value={credentials.password}
-              onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-              required
-            />
-          </div>
-          {error && <div className="error-message">{error}</div>}
-          <button type="submit" disabled={loading}>
-            {loading ? 'Вход...' : 'Войти'}
-          </button>
-        </form>
-        <div className="test-accounts">
-          <p>Тестовые учетные записи:</p>
-          <p>admin / admin123</p>
-        </div>
-      </div>
-    </div>
-  );
+/* Сброс стилей и базовые настройки */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-// =====================================================
-// ГЛАВНОЕ МЕНЮ
-// =====================================================
-
-function MainMenu({ activeSection, onSectionChange, userRole }) {
-  const menuItems = [
-    { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
-    { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
-    { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
-    { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'reports', label: 'Отчеты', roles: ['admin'] },
-    { id: 'settings', label: 'Настройки', roles: ['admin'] }
-  ];
-
-  const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
-
-  return (
-    <nav className="main-menu">
-      <h3>Меню</h3>
-      {visibleItems.map(item => (
-        <button
-          key={item.id}
-          onClick={() => onSectionChange(item.id)}
-          className={activeSection === item.id ? 'active' : ''}
-        >
-          {item.label}
-        </button>
-      ))}
-    </nav>
-  );
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f5f6fa;
+  color: #2c3e50;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-// =====================================================
-// КОМПОНЕНТ СТРУКТУРЫ СЕТИ
-// =====================================================
+/* ===================================================== 
+   СТИЛИ ДЛЯ СТРАНИЦЫ ВХОДА
+   ===================================================== */
 
-function NetworkStructure({ selectedRes }) {
-  const [networkData, setNetworkData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTp, setSearchTp] = useState('');
-  const { user } = useContext(AuthContext);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedDetails, setSelectedDetails] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedPosition, setSelectedPosition] = useState(null);
-  
-  // Для редактирования
-  const [editingCell, setEditingCell] = useState(null);
-  const [editValue, setEditValue] = useState('');
-  
-  // Для выбора и удаления
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  
-  // Оптимизированная функция загрузки
-  const loadNetworkStructure = useCallback(async () => {
-    try {
-      const response = await api.get(`/api/network/structure/${selectedRes || ''}`);
-      setNetworkData(response.data);
-    } catch (error) {
-      console.error('Error loading network structure:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedRes]);
-
-  useEffect(() => {
-    loadNetworkStructure();
-    
-    // Слушаем события обновления
-    const handleUpdate = () => loadNetworkStructure();
-    
-    window.addEventListener('structureUpdated', handleUpdate);
-    window.addEventListener('dataCleared', handleUpdate);
-    window.addEventListener('structureDeleted', handleUpdate);
-    
-    return () => {
-      window.removeEventListener('structureUpdated', handleUpdate);
-      window.removeEventListener('dataCleared', handleUpdate);
-      window.removeEventListener('structureDeleted', handleUpdate);
-    };
-  }, [loadNetworkStructure]);
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'checked_ok': return 'status-ok';
-      case 'checked_error': return 'status-error';
-      case 'not_checked': return 'status-unchecked';
-      case 'pending_recheck': return 'status-pending';
-      case 'empty': return 'status-empty';
-      default: return 'status-empty';
-    }
-  };
-
-  const handleCellClick = (item, position) => {
-    const puNumber = position === 'start' ? item.startPu : 
-                     position === 'middle' ? item.middlePu : 
-                     item.endPu;
-    
-    if (puNumber && item.PuStatuses) {
-      const status = item.PuStatuses.find(s => 
-        s.puNumber === puNumber && s.position === position
-      );
-      
-      if (status && status.status === 'checked_error') {
-        setSelectedDetails(status);
-        setSelectedItem(item);
-        setSelectedPosition(position);
-        setModalOpen(true);
-      }
-    }
-  };
-  
-  // Начать редактирование
-  const startEdit = (item, position) => {
-    if (user.role !== 'admin') return;
-    
-    setEditingCell(`${item.id}-${position}`);
-    const currentValue = position === 'start' ? item.startPu : 
-                        position === 'middle' ? item.middlePu : 
-                        item.endPu;
-    setEditValue(currentValue || '');
-  };
-  
-  // Сохранить изменения
-  const saveEdit = async (item) => {
-    try {
-      const updateData = {
-        startPu: item.startPu,
-        middlePu: item.middlePu,
-        endPu: item.endPu
-      };
-      
-      const position = editingCell.split('-')[1];
-      if (position === 'start') updateData.startPu = editValue || null;
-      if (position === 'middle') updateData.middlePu = editValue || null;
-      if (position === 'end') updateData.endPu = editValue || null;
-      
-      await api.put(`/api/network/structure/${item.id}`, updateData);
-      
-      await loadNetworkStructure();
-      setEditingCell(null);
-      setEditValue('');
-    } catch (error) {
-      alert('Ошибка при сохранении');
-    }
-  };
-  
-  const cancelEdit = () => {
-    setEditingCell(null);
-    setEditValue('');
-  };
-  
-  // Обработка выбора строк
-  const handleSelectRow = (id) => {
-    setSelectedIds(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(i => i !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
-  };
-  
-  const handleSelectAll = () => {
-    if (selectedIds.length === filteredData.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredData.map(item => item.id));
-    }
-  };
-  
-  // Удаление выбранных с автообновлением
-  const handleDeleteSelected = async () => {
-    try {
-      const response = await api.post('/api/network/delete-selected', {
-        ids: selectedIds,
-        password: deletePassword
-      });
-    
-      alert(response.data.message);
-      setShowDeleteModal(false);
-      setDeletePassword('');
-      setSelectedIds([]);
-      setSearchTp(''); // Очищаем поле поиска!
-    
-      // Автообновление
-      await loadNetworkStructure();
-    
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  const renderPuCell = (item, position) => {
-    const puNumber = position === 'start' ? item.startPu : 
-                     position === 'middle' ? item.middlePu : 
-                     item.endPu;
-    const isEditing = editingCell === `${item.id}-${position}`;
-    
-    if (isEditing) {
-      return (
-        <div className="edit-cell">
-          <input
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') saveEdit(item);
-              if (e.key === 'Escape') cancelEdit();
-            }}
-            autoFocus
-          />
-          <button onClick={() => saveEdit(item)} className="save-btn">✓</button>
-          <button onClick={cancelEdit} className="cancel-btn">✗</button>
-        </div>
-      );
-    }
-    
-    return (
-      <div 
-        className="pu-cell"
-        onDoubleClick={() => startEdit(item, position)}
-        title={user.role === 'admin' ? 'Двойной клик для редактирования' : ''}
-      >
-        {puNumber ? (
-          <>
-            <div 
-              className={`status-box ${getStatusColor(
-                item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position)?.status || 'not_checked'
-              )}`}
-              onClick={() => handleCellClick(item, position)}
-            />
-            <span className="pu-number">{puNumber}</span>
-          </>
-        ) : (
-          <div className="status-box status-empty">X</div>
-        )}
-      </div>
-    );
-  };
-  
-  if (loading) return <div className="loading">Загрузка...</div>;
-  
-  const filteredData = networkData.filter(item => 
-    !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
-  );
-  
-  // Функция экспорта в Excel
-  const exportStructureToExcel = () => {
-    if (filteredData.length === 0) {
-      alert('Нет данных для экспорта');
-      return;
-    }
-
-    // Подготавливаем данные
-    const exportData = filteredData.map(item => {
-      // Находим статусы для каждого ПУ
-      const getStatus = (puNumber, position) => {
-        if (!puNumber) return 'Пусто';
-        const status = item.PuStatuses?.find(s => s.puNumber === puNumber && s.position === position);
-        
-        switch(status?.status) {
-          case 'checked_ok': return 'Проверен ✓';
-          case 'checked_error': return 'Ошибка ✗';
-          case 'pending_recheck': return 'Ожидает перепроверки';
-          case 'not_checked': return 'Не проверен';
-          default: return 'Не проверен';
-        }
-      };
-
-      return {
-        'РЭС': item.ResUnit?.name || '',
-        'ТП': item.tpName || '',
-        'ВЛ': item.vlName || '',
-        'ПУ Начало': item.startPu || '-',
-        'Статус начала': getStatus(item.startPu, 'start'),
-        'ПУ Середина': item.middlePu || '-',
-        'Статус середины': getStatus(item.middlePu, 'middle'),
-        'ПУ Конец': item.endPu || '-',
-        'Статус конца': getStatus(item.endPu, 'end'),
-        'Последнее обновление': new Date(item.lastUpdate).toLocaleDateString('ru-RU')
-      };
-    });
-
-    // Создаем Excel файл
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    // Устанавливаем ширину колонок
-    ws['!cols'] = [
-      { wch: 20 }, // РЭС
-      { wch: 15 }, // ТП
-      { wch: 15 }, // ВЛ
-      { wch: 15 }, // ПУ Начало
-      { wch: 20 }, // Статус начала
-      { wch: 15 }, // ПУ Середина
-      { wch: 20 }, // Статус середины
-      { wch: 15 }, // ПУ Конец
-      { wch: 20 }, // Статус конца
-      { wch: 20 }  // Последнее обновление
-    ];
-    
-    XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
-    
-    const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    
-    alert(`Структура сети экспортирована в файл: ${fileName}`);
-  };
-  
-  return (
-    <div className="network-structure">
-      <h2>Структура сети</h2>
-      {user.role === 'admin' && (
-        <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
-      )}
-      
-      <div className="structure-controls">
-        <div className="search-box">
-          <input 
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            name="network-search-tp"
-          />
-        </div>
-        
-        <button 
-          className="export-btn" 
-          onClick={exportStructureToExcel}
-        >
-          📊 Экспорт в Excel
-        </button>
-        
-        {user.role === 'admin' && selectedIds.length > 0 && (
-          <button 
-            className="delete-selected-btn"
-            onClick={() => setShowDeleteModal(true)}
-          >
-            🗑️ Удалить выбранные ({selectedIds.length})
-          </button>
-        )}
-      </div>
-      
-      <div className="status-legend">
-        <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
-        <div><span className="status-box status-error"></span> Проверен с ошибками</div>
-        <div><span className="status-box status-unchecked"></span> Не проверен</div>
-        <div><span className="status-box status-pending"></span> Ожидает перепроверки</div>
-        <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
-      </div>
-      
-      <div className="structure-table">
-        <table>
-          <thead>
-            <tr>
-              {user.role === 'admin' && (
-                <th className="checkbox-column">
-                  <input 
-                    type="checkbox"
-                    checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                    onChange={handleSelectAll}
-                  />
-                </th>
-              )}
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Начало</th>
-              <th>Середина</th>
-              <th>Конец</th>
-              <th>Дата обновления</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map(item => (
-              <tr key={item.id} className={selectedIds.includes(item.id) ? 'selected' : ''}>
-                {user.role === 'admin' && (
-                  <td className="checkbox-column">
-                    <input 
-                      type="checkbox"
-                      checked={selectedIds.includes(item.id)}
-                      onChange={() => handleSelectRow(item.id)}
-                    />
-                  </td>
-                )}
-                <td>{item.ResUnit?.name}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>{renderPuCell(item, 'start')}</td>
-                <td>{renderPuCell(item, 'middle')}</td>
-                <td>{renderPuCell(item, 'end')}</td>
-                <td>{new Date(item.lastUpdate).toLocaleDateString('ru-RU')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      <ErrorDetailsModal 
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        details={selectedDetails}
-        tpName={selectedItem?.tpName}
-        vlName={selectedItem?.vlName}
-        position={selectedPosition}
-      />
-      
-      {/* Модальное окно для удаления */}
-      {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение удаления</h3>
-              <button className="close-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p>Вы собираетесь удалить {selectedIds.length} записей.</p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                  autoComplete="new-password"    
-                  name="delete-notification-password"  
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleDeleteSelected}
-                disabled={!deletePassword}
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Удалите старый градиент и добавьте новые стили */
+  position: relative;
+  overflow: hidden;
 }
 
-// Модальное окно с деталями ошибки
-function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position }) {
-  if (!isOpen || !details) return null;
-  
-  // Парсим детали если они в формате JSON строки
-  let errorSummary = '';
-  let parsedDetails = null;
-  
-  try {
-    if (details?.errorDetails) {
-      const parsed = JSON.parse(details.errorDetails);
-      errorSummary = parsed.summary || details.errorDetails;
-      parsedDetails = parsed.details;
-    }
-  } catch (e) {
-    errorSummary = details?.errorDetails || 'Нет данных';
-  }
-  
- // Парсим фазы из деталей - все зеленые по умолчанию!
-// Парсим фазы из деталей - красим ТОЛЬКО явно указанные!
-const getPhaseErrors = () => {
-  const phases = { A: false, B: false, C: false };
-  
-  if (parsedDetails) {
-    // Проверяем только конкретные фазы
-    if (parsedDetails.overvoltage) {
-      if (parsedDetails.overvoltage.phase_A && parsedDetails.overvoltage.phase_A.count > 0) phases.A = true;
-      if (parsedDetails.overvoltage.phase_B && parsedDetails.overvoltage.phase_B.count > 0) phases.B = true;
-      if (parsedDetails.overvoltage.phase_C && parsedDetails.overvoltage.phase_C.count > 0) phases.C = true;
-    }
-    
-    if (parsedDetails.undervoltage) {
-      if (parsedDetails.undervoltage.phase_A && parsedDetails.undervoltage.phase_A.count > 0) phases.A = true;
-      if (parsedDetails.undervoltage.phase_B && parsedDetails.undervoltage.phase_B.count > 0) phases.B = true;
-      if (parsedDetails.undervoltage.phase_C && parsedDetails.undervoltage.phase_C.count > 0) phases.C = true;
-    }
-  }
-  
-  // Проверяем текст только на явные упоминания
-  if (errorSummary) {
-    if (errorSummary.indexOf('Фаза A') !== -1 || errorSummary.indexOf('phase_A') !== -1) phases.A = true;
-    if (errorSummary.indexOf('Фаза B') !== -1 || errorSummary.indexOf('phase_B') !== -1) phases.B = true;
-    if (errorSummary.indexOf('Фаза C') !== -1 || errorSummary.indexOf('phase_C') !== -1) phases.C = true;
-  }
-  
-  return phases;
-};
-  
-  const phaseErrors = getPhaseErrors();
-  
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content error-details-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Детали проверки ПУ #{details?.puNumber}</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
-        
-        <div className="modal-body">
-          <div className="modal-info">
-            <p><strong>ТП:</strong> {tpName}</p>
-            <p><strong>Фидер:</strong> {vlName}</p>
-            <p><strong>Позиция:</strong> {position === 'start' ? 'Начало' : position === 'middle' ? 'Середина' : 'Конец'}</p>
-          </div>
-          
-          <div className="phase-indicators-large">
-            <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-            <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-            <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-          </div>
-          
-          <div className="error-summary">
-            <h4>Обнаруженные отклонения:</h4>
-            <div className="error-text">{errorSummary}</div>
-          </div>
-        </div>
-        
-        <div className="modal-footer">
-          <button className="action-btn" onClick={onClose}>Закрыть</button>
-        </div>
-      </div>
-    </div>
-  );
+.login-box {
+  background: rgba(255, 255, 255, 0.95); /* Немного прозрачности */
+  backdrop-filter: blur(10px); /* Эффект размытия */
+  padding: 48px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 100%;
+  max-width: 420px;
+  transform: translateY(0);
+  transition: transform 0.3s ease;
+  position: relative; /* Важно! */
+  z-index: 3; /* Поверх градиента */
+}
+
+.login-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 25px 70px rgba(0,0,0,0.25);
+}
+
+.login-box h2 {
+  text-align: center;
+  margin-bottom: 32px;
+  color: #2c3e50;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background-color: #fff;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+button {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.error-message {
+  color: #e53e3e;
+  text-align: center;
+  margin-bottom: 16px;
+  font-size: 14px;
+  padding: 10px;
+  background-color: #fed7d7;
+  border-radius: 6px;
+}
+
+.test-accounts {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e1e4e8;
+  font-size: 14px;
+  color: #718096;
+  text-align: center;
+}
+
+/* ===================================================== 
+   ОСНОВНОЙ LAYOUT
+   ===================================================== */
+
+.app {
+  display: flex;
+  height: 100vh;
+  background-color: #f5f6fa;
+}
+
+/* Главное меню */
+.main-menu {
+  width: 260px;
+  background: linear-gradient(180deg, #0c4a6e 0%, #2d3748 100%);
+  color: white;
+  padding: 24px;
+  overflow-y: auto;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.main-menu h3 {
+  margin-bottom: 32px;
+  font-size: 22px;
+  font-weight: 600;
+  text-align: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.main-menu button {
+  width: 100%;
+  padding: 14px 20px;
+  margin-bottom: 8px;
+  background: transparent;
+  color: rgba(255,255,255,0.8);
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 15px;
+  font-weight: 500;
+  min-height: 60px; /* Фиксированная минимальная высота */
+  display: flex;
+  align-items: center;
+}
+
+.main-menu button:hover {
+  background-color: rgba(255,255,255,0.1);
+  color: white;
+  transform: translateX(4px);
+}
+
+.main-menu button.active {
+  background: linear-gradient(135deg, #2d3748 0%, #0c4a6e 100%);
+  color: white;
+  box-shadow: 0 12px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Основной контент */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Шапка */
+.app-header {
+  background-color: white;
+  padding: 20px 32px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.header-left h1 {
+  font-size: 24px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.header-left select {
+  padding: 8px 16px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.header-left select:focus {
+  border-color: #667eea;
+  outline: none;
+}
+
+.res-name {
+  color: #667eea;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-role {
+  color: #718096;
+  font-size: 14px;
+}
+
+.logout-btn {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  font-size: 14px;
+  width: auto;
+  text-transform: none;
+}
+
+.logout-btn:hover {
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+}
+
+/* Контент */
+
+/* ===================================================== 
+   СТРУКТУРА СЕТИ
+   ===================================================== */
+
+.network-structure h2 {
+  margin-bottom: 24px;
+  color: #2c3e50;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.structure-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.structure-table {
+  background: white;
+  border-radius: 0 0 12px 12px; /* Скругление только снизу */
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-top: -2px; /* УБИРАЕМ ДЫРКУ! */
+  overflow: visible;
+   width: 100%;
 }
 
 
-// =====================================================
-// КОМПОНЕНТ ЗАГРУЗКИ ФАЙЛОВ
-// =====================================================
+.structure-table th {
+  background: #f8f9fb;
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+  position: relative; /* Добавь это */
+}
 
-function FileUpload({ selectedRes }) {
-  const [selectedType, setSelectedType] = useState('');
-  const [files, setFiles] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
-  const { user } = useContext(AuthContext);
+.structure-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f1f3f5;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap; /* Предотвращаем переносы */
+}
 
-  const fileTypes = [
-    { id: 'rim_single', label: 'Счетчики РИМ (отдельный файл)' },
-    { id: 'rim_mass', label: 'Счетчики РИМ (массовая выгрузка)' },
-    { id: 'nartis', label: 'Счетчики Нартис' },
-    { id: 'energomera', label: 'Счетчики Энергомера' }
-  ];
+/* Специально для названий РЭС и ТП */
+.structure-table td:nth-child(2),
+.structure-table td:nth-child(3) {
+  font-size: 14px; /* Уменьшаем шрифт если нужно */
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  const handleFileSelect = (e) => {
-    setFiles(Array.from(e.target.files));
-    setUploadResult(null);
-  };
+.structure-table tr:hover {
+  background-color: #f8f9fb;
+}
 
-  const handleUpload = async () => {
-  if (!files.length || !selectedType) {
-    alert('Выберите тип файла и файлы для загрузки');
-    return;
+/* Статус боксы и ячейки ПУ */
+.pu-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 60px; /* Добавляем минимальную высоту */
+}
+
+.status-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+  transition: all 0.3s ease;
+  position: relative;
+  flex-shrink: 0; /* Предотвращаем сжатие */
+}
+
+.status-ok {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+}
+
+.status-error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+  cursor: pointer;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
   }
-  
-  // Определяем resId
-  let resIdToUse;
-  if (user.role === 'admin') {
-    resIdToUse = selectedRes || user.resId || 1;
-  } else {
-    resIdToUse = user.resId;
+  50% {
+    box-shadow: 0 2px 16px rgba(245, 101, 101, 0.5);
   }
-  
-  if (!resIdToUse) {
-    alert('Ошибка: не определен РЭС для загрузки');
-    return;
-  }
-  
-  setUploading(true);
-  setUploadResult(null);
-  setUploadProgress({ current: 0, total: files.length });
-  
-  const results = [];
-  const errors = [];
-  let duplicatesCount = 0;
-  let successCount = 0;
-  let problemsCount = 0;
-  let wrongPeriodCount = 0;
-  
-  // Обрабатываем каждый файл
-for (let i = 0; i < files.length; i++) {
-  const file = files[i];
-  setUploadProgress({ current: i + 1, total: files.length });
-  
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('type', selectedType);
-  formData.append('resId', resIdToUse);
-  
-  try {
-    const response = await api.post('/api/upload/analyze', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-    
-    // Проверка на разные статусы
-    const firstDetail = response.data.details?.[0];
-    
-    if (firstDetail) {
-      if (firstDetail.status === 'duplicate_error') {
-        duplicatesCount++;
-        results.push({
-          fileName: file.name,
-          status: 'duplicate',
-          message: firstDetail.error
-        });
-      } else if (firstDetail.status === 'wrong_period') {
-        wrongPeriodCount++;
-        results.push({
-          fileName: file.name,
-          status: 'wrong_period',
-          message: firstDetail.error
-        });
-      } else if (firstDetail.status === 'not_in_structure') {
-        results.push({
-          fileName: file.name,
-          status: 'not_found',
-          message: 'ПУ не найден в структуре сети'
-        });
-      } else {
-        // Обычная обработка
-        if (response.data.errors > 0) {
-          problemsCount += response.data.errors;
-        } else {
-          successCount++;
-        }
-        
-        results.push({
-          fileName: file.name,
-          status: 'processed',
-          ...response.data
-        });
-      }
-    }
-    
-  } catch (error) {
-    errors.push({
-      fileName: file.name,
-      error: error.response?.data?.error || 'Ошибка загрузки'
-    });
+  100% {
+    box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
   }
 }
-  
-  // Показываем итоговый результат
-  setUploadResult({
-    success: errors.length === 0,
-    totalFiles: files.length,
-    successCount,
-    problemsCount,
-    duplicatesCount,
-    wrongPeriodCount,
-    errorCount: errors.length,
-    results,
-    errors
-  });
-  
-  // Формируем итоговое сообщение
-  let message = `Обработано файлов: ${files.length}\n`;
-  if (successCount > 0) message += `✅ Без ошибок: ${successCount}\n`;
-  if (problemsCount > 0) message += `⚠️ С проблемами: ${problemsCount}\n`;
-  if (duplicatesCount > 0) message += `🔄 Дубликатов: ${duplicatesCount}\n`;
-  if (wrongPeriodCount > 0) message += `📅 Неверный период: ${wrongPeriodCount}\n`;
-  if (errors.length > 0) message += `❌ Ошибок загрузки: ${errors.length}`;
-  
-  alert(message);
-  
-  // Сбрасываем форму
-  setFiles([]);
-  setSelectedType('');
-  setUploading(false);
-  
-  // Создаем событие для обновления структуры
-  window.dispatchEvent(new CustomEvent('structureUpdated'));
-  window.dispatchEvent(new CustomEvent('notificationsUpdated'));
-};
 
-  return (
-    <div className="file-upload">
-      <h2>Загрузка файлов для анализа</h2>
-      
-      {/* Показываем для какого РЭС загружаем */}
-      <div className="upload-info">
-        <p>
-          <strong>Загрузка для РЭС:</strong> {
-            user.role === 'admin' && selectedRes 
-              ? `Выбранный РЭС (ID: ${selectedRes})`
-              : user.resName || 'Ваш РЭС'
-          }
-        </p>
-        <p className="hint">
-          💡 Имя файла должно совпадать с номером ПУ в структуре сети!
-        </p>
-      </div>
-      
-      <div className="upload-form">
-        <div className="form-group">
-          <label>Тип файла</label>
-          <select 
-            value={selectedType} 
-            onChange={(e) => setSelectedType(e.target.value)}
-          >
-            <option value="">Выберите тип файла</option>
-            {fileTypes.map(type => (
-              <option key={type.id} value={type.id}>{type.label}</option>
-            ))}
-          </select>
-        </div>
-        
-        {selectedType && (
-          <div className="file-input-wrapper">
-            <input 
-              type="file" 
-              accept=".xlsx,.xls,.csv"
-              multiple
-              onChange={handleFileSelect}
-            />
-            {files.length > 0 && (
-              <div className="file-info">
-                <p>Выбрано файлов: <strong>{files.length}</strong></p>
-                <div className="selected-files">
-                  {files.map((file, idx) => (
-                    <div key={idx} className="file-item">
-                      <span>{file.name}</span>
-                      <span className="pu-number">ПУ: {file.name.split('.')[0]}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {uploading && (
-              <div className="upload-progress">
-                Загружается файл {uploadProgress.current} из {uploadProgress.total}...
-              </div>
-            )}
-          </div>
-        )}
-        
-        <button 
-          onClick={handleUpload} 
-          disabled={uploading || !files.length || !selectedType}  // ИЗМЕНЕНО
-          className="upload-btn"
-        >
-          {uploading ? `Загрузка ${uploadProgress.current}/${uploadProgress.total}...` : 'Загрузить и анализировать'}
-        </button>
-      </div>
-      
-      {/* Результаты загрузки */}
-      {uploadResult && (
-        <div className={`upload-result ${uploadResult.success ? 'success' : 'error'}`}>
-          {uploadResult.success ? (
-            <>
-              <h3>✅ Анализ завершен</h3>
-              <p>Обработано записей: {uploadResult.processed}</p>
-              <p>Найдено ошибок: {uploadResult.errors}</p>
-              {uploadResult.details && uploadResult.details.length > 0 && (
-                <details>
-                  <summary>Подробности</summary>
-                  <pre>{JSON.stringify(uploadResult.details, null, 2)}</pre>
-                </details>
-              )}
-            </>
-          ) : (
-            <>
-              <h3>❌ Ошибка</h3>
-              <p>{uploadResult.error}</p>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
+.status-unchecked {
+  background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
 }
 
-// =====================================================
-// КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
-// =====================================================
-
-function Notifications({ filterType }) {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedNotification, setSelectedNotification] = useState(null);
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const [comment, setComment] = useState('');
-  const [checkFromDate, setCheckFromDate] = useState(new Date().toISOString().split('T')[0]);
-  const [searchTp, setSearchTp] = useState('');
-  const { user } = useContext(AuthContext);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteNotificationId, setDeleteNotificationId] = useState(null);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [detailsNotification, setDetailsNotification] = useState(null);
-  const [uploadingPu, setUploadingPu] = useState(null);
-  const [attachedFiles, setAttachedFiles] = useState([]); // ДОБАВЛЕНО!
-  
-  // Оптимизированная функция загрузки
-  const loadNotifications = useCallback(async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      // Фильтруем по переданному типу
-      const filtered = response.data.filter(n => {
-        if (filterType) return n.type === filterType;
-        return true;
-      });
-      setNotifications(filtered);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
-  useEffect(() => {
-    loadNotifications();
-    
-    // Слушаем события обновления
-    const handleUpdate = () => loadNotifications();
-    
-    window.addEventListener('structureUpdated', handleUpdate);
-    window.addEventListener('notificationsUpdated', handleUpdate);
-    window.addEventListener('dataCleared', handleUpdate);
-    
-    // Автообновление каждые 30 секунд
-    const interval = setInterval(loadNotifications, 30000);
-    
-    return () => {
-      window.removeEventListener('structureUpdated', handleUpdate);
-      window.removeEventListener('notificationsUpdated', handleUpdate);
-      window.removeEventListener('dataCleared', handleUpdate);
-      clearInterval(interval);
-    };
-  }, [loadNotifications]);
-
-  const handleCompleteWork = async () => {
-    const wordCount = comment.trim().split(' ').filter(word => word.length > 0).length;
-    if (wordCount < 5) {
-      alert('Комментарий должен содержать не менее 5 слов');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('comment', comment);
-      formData.append('checkFromDate', checkFromDate);
-      
-      // Добавляем файлы
-      attachedFiles.forEach(file => {
-        formData.append('attachments', file);
-      });
-      
-      await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-    
-      alert('Мероприятия отмечены как выполненные');
-      setShowCompleteModal(false);
-      setComment('');
-      setAttachedFiles([]);
-      setSelectedNotification(null);
-      
-      await loadNotifications();
-      
-    } catch (error) {
-      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    }
-  };
-
-  const handleDeleteNotification = async () => {
-    try {
-      await api.delete(`/api/notifications/${deleteNotificationId}`, {
-        data: { password: deletePassword }
-      });
-     
-      alert('Уведомление удалено');
-      setShowDeleteModal(false);
-      setDeletePassword('');
-      setDeleteNotificationId(null);
-      
-      // ВАЖНО: Автообновление после удаления!
-      await loadNotifications();
-      
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  // Функция загрузки файла прямо из уведомления АСКУЭ
-  const handleFileUpload = async (puNumber, notificationData) => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.xlsx,.xls,.csv';
-  
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    // Проверяем имя файла
-    const fileName = file.name.split('.')[0];
-    if (fileName !== puNumber) {
-      alert(`Имя файла должно быть ${puNumber}.xls или ${puNumber}.xlsx`);
-      return;
-    }
-    
-    setUploadingPu(puNumber);
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'rim_single');
-    formData.append('resId', user.resId);
-    formData.append('requiredPeriod', notificationData.checkFromDate);
-    
-    try {
-      const response = await api.post('/api/upload/analyze', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      // ПРОВЕРЯЕМ РЕЗУЛЬТАТ!
-      if (response.data.details && response.data.details.length > 0) {
-        const firstResult = response.data.details[0];
-        
-        // Проверяем статус
-        if (firstResult.status === 'wrong_period') {
-          // Показываем ошибку периода
-          alert(firstResult.error);
-          // НЕ обновляем уведомления, чтобы можно было попробовать снова
-          return;
-        } else if (firstResult.status === 'duplicate_error') {
-          // Показываем ошибку дубликата
-          alert(firstResult.error);
-          return;
-        }
-      }
-      
-      // Если все ок
-      alert('Файл успешно загружен и обработан!');
-      await loadNotifications();
-      window.dispatchEvent(new CustomEvent('structureUpdated'));
-      
-    } catch (error) {
-      alert('Ошибка загрузки: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setUploadingPu(null);
-    }
-  };
-  
-  input.click();
-};
-
-  // ИСПРАВЛЕННАЯ функция определения фаз - без регулярных выражений!
-  const getPhaseErrors = useCallback((errorDetails) => {
-    const phases = { A: false, B: false, C: false };
-    
-    if (!errorDetails) return phases;
-    
-    try {
-      let data = null;
-      let textToAnalyze = '';
-      
-      // Пытаемся распарсить JSON
-      if (typeof errorDetails === 'string') {
-        try {
-          const parsed = JSON.parse(errorDetails);
-          data = parsed.details || parsed;
-          textToAnalyze = parsed.summary || errorDetails;
-        } catch {
-          textToAnalyze = errorDetails;
-        }
-      } else if (typeof errorDetails === 'object') {
-        data = errorDetails.details || errorDetails;
-        textToAnalyze = errorDetails.summary || JSON.stringify(errorDetails);
-      }
-      
-      // Проверяем структурированные данные ТОЛЬКО если есть конкретные фазы
-      if (data && typeof data === 'object') {
-        if (data.overvoltage) {
-          if (data.overvoltage.phase_A && data.overvoltage.phase_A.count > 0) phases.A = true;
-          if (data.overvoltage.phase_B && data.overvoltage.phase_B.count > 0) phases.B = true;
-          if (data.overvoltage.phase_C && data.overvoltage.phase_C.count > 0) phases.C = true;
-        }
-        
-        if (data.undervoltage) {
-          if (data.undervoltage.phase_A && data.undervoltage.phase_A.count > 0) phases.A = true;
-          if (data.undervoltage.phase_B && data.undervoltage.phase_B.count > 0) phases.B = true;
-          if (data.undervoltage.phase_C && data.undervoltage.phase_C.count > 0) phases.C = true;
-        }
-      }
-      
-      // Проверяем текст ТОЛЬКО на явные упоминания конкретных фаз
-      if (textToAnalyze) {
-        // Только если явно написано "Фаза A" или "phase_A"
-        if (textToAnalyze.indexOf('Фаза A') !== -1 || textToAnalyze.indexOf('phase_A') !== -1) phases.A = true;
-        if (textToAnalyze.indexOf('Фаза B') !== -1 || textToAnalyze.indexOf('phase_B') !== -1) phases.B = true;
-        if (textToAnalyze.indexOf('Фаза C') !== -1 || textToAnalyze.indexOf('phase_C') !== -1) phases.C = true;
-      }
-    } catch (e) {
-      console.error('Error parsing phase errors:', e);
-    }
-    
-    return phases;
-  }, []);
-
-  if (loading) return <div className="loading">Загрузка...</div>;
-
-  const title = filterType === 'error' ? 'Ожидающие мероприятий' : 
-                filterType === 'pending_askue' ? 'Ожидающие проверки АСКУЭ' : 
-                'Все уведомления';
-
-  // Фильтрация по ТП
-  const filteredNotifications = notifications.filter(notif => {
-    if (!searchTp) return true;
-    try {
-      const data = JSON.parse(notif.message);
-      return data.tpName?.toLowerCase().includes(searchTp.toLowerCase());
-    } catch {
-      return true;
-    }
-  });
-
-  return (
-    <div className="notifications">
-      <h2>{title}</h2>
-      
-      <div className="notifications-controls">
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            name="notifications-search-tp"
-          />
-        </div>
-      </div>
-      
-      <div className="notifications-list">
-        {filteredNotifications.map(notif => (
-          <div 
-            key={notif.id} 
-            className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
-          >
-            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
-            {notif.type === 'error' && (() => {
-              try {
-                const data = JSON.parse(notif.message);
-                const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
-                
-                return (
-                  <div className="notification-narrow-content">
-                    <div className="notification-phases">
-                      <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-                      <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-                      <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-                    </div>
-                    
-                    <div className="notification-narrow-info">
-                      <div className="notification-tp">{data.tpName}</div>
-                      <div className="notification-narrow-details">
-                        <span className="label">РЭС:</span> {data.resName} | 
-                        <span className="label"> ТП:</span> {data.tpName} | 
-                        <span className="label"> ВЛ:</span> {data.vlName} | 
-                        <span className="label"> Позиция:</span> {
-                          data.position === 'start' ? 'Начало' : 
-                          data.position === 'middle' ? 'Середина' : 'Конец'
-                        }
-                      </div>
-                      <div className="notification-pu-number">
-                        ПУ №: <strong>{data.puNumber}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="notification-narrow-actions">
-                      <button 
-                        className="btn-details-light"
-                        onClick={() => {
-                          setDetailsNotification({ ...notif, data });
-                          setShowDetailsModal(true);
-                        }}
-                        title="Подробности"
-                      >
-                        🔍
-                      </button>
-                      
-                      {user.role === 'res_responsible' && (
-                        <button 
-                          className="btn-complete"
-                          onClick={() => {
-                            setSelectedNotification({ id: notif.id, data });
-                            setShowCompleteModal(true);
-                          }}
-                          title="Выполнить мероприятия"
-                        >
-                          ✅
-                        </button>
-                      )}
-                      
-                      {user.role === 'admin' && (
-                        <button
-                          className="btn-delete"
-                          onClick={() => {
-                            setDeleteNotificationId(notif.id);
-                            setShowDeleteModal(true);
-                          }}
-                          title="Удалить"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              } catch (e) {
-                return <div className="error-text">Ошибка отображения</div>;
-              }
-            })()}
-            
-            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
-            {notif.type === 'pending_askue' && (() => {
-              try {
-                const data = JSON.parse(notif.message);
-                return (
-                  <div className="notification-compact-content askue">
-                    <div className="notification-main-info">
-                      <div className="notification-location">
-                        <span className="label">ТП:</span> {data.tpName} | 
-                        <span className="label"> ПУ №:</span> <strong>{data.puNumber}</strong> | 
-                        <span className="label"> Журнал с:</span> <strong>{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="notification-actions-row">
-                      <div className="notification-buttons">
-                        <button 
-                          className="btn-upload"
-                          onClick={() => handleFileUpload(data.puNumber, data)}
-                          disabled={uploadingPu === data.puNumber}
-                          title="Загрузить файл"
-                        >
-                          {uploadingPu === data.puNumber ? '⏳ Загрузка...' : '📤 Загрузить'}
-                        </button>
-                        
-                        <button 
-                          className="btn-details"
-                          onClick={() => {
-                            setDetailsNotification({ ...notif, data });
-                            setShowDetailsModal(true);
-                          }}
-                          title="Подробности"
-                        >
-                          🔍
-                        </button>
-                        
-                        {user.role === 'admin' && (
-                          <button
-                            className="btn-delete"
-                            onClick={() => {
-                              setDeleteNotificationId(notif.id);
-                              setShowDeleteModal(true);
-                            }}
-                            title="Удалить"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              } catch (e) {
-                return <div className="error-text">Ошибка отображения</div>;
-              }
-            })()}
-            
-            {/* УСПЕШНЫЕ УВЕДОМЛЕНИЯ */}
-            {notif.type === 'success' && (
-              <div className="notification-compact-content success">
-                <div className="success-icon">✅</div>
-                <div className="success-text">{notif.message}</div>
-              </div>
-            )}
-
-            {/* ИНФОРМАЦИОННЫЕ УВЕДОМЛЕНИЯ */}
-            {notif.type === 'info' && (
-              <div className="notification-compact-content info">
-                <div className="info-icon">ℹ️</div>
-                <div className="info-text">{notif.message}</div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Модальное окно деталей */}
-      {showDetailsModal && detailsNotification && (
-        <div className="modal-backdrop" onClick={() => setShowDetailsModal(false)}>
-          <div className="modal-content details-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подробная информация</h3>
-              <button className="close-btn" onClick={() => setShowDetailsModal(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              {detailsNotification.type === 'error' && (
-                <>
-                  {/* Показываем фазы в детальном окне */}
-                  <div className="phase-indicators-large">
-                    {(() => {
-                      const phases = { A: false, B: false, C: false };
-                      
-                      // Проверяем только явные упоминания фаз
-                      if (detailsNotification.data.details && typeof detailsNotification.data.details === 'object') {
-                        const details = detailsNotification.data.details;
-                        if (details.overvoltage) {
-                          if (details.overvoltage.phase_A && details.overvoltage.phase_A.count > 0) phases.A = true;
-                          if (details.overvoltage.phase_B && details.overvoltage.phase_B.count > 0) phases.B = true;
-                          if (details.overvoltage.phase_C && details.overvoltage.phase_C.count > 0) phases.C = true;
-                        }
-                        if (details.undervoltage) {
-                          if (details.undervoltage.phase_A && details.undervoltage.phase_A.count > 0) phases.A = true;
-                          if (details.undervoltage.phase_B && details.undervoltage.phase_B.count > 0) phases.B = true;
-                          if (details.undervoltage.phase_C && details.undervoltage.phase_C.count > 0) phases.C = true;
-                        }
-                      }
-                      
-                      const errorText = detailsNotification.data.errorDetails || '';
-                      if (errorText.indexOf('Фаза A') !== -1 || errorText.indexOf('phase_A') !== -1) phases.A = true;
-                      if (errorText.indexOf('Фаза B') !== -1 || errorText.indexOf('phase_B') !== -1) phases.B = true;
-                      if (errorText.indexOf('Фаза C') !== -1 || errorText.indexOf('phase_C') !== -1) phases.C = true;
-                      
-                      return (
-                        <>
-                          <div className={`phase-indicator ${phases.A ? 'phase-error' : ''}`}>A</div>
-                          <div className={`phase-indicator ${phases.B ? 'phase-error' : ''}`}>B</div>
-                          <div className={`phase-indicator ${phases.C ? 'phase-error' : ''}`}>C</div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  
-                  <div className="detail-row">
-                    <strong>РЭС:</strong> {detailsNotification.data.resName}
-                  </div>
-                  <div className="detail-row">
-                    <strong>ТП:</strong> {detailsNotification.data.tpName}
-                  </div>
-                  <div className="detail-row">
-                    <strong>Фидер:</strong> {detailsNotification.data.vlName}
-                  </div>
-                  <div className="detail-row">
-                    <strong>ПУ №:</strong> {detailsNotification.data.puNumber}
-                  </div>
-                  <div className="detail-row">
-                    <strong>Позиция:</strong> {
-                      detailsNotification.data.position === 'start' ? 'Начало' :
-                      detailsNotification.data.position === 'middle' ? 'Середина' : 'Конец'
-                    }
-                  </div>
-                  <div className="error-details-box">
-                    <strong>Детали ошибки:</strong>
-                    <p>{detailsNotification.data.errorDetails}</p>
-                  </div>
-                </>
-              )}
-              
-              {detailsNotification.type === 'pending_askue' && (
-                <>
-                  <div className="askue-details-content">
-                    <h4>⚡ Требуется снять журнал событий</h4>
-                    <div className="detail-row">
-                      <strong>ПУ №:</strong> {detailsNotification.data.puNumber}
-                    </div>
-                    <div className="detail-row">
-                      <strong>ТП:</strong> {detailsNotification.data.tpName}
-                    </div>
-                    <div className="detail-row">
-                      <strong>Фидер:</strong> {detailsNotification.data.vlName}
-                    </div>
-                    <div className="highlight-box">
-                      <strong>📅 Журнал событий с даты:</strong>
-                      <p>{new Date(detailsNotification.data.checkFromDate).toLocaleDateString('ru-RU')}</p>
-                    </div>
-                    <div className="highlight-box">
-                      <strong>💬 Комментарий РЭС:</strong>
-                      <p>{detailsNotification.data.completedComment}</p>
-                    </div>
-                    <div className="detail-row">
-                      <strong>Мероприятия выполнены:</strong> {new Date(detailsNotification.data.completedAt).toLocaleString('ru-RU')}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="modal-footer">
-              <button className="action-btn" onClick={() => setShowDetailsModal(false)}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Модальное окно для выполнения мероприятий */}
-      {showCompleteModal && selectedNotification && (
-        <div className="modal-backdrop" onClick={() => setShowCompleteModal(false)}>
-          <div className="modal-content complete-work-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Отметить выполнение мероприятий</h3>
-              <button className="close-btn" onClick={() => setShowCompleteModal(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="work-info">
-                <p><strong>ТП:</strong> {selectedNotification.data.tpName}</p>
-                <p><strong>ВЛ:</strong> {selectedNotification.data.vlName}</p>
-                <p><strong>ПУ №:</strong> {selectedNotification.data.puNumber}</p>
-              </div>
-              
-              <div className="form-group">
-                <label>Что было выполнено? (минимум 5 слов)</label>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Опишите выполненные работы..."
-                  rows={4}
-                />
-                <small className="word-count">
-                  Слов: {comment.trim().split(' ').filter(w => w.length > 0).length} из 5
-                </small>
-              </div>
-              
-              <div className="form-group">
-                <label>Журнал событий требуется с даты:</label>
-                <input
-                  type="date"
-                  value={checkFromDate}
-                  onChange={(e) => setCheckFromDate(e.target.value)}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Прикрепить фото/документы (макс. 5 файлов по 10MB)</label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,application/pdf"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files).slice(0, 5);
-                    setAttachedFiles(files);
-                  }}
-                />
-                {attachedFiles.length > 0 && (
-                  <div className="attached-files-list">
-                    <p>Выбрано файлов: {attachedFiles.length}</p>
-                    {attachedFiles.map((file, idx) => (
-                      <div key={idx} className="attached-file-item">
-                        {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="confirm-btn" 
-                onClick={handleCompleteWork}
-                disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
-              >
-                Подтвердить выполнение
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Модальное окно для удаления */}
-      {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение удаления</h3>
-              <button className="close-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p>Вы собираетесь удалить это уведомление.</p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                  autoComplete="new-password"    
-                  name="delete-notification-password"  
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => {setShowDeleteModal(false); setDeletePassword('');}}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleDeleteNotification}
-                disabled={!deletePassword}
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+.status-pending {
+  background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+  box-shadow: 0 2px 8px rgba(237, 137, 54, 0.3);
 }
 
-// =====================================================
-// КОМПОНЕНТ ОТЧЕТОВ
-// =====================================================
-
-function Reports() {
-  const [reportType, setReportType] = useState('pending_work');
-  const [reportData, setReportData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [dateFrom, setDateFrom] = useState(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  );
-  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
-  const [searchTp, setSearchTp] = useState('');
-  
-  const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
-  
-  useEffect(() => {
-    loadReports();
-  }, [reportType, dateFrom, dateTo]);
-
-  const loadReports = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/api/reports/detailed', {
-        params: {
-          type: reportType,
-          dateFrom,
-          dateTo
-        }
-      });
-      setReportData(response.data);
-    } catch (error) {
-      console.error('Error loading reports:', error);
-      setReportData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Функция для открытия просмотра файлов
-  const viewAttachments = (attachments) => {
-    
-    console.log('Viewing attachments:', attachments);
-    
-    if (attachments && attachments.length > 0) {
-      setSelectedFiles(attachments);
-      setCurrentFileIndex(0);
-      setShowFileViewer(true);
-    }
-  };
-  
-  // Обновленная функция exportToExcel в компоненте Reports
-  const exportToExcel = () => {
-    if (filteredData.length === 0) {
-      alert('Нет данных для экспорта');
-      return;
-    }
-
-    // Подготавливаем данные для экспорта
-    const exportData = filteredData.map(item => {
-      const base = {
-        'РЭС': item.resName || '',
-        'ТП': item.tpName || '',
-        'ВЛ': item.vlName || '',
-        'Позиция': item.position === 'start' ? 'Начало' : 
-                   item.position === 'middle' ? 'Середина' : 'Конец',
-        'Номер ПУ': item.puNumber || '',
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate)
-      };
-
-      // Добавляем дополнительные поля в зависимости от типа отчета
-      if (reportType === 'pending_askue' || reportType === 'completed') {
-        base['Комментарий РЭС'] = item.resComment || '';
-        base['Дата завершения мероприятий'] = formatDate(item.workCompletedDate);
-      }
-
-      if (reportType === 'completed') {
-        base['Дата перепроверки'] = formatDate(item.recheckDate);
-        base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
-      }
-
-      return base;
-    });
-
-    // Создаем новую книгу Excel
-    const wb = XLSX.utils.book_new();
-    
-    // Создаем лист с данными
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    // Устанавливаем ширину колонок
-    const columnWidths = [
-      { wch: 20 }, // РЭС
-      { wch: 15 }, // ТП
-      { wch: 15 }, // ВЛ
-      { wch: 12 }, // Позиция
-      { wch: 15 }, // Номер ПУ
-      { wch: 50 }, // Ошибка
-      { wch: 18 }, // Дата обнаружения
-    ];
-    
-    if (reportType === 'pending_askue' || reportType === 'completed') {
-      columnWidths.push({ wch: 40 }); // Комментарий РЭС
-      columnWidths.push({ wch: 25 }); // Дата завершения мероприятий
-    }
-    
-    if (reportType === 'completed') {
-      columnWidths.push({ wch: 18 }); // Дата перепроверки
-      columnWidths.push({ wch: 15 }); // Результат
-    }
-    
-    ws['!cols'] = columnWidths;
-    
-    // Добавляем лист в книгу
-    const sheetName = getReportTitle();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    
-    // Генерируем имя файла
-    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-    
-    // Сохраняем файл
-    XLSX.writeFile(wb, fileName);
-    
-    // Показываем уведомление
-    alert(`Отчет успешно экспортирован в файл: ${fileName}`);
-  };
-
-  // Вспомогательная функция для форматирования даты
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getReportTitle = () => {
-    switch (reportType) {
-      case 'pending_work':
-        return 'Ожидающие мероприятий';
-      case 'pending_askue':
-        return 'Ожидающие проверки АСКУЭ';
-      case 'completed':
-        return 'Завершенные проверки';
-      default:
-        return 'Отчет';
-    }
-  };
-
-  // Фильтрация по ТП с мемоизацией
-  const filteredData = useMemo(() => 
-    reportData.filter(item => 
-      !searchTp || item.tpName?.toLowerCase().includes(searchTp.toLowerCase())
-    ), [reportData, searchTp]
-  );
-
-  if (loading) return <div className="loading">Загрузка отчета...</div>;
-
-  return (
-    <div className="reports">
-      <h2>Отчеты по проверкам</h2>
-      
-      <div className="report-controls">
-        <div className="control-group">
-          <label>Тип отчета:</label>
-          <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
-            <option value="pending_work">Ожидающие мероприятий</option>
-            <option value="pending_askue">Ожидающие проверки АСКУЭ</option>
-            <option value="completed">Завершенные проверки</option>
-          </select>
-        </div>
-        
-        <div className="control-group">
-          <label>Период с:</label>
-          <input 
-            type="date" 
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-        </div>
-        
-        <div className="control-group">
-          <label>по:</label>
-          <input 
-            type="date" 
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-        </div>
-        
-        <div className="control-group">
-          <input 
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-          />
-        </div>
-        
-        <button className="export-btn" onClick={exportToExcel}>
-          📊 Экспорт в Excel
-        </button>
-      </div>
-      
-      <div className="report-summary">
-        <h3>{getReportTitle()}</h3>
-        <p>Найдено записей: {filteredData.length}</p>
-      </div>
-      
-      <div className="report-table">
-        <table>
-          <thead>
-            <tr>
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Позиция</th>
-              <th>Номер ПУ</th>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-              {(reportType === 'pending_askue' || reportType === 'completed') && (
-                <>
-                  <th>Комментарий РЭС</th>
-                  <th>Дата завершения мероприятий</th>
-                </>
-              )}
-              {reportType === 'completed' && (
-                <>
-                  <th>Дата перепроверки</th>
-                  <th>Результат</th>
-                  <th>Файлы</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((item, idx) => (
-              <tr key={idx}>
-                <td>{item.resName}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
-                <td>{item.puNumber}</td>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-                {(reportType === 'pending_askue' || reportType === 'completed') && (
-                  <>
-                    <td>{item.resComment}</td>
-                    <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                  </>
-                )}
-                {reportType === 'completed' && (
-                  <>
-                    <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
-                    <td className={item.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
-                      {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-                    </td>
-                    <td>
-                      {item.attachments && item.attachments.length > 0 ? (
-                        <button 
-                          className="btn-view-files"
-                          onClick={() => viewAttachments(item.attachments)}
-                        >
-                          📎 {item.attachments.length} файл(ов)
-                        </button>
-                      ) : (
-                        <span className="no-files">—</span>
-                      )}
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {filteredData.length === 0 && (
-        <div className="no-data">
-          <p>Нет данных для отображения за выбранный период</p>
-        </div>
-      )}
-      
-      {showFileViewer && (
-        <FileViewer 
-          files={selectedFiles}
-          currentIndex={currentFileIndex}
-          onClose={() => setShowFileViewer(false)}
-          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
-          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
-        />
-      )}
-    </div>
-  );
+.status-empty {
+  background-color: #e2e8f0;
+  color: #a0aec0;
 }
 
-
-// =====================================================
-// КОМПОНЕНТ НАСТРОЕК С УПРАВЛЕНИЕМ ПОЛЬЗОВАТЕЛЯМИ
-// =====================================================
-
-function Settings() {
-  const [activeTab, setActiveTab] = useState('structure');
-  
-  return (
-    <div className="settings-container">
-      <h2>Настройки системы</h2>
-      
-      <div className="settings-tabs">
-        <button 
-          className={activeTab === 'structure' ? 'active' : ''}
-          onClick={() => setActiveTab('structure')}
-        >
-          📁 Структура сети
-        </button>
-        <button 
-          className={activeTab === 'users' ? 'active' : ''}
-          onClick={() => setActiveTab('users')}
-        >
-          👥 Пользователи
-        </button>
-        <button 
-          className={activeTab === 'maintenance' ? 'active' : ''}
-          onClick={() => setActiveTab('maintenance')}
-        >
-          🔧 Обслуживание
-        </button>
-        <button 
-          className={activeTab === 'files' ? 'active' : ''}
-          onClick={() => setActiveTab('files')}
-        >
-          📎 Управление файлами
-        </button>
-      </div>
-      
-      <div className="settings-content">
-        {activeTab === 'structure' && <StructureSettings />}
-        {activeTab === 'users' && <UserSettings />}
-        {activeTab === 'maintenance' && <MaintenanceSettings />}
-        {activeTab === 'files' && <FileManagement />}
-      </div>
-    </div>
-  );
-}
-// Новый подкомпонент управления файлами
-function FileManagement() {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
-  
-  useEffect(() => {
-    loadFiles();
-  }, []);
-  
-  const loadFiles = async () => {
-    try {
-      console.log('Loading files...');
-      const response = await api.get('/api/admin/files');
-      console.log('Files response:', response.data);
-      setFiles(response.data.files);
-    } catch (error) {
-      console.error('Error loading files:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleDeleteFile = async () => {
-    try {
-      await api.delete(`/api/admin/files/${selectedFile.public_id}`, {
-        data: { password: deletePassword }
-      });
-      
-      alert('Файл удален успешно');
-      setShowDeleteModal(false);
-      setDeletePassword('');
-      setSelectedFile(null);
-      loadFiles();
-      
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  const getTotalSize = () => {
-    const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
-    return (totalBytes / 1024 / 1024).toFixed(2);
-  };
-  
-  if (loading) return <div className="loading">Загрузка...</div>;
-  
-  return (
-    <div className="settings-section">
-      <h3>📎 Управление загруженными файлами</h3>
-      
-      <div className="file-stats">
-        <div className="stat-card">
-          <h4>Всего файлов</h4>
-          <p className="stat-value">{files.length}</p>
-        </div>
-        <div className="stat-card">
-          <h4>Общий размер</h4>
-          <p className="stat-value">{getTotalSize()} MB</p>
-        </div>
-      </div>
-      
-      <div className="files-grid">
-        {files.map((file, idx) => (
-          <div key={idx} className="file-card">
-            {(file.url.toLowerCase().endsWith('.jpg') || 
-              file.url.toLowerCase().endsWith('.jpeg') || 
-              file.url.toLowerCase().endsWith('.png') || 
-              file.url.toLowerCase().endsWith('.gif')) ? (
-              <img src={file.url} alt={file.original_name} className="file-thumbnail" />
-            ) : (
-              <div className="file-icon">📄</div>
-            )}
-            
-            <div className="file-info">
-              <p className="file-name">{file.original_name}</p>
-              <p className="file-meta">
-                РЭС: {file.resName}<br/>
-                ТП: {file.tpName}<br/>
-                ПУ: {file.puNumber}<br/>
-                Дата: {new Date(file.uploadDate).toLocaleDateString('ru-RU')}
-              </p>
-            </div>
-            
-            <div className="file-actions">
-              <a 
-                href={file.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="btn-icon"
-                title="Открыть"
-              >
-                👁️
-              </a>
-              <button 
-                onClick={() => {
-                  setSelectedFile(file);
-                  setShowDeleteModal(true);
-                }}
-                className="btn-icon danger"
-                title="Удалить"
-              >
-                🗑️
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Модальное окно удаления */}
-      {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение удаления файла</h3>
-              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p>Вы собираетесь удалить файл:</p>
-              <p><strong>{selectedFile?.original_name}</strong></p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleDeleteFile}
-                disabled={!deletePassword}
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Просмотрщик файлов */}
-      {showFileViewer && (
-        <FileViewer 
-          files={selectedFiles}
-          currentIndex={currentFileIndex}
-          onClose={() => setShowFileViewer(false)}
-          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
-          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
-        />
-      )}
-    </div>
-  );
-}
-// Подкомпонент настроек структуры
-function StructureSettings() {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [uploadStats, setUploadStats] = useState(null);
-  const [clearOld, setClearOld] = useState(false);
-  
-  const handleFileSelect = (e) => {
-    setFile(e.target.files[0]);
-    setMessage('');
-    setUploadStats(null);
-  };
-
-  const handleUploadStructure = async () => {
-    if (!file) {
-      alert('Выберите файл');
-      return;
-    }
-
-    if (clearOld && !confirm('Вы уверены что хотите удалить существующие данные перед загрузкой?')) {
-      return;
-    }
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('clearOld', clearOld);
-
-    try {
-      const response = await api.post('/api/network/upload-full-structure', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      setMessage('✅ Структура сети успешно загружена!');
-      setUploadStats(response.data);
-      setFile(null);
-      
-      // Создаем событие для обновления структуры
-      window.dispatchEvent(new CustomEvent('structureUpdated'));
-      
-    } catch (error) {
-      console.error('Upload error:', error);
-      setMessage('❌ Ошибка загрузки: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-      setUploadStats(null);
-    } finally {
-      setUploading(false);
-    }
-  };
-  
-  return (
-    <div className="settings-section">
-      <h3>📂 Загрузка структуры сети</h3>
-      <p className="section-description">
-        Загрузите Excel файл со структурой сети. Формат: РЭС | ТП | Фидер | Начало | Середина | Конец
-      </p>
-      
-      <div className="upload-area">
-        <input 
-          type="file" 
-          accept=".xlsx,.xls"
-          onChange={handleFileSelect}
-          id="structure-file"
-        />
-        <label htmlFor="structure-file" className="file-label">
-          {file ? file.name : 'Выберите файл Excel'}
-        </label>
-      </div>
-      
-      <div className="settings-option">
-        <label className="checkbox-label">
-          <input 
-            type="checkbox" 
-            checked={clearOld}
-            onChange={(e) => setClearOld(e.target.checked)}
-          />
-          <span>Удалить существующие данные перед загрузкой</span>
-        </label>
-      </div>
-      
-      <button 
-        onClick={handleUploadStructure} 
-        disabled={uploading || !file}
-        className="primary-btn"
-      >
-        {uploading ? 'Загрузка...' : '📤 Загрузить структуру'}
-      </button>
-      
-      {message && (
-        <div className={message.includes('✅') ? 'success-message' : 'error-message'}>
-          {message}
-        </div>
-      )}
-      
-      {uploadStats && (
-        <div className="upload-stats">
-          <h4>Результаты загрузки:</h4>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <span className="stat-label">Обработано:</span>
-              <span className="stat-value">{uploadStats.processed}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Всего записей:</span>
-              <span className="stat-value">{uploadStats.total}</span>
-            </div>
-          </div>
-          {uploadStats.errors && uploadStats.errors.length > 0 && (
-            <div className="errors-list">
-              <p>⚠️ Ошибки при загрузке:</p>
-              <ul>
-                {uploadStats.errors.slice(0, 5).map((err, idx) => (
-                  <li key={idx}>{err}</li>
-                ))}
-              </ul>
-              {uploadStats.errors.length > 5 && (
-                <p>... и еще {uploadStats.errors.length - 5} ошибок</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+.pu-number {
+  font-size: 12px;
+  color: #4a5568;
+  font-weight: 600;
 }
 
-// Подкомпонент управления пользователями
-function UserSettings() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [resList, setResList] = useState([]);
-  
-  // Форма для создания/редактирования
-  const [userForm, setUserForm] = useState({
-    fio: '',
-    login: '',
-    password: '',
-    email: '',
-    role: 'uploader',
-    resId: ''
-  });
-  
-  useEffect(() => {
-    loadUsers();
-    loadResList();
-  }, []);
-  
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/api/users/list');
-      setUsers(response.data);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const loadResList = async () => {
-    try {
-      const response = await api.get('/api/res/list');
-      setResList(response.data);
-    } catch (error) {
-      console.error('Error loading RES list:', error);
-    }
-  };
-  
-  const handleCreateUser = async () => {
-    try {
-      await api.post('/api/users/create', userForm);
-      alert('Пользователь создан успешно');
-      setShowCreateModal(false);
-      setUserForm({
-        fio: '',
-        login: '',
-        password: '',
-        email: '',
-        role: 'uploader',
-        resId: ''
-      });
-      loadUsers();
-    } catch (error) {
-      alert('Ошибка создания пользователя: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  const handleUpdateUser = async () => {
-    try {
-      await api.put(`/api/users/${editingUser.id}`, userForm);
-      alert('Пользователь обновлен успешно');
-      setShowEditModal(false);
-      setEditingUser(null);
-      loadUsers();
-    } catch (error) {
-      alert('Ошибка обновления пользователя: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  const handleDeleteUser = async (userId) => {
-    if (!confirm('Удалить пользователя?')) return;
-    
-    const password = prompt('Введите пароль администратора:');
-    if (!password) return;
-    
-    try {
-      await api.delete(`/api/users/${userId}`, { data: { password } });
-      alert('Пользователь удален');
-      loadUsers();
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  const startEdit = (user) => {
-    setEditingUser(user);
-    setUserForm({
-      fio: user.fio,
-      login: user.login,
-      password: '',
-      email: user.email,
-      role: user.role,
-      resId: user.resId || ''
-    });
-    setShowEditModal(true);
-  };
-  
-  const createTestUsers = async () => {
-    try {
-      const response = await api.post('/api/users/create-test');
-      alert(response.data.message);
-      loadUsers();
-    } catch (error) {
-      alert('Ошибка создания тестовых пользователей');
-    }
-  };
-  
-  return (
-    <div className="settings-section">
-      <div className="section-header">
-        <h3>👥 Управление пользователями</h3>
-        <div className="header-actions">
-          <button onClick={createTestUsers} className="secondary-btn">
-            🧪 Создать тестовых
-          </button>
-          <button onClick={() => setShowCreateModal(true)} className="primary-btn">
-            ➕ Новый пользователь
-          </button>
-        </div>
-      </div>
-      
-      <div className="users-table-container">
-        {loading ? (
-          <div className="loading">Загрузка...</div>
-        ) : (
-          <table className="users-table">
-            <thead>
-              <tr>
-                <th>ФИО</th>
-                <th>Логин</th>
-                <th>Роль</th>
-                <th>РЭС</th>
-                <th>Email</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr key={user.id}>
-                  <td>{user.fio}</td>
-                  <td><strong>{user.login}</strong></td>
-                  <td>
-                    <span className={`role-badge role-${user.role}`}>
-                      {user.role === 'admin' ? '👑 Админ' : 
-                       user.role === 'uploader' ? '📤 Загрузчик' : 
-                       '⚡ Ответственный'}
-                    </span>
-                  </td>
-                  <td>{user.ResUnit?.name || '-'}</td>
-                  <td>{user.email}</td>
-                  <td>
-                    <div className="action-buttons">
-                      <button 
-                        onClick={() => startEdit(user)}
-                        className="btn-icon"
-                        title="Редактировать"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="btn-icon danger"
-                        title="Удалить"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-      
-      {/* Модальное окно создания пользователя */}
-      {showCreateModal && (
-        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content user-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Создание пользователя</h3>
-              <button className="close-btn" onClick={() => setShowCreateModal(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="form-group">
-                <label>ФИО</label>
-                <input
-                  type="text"
-                  value={userForm.fio}
-                  onChange={(e) => setUserForm({...userForm, fio: e.target.value})}
-                  placeholder="Иванов Иван Иванович"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Логин</label>
-                <input
-                  type="text"
-                  value={userForm.login}
-                  onChange={(e) => setUserForm({...userForm, login: e.target.value})}
-                  placeholder="ivanov"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Пароль</label>
-                <input
-                  type="password"
-                  value={userForm.password}
-                  onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                  placeholder="Минимум 6 символов"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={userForm.email}
-                  onChange={(e) => setUserForm({...userForm, email: e.target.value})}
-                  placeholder="ivanov@res.ru"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Роль</label>
-                <select
-                  value={userForm.role}
-                  onChange={(e) => setUserForm({...userForm, role: e.target.value})}
-                >
-                  <option value="admin">Администратор</option>
-                  <option value="uploader">Загрузчик АСКУЭ</option>
-                  <option value="res_responsible">Ответственный РЭС</option>
-                </select>
-              </div>
-              
-              {userForm.role !== 'admin' && (
-                <div className="form-group">
-                  <label>РЭС</label>
-                  <select
-                    value={userForm.resId}
-                    onChange={(e) => setUserForm({...userForm, resId: e.target.value})}
-                  >
-                    <option value="">Выберите РЭС</option>
-                    {resList.map(res => (
-                      <option key={res.id} value={res.id}>{res.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-            
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowCreateModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="primary-btn" 
-                onClick={handleCreateUser}
-                disabled={!userForm.fio || !userForm.login || !userForm.password || !userForm.email}
-              >
-                Создать
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Модальное окно редактирования (аналогично создания) */}
-      {showEditModal && (
-        <div className="modal-backdrop" onClick={() => setShowEditModal(false)}>
-          <div className="modal-content user-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Редактирование пользователя</h3>
-              <button className="close-btn" onClick={() => setShowEditModal(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="form-group">
-                <label>ФИО</label>
-                <input
-                  type="text"
-                  value={userForm.fio}
-                  onChange={(e) => setUserForm({...userForm, fio: e.target.value})}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Логин</label>
-                <input
-                  type="text"
-                  value={userForm.login}
-                  onChange={(e) => setUserForm({...userForm, login: e.target.value})}
-                  disabled
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Новый пароль (оставьте пустым чтобы не менять)</label>
-                <input
-                  type="password"
-                  value={userForm.password}
-                  onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                  placeholder="Оставьте пустым"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={userForm.email}
-                  onChange={(e) => setUserForm({...userForm, email: e.target.value})}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Роль</label>
-                <select
-                  value={userForm.role}
-                  onChange={(e) => setUserForm({...userForm, role: e.target.value})}
-                >
-                  <option value="admin">Администратор</option>
-                  <option value="uploader">Загрузчик АСКУЭ</option>
-                  <option value="res_responsible">Ответственный РЭС</option>
-                </select>
-              </div>
-              
-              {userForm.role !== 'admin' && (
-                <div className="form-group">
-                  <label>РЭС</label>
-                  <select
-                    value={userForm.resId}
-                    onChange={(e) => setUserForm({...userForm, resId: e.target.value})}
-                  >
-                    <option value="">Выберите РЭС</option>
-                    {resList.map(res => (
-                      <option key={res.id} value={res.id}>{res.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-            
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowEditModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="primary-btn" 
-                onClick={handleUpdateUser}
-              >
-                Сохранить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+.network-structure-wrapper {
+  position: relative;
 }
 
-// Подкомпонент обслуживания системы
-function MaintenanceSettings() {
-  const [clearing, setClearing] = useState(false);
-  const [showClearModal, setShowClearModal] = useState(false);
-  const [clearPassword, setClearPassword] = useState('');
+/* Легенда статусов - ОБНОВЛЕНО */
+/* Легенда статусов */
+.status-legend {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+  padding: 7px 20px;
+  background: white;
+  border-radius: 12px 12px 0 0; /* Скругление только сверху */
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   
-  const handleClearAll = async () => {
-    setClearing(true);
-    try {
-      const response = await api.delete('/api/network/clear-all', {
-        data: { password: clearPassword }
-      });
-      
-      alert('✅ Все данные успешно удалены!');
-      setShowClearModal(false);
-      setClearPassword('');
-      
-      // Создаем событие для обновления всех компонентов
-      window.dispatchEvent(new CustomEvent('dataCleared'));
-      
-    } catch (error) {
-      alert('❌ Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    } finally {
-      setClearing(false);
-    }
-  };
-  
-  return (
-    <div className="settings-section">
-      <h3>🔧 Обслуживание системы</h3>
-      
-      <div className="maintenance-card danger">
-        <h4>⚠️ Полная очистка данных</h4>
-        <p>Удаляет всю структуру сети, статусы проверок, уведомления и историю.</p>
-        <p className="warning-text">Это действие необратимо!</p>
-        <button 
-          onClick={() => setShowClearModal(true)}
-          disabled={clearing}
-          className="danger-btn"
-        >
-          {clearing ? 'Удаление...' : '🗑️ Очистить все данные'}
-        </button>
-      </div>
-      
-      <div className="maintenance-card">
-        <h4>📊 Статистика системы</h4>
-        <div className="stats-grid">
-          <div className="stat-item">
-            <span className="stat-label">Версия системы:</span>
-            <span className="stat-value">2.0.1</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">База данных:</span>
-            <span className="stat-value">PostgreSQL</span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Модальное окно для удаления всех данных */}
-      {showClearModal && (
-        <div className="modal-backdrop" onClick={() => setShowClearModal(false)}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение полной очистки</h3>
-              <button className="close-btn" onClick={() => setShowClearModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p className="warning">⚠️ ВНИМАНИЕ! Будут удалены:</p>
-              <ul>
-                <li>Вся структура сети</li>
-                <li>Все статусы проверок</li>
-                <li>Все уведомления</li>
-                <li>Вся история загрузок</li>
-                <li>Вся история проверок</li>
-              </ul>
-              <p className="warning">Это действие НЕЛЬЗЯ отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={clearPassword}
-                  onChange={(e) => setClearPassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowClearModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleClearAll}
-                disabled={!clearPassword || clearing}
-              >
-                {clearing ? 'Удаление...' : 'Удалить всё'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  height: 70px;
+  box-sizing: border-box;
+}
+/* Каждый элемент легенды */
+.status-legend > div {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Расстояние между квадратиком и текстом */
+  position: relative;
+  padding-left: 44px; /* 36px (ширина квадрата) + 8px (отступ) */
+}
+/* Квадратики позиционируем абсолютно */
+.status-legend .status-box {
+  position: absolute;
+  left: 0;
+  width: 36px;
+  height: 36px;
+}
+.status-legend > div:not(:last-child) {
+  margin-right: 60px; /* Это расстояние между КВАДРАТИКАМИ */
+}
+/* Таблица */
+/* Заголовки таблицы */
+.structure-table thead {
+  position: sticky;
+  top: 70px;
+  z-index: 90;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-// =====================================================
-// ОСНОВНОЕ ПРИЛОЖЕНИЕ
-// =====================================================
-
-// =====================================================
-// Компонент для просмотра файлов
-// =====================================================
-function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
-  console.log('FileViewer files:', files);
-  console.log('Current file:', files[currentIndex]);
-  
-  const currentFile = files[currentIndex];
-  const url = currentFile.url.toLowerCase();
-  const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif');
-  const isPdf = url.endsWith('.pdf');
-  
-  return (
-    <div className="modal-backdrop file-viewer-backdrop" onClick={onClose}>
-      <div className="file-viewer-container" onClick={e => e.stopPropagation()}>
-        <div className="file-viewer-header">
-          <h3>Просмотр файлов ({currentIndex + 1} из {files.length})</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
-        
-        <div className="file-viewer-content">
-          {isImage ? (
-            <img 
-              src={currentFile.url} 
-              alt={currentFile.original_name}
-              className="file-viewer-image"
-            />
-          ) : isPdf ? (
-            <div className="pdf-viewer">
-              <iframe 
-                src={currentFile.url} 
-                width="100%" 
-                height="600px"
-                title={currentFile.original_name}
-              />
-              <a 
-                href={currentFile.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="pdf-download-link"
-              >
-                📥 Открыть PDF в новой вкладке
-              </a>
-            </div>
-          ) : (
-            <div className="file-not-supported">
-              <p>Предпросмотр недоступен</p>
-              <a 
-                href={currentFile.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="download-link"
-              >
-                📥 Скачать файл
-              </a>
-            </div>
-          )}
-        </div>
-        
-        <div className="file-viewer-info">
-          <p><strong>Имя файла:</strong> {currentFile.original_name}</p>
-          <p><strong>Загружен:</strong> {new Date(currentFile.uploaded_at).toLocaleString('ru-RU')}</p>
-        </div>
-        
-        {files.length > 1 && (
-          <div className="file-viewer-navigation">
-            <button onClick={onPrev} className="nav-btn">
-              ← Предыдущий
-            </button>
-            <button onClick={onNext} className="nav-btn">
-              Следующий →
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+/* Убираем лишнюю обертку */
+.structure-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
 }
 
-// =====================================================
-// КОМПОНЕНТ ЗАГРУЖЕННЫХ ДОКУМЕНТОВ
-// =====================================================
-
-function UploadedDocuments() {
-  const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [showFileViewer, setShowFileViewer] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
-  const { user } = useContext(AuthContext);
-  
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-  
-  const loadDocuments = async () => {
-    try {
-      const response = await api.get('/api/documents/list');
-      setDocuments(response.data);
-    } catch (error) {
-      console.error('Error loading documents:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleViewFile = (files) => {
-    setSelectedFiles(files);
-    setCurrentFileIndex(0);
-    setShowFileViewer(true);
-  };
-  
-  const handleDeleteFile = async () => {
-    try {
-      await api.delete(`/api/documents/${selectedFile.recordId}/${selectedFile.fileIndex}`, {
-        data: { password: deletePassword }
-      });
-      
-      alert('Файл удален успешно');
-      setShowDeleteModal(false);
-      setDeletePassword('');
-      setSelectedFile(null);
-      loadDocuments();
-      
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
-  
-  if (loading) return <div className="loading">Загрузка документов...</div>;
-  
-  return (
-    <div className="uploaded-documents">
-      <h2>📄 Загруженные документы</h2>
-      
-      <div className="documents-info">
-        <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
-      </div>
-      
-      <div className="documents-table">
-        <table>
-          <thead>
-            <tr>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>ПУ №</th>
-              <th>Загрузил</th>
-              <th>Дата загрузки</th>
-              <th>Комментарий</th>
-              <th>Статус</th>
-              <th>Файлы</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.map((doc) => (
-              <tr key={doc.id}>
-                <td>{doc.tpName}</td>
-                <td>{doc.vlName}</td>
-                <td><strong>{doc.puNumber}</strong></td>
-                <td>{doc.uploadedBy}</td>
-                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                <td className="comment-cell">{doc.resComment}</td>
-                <td>
-                  <span className={`status-badge status-${doc.status}`}>
-                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
-                  </span>
-                </td>
-                <td>
-                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    {doc.attachments && doc.attachments.length > 0 && (
-                      <button 
-                        className="btn-view"
-                        onClick={() => handleViewFile(doc.attachments)}
-                        title="Просмотреть"
-                      >
-                        👁️
-                      </button>
-                    )}
-                    {user.role === 'admin' && doc.attachments && doc.attachments.map((file, idx) => (
-                      <button 
-                        key={idx}
-                        className="btn-delete-small"
-                        onClick={() => {
-                          setSelectedFile({ ...file, recordId: doc.id, fileIndex: idx });
-                          setShowDeleteModal(true);
-                        }}
-                        title={`Удалить ${file.original_name}`}
-                      >
-                        🗑️
-                      </button>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {documents.length === 0 && (
-        <div className="no-data">
-          <p>Пока нет загруженных документов</p>
-        </div>
-      )}
-      
-      {/* Модальное окно удаления */}
-      {showDeleteModal && (
-        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение удаления файла</h3>
-              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p>Вы собираетесь удалить файл:</p>
-              <p><strong>{selectedFile?.original_name}</strong></p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleDeleteFile}
-                disabled={!deletePassword}
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Просмотрщик файлов */}
-      {showFileViewer && (
-        <FileViewer 
-          files={selectedFiles}
-          currentIndex={currentFileIndex}
-          onClose={() => setShowFileViewer(false)}
-          onNext={() => setCurrentFileIndex((prev) => (prev + 1) % selectedFiles.length)}
-          onPrev={() => setCurrentFileIndex((prev) => (prev - 1 + selectedFiles.length) % selectedFiles.length)}
-        />
-      )}
-    </div>
-  );
+/* Специальные стили для колонок */
+.structure-table th:first-child,
+.structure-table td:first-child {
+  width: 40px; /* Чекбокс */
 }
 
+.structure-table th:nth-child(2),
+.structure-table td:nth-child(2) {
+  min-width: 120px; /* РЭС */
+  font-size: 13px;
+text-align: left;
+}
 
-// экспорт файлов
+.structure-table th:nth-child(3),
+.structure-table td:nth-child(3) {
+  width: 120px; /* ТП */
+  font-size: 13px;
+text-align: left;
+}
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [activeSection, setActiveSection] = useState('structure');
-  const [selectedRes, setSelectedRes] = useState(null);
-  const [resList, setResList] = useState([]);
+.structure-table th:nth-child(4),
+.structure-table td:nth-child(4) {
+  width: 100px; /* ВЛ */
+  font-size: 13px;
+text-align: left;
+}
 
-  // Оптимизированная проверка токена
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.get('/api/auth/me')
-        .then(response => {
-          setUser(response.data.user);
-          setSelectedRes(response.data.user.resId);
-        })
-        .catch(() => {
-          try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            setUser({
-              id: payload.id,
-              role: payload.role,
-              resId: payload.resId
-            });
-            setSelectedRes(payload.resId);
-          } catch (error) {
-            localStorage.removeItem('token');
-          }
-        });
-    }
-  }, []);
+/* Колонки с ПУ */
+.structure-table th:nth-child(5),
+.structure-table th:nth-child(6),
+.structure-table th:nth-child(7),
+.structure-table td:nth-child(5),
+.structure-table td:nth-child(6),
+.structure-table td:nth-child(7) {
+  width: 80px;
+text-align: center;
+}
 
-  useEffect(() => {
-    if (user && user.role === 'admin') {
-      loadResList();
-    }
-  }, [user]);
+/* Дата обновления */
+.structure-table th:last-child,
+.structure-table td:last-child {
+  width: 120px;
+  font-size: 12px;
+text-align: left;
+}
 
-  const loadResList = async () => {
-    try {
-      const response = await api.get('/api/res/list');
-      setResList(response.data);
-    } catch (error) {
-      console.error('Error loading RES list:', error);
-    }
-  };
+/* Контейнер структуры сети */
+.network-structure {
+  margin-top: 0; /* Убираем верхний отступ */
+  padding-top: 0; /* И тут тоже */
+   width: 100%;
+}
+/* Корректировка отступов контента */
+.content {
+  flex: 1;
+  padding: 0 20px 24px 20px; /* Был padding: 24px 20px - убираем верхний */
+  overflow-y: auto;
+  background-color: #f5f6fa;
+  max-width: 100%; /* Добавьте это */
+  width: 100%; /* Добавьте это */
+}
+/* ===================================================== 
+   КОМПАКТНЫЕ УВЕДОМЛЕНИЯ
+   ===================================================== */
 
-  const handleLogin = useCallback((userData) => {
-    setUser({
-      id: userData.id,
-      fio: userData.fio,
-      role: userData.role,
-      resId: userData.resId,
-      resName: userData.resName
-    });
-    if (userData.resId) {
-      setSelectedRes(userData.resId);
-    }
-  }, []);
+.notification-narrow-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0;
+}
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setSelectedRes(null);
-  };
+.notification-phases {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
 
-  if (!user) {
-    return <LoginForm onLogin={handleLogin} />;
+.notification-narrow-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-tp {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.notification-narrow-details {
+  font-size: 13px;
+  color: #718096;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notification-pu-number {
+  font-size: 14px;
+  color: #4a5568;
+  margin-top: 2px;
+}
+
+.notification-pu-number strong {
+  color: #667eea;
+  font-size: 16px;
+}
+
+.notification-narrow-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Светлая кнопка лупы */
+.btn-details-light {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f7fafc;
+  color: #a0aec0;
+  width: auto;
+}
+
+.btn-details-light:hover {
+  background: #edf2f7;
+  color: #718096;
+  transform: translateY(-1px);
+}
+.notifications h2 {
+  margin-bottom: 24px;
+  color: #2c3e50;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.notifications-controls {
+  margin-bottom: 24px;
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Компактные уведомления */
+.notification-compact {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+  border-left: 4px solid transparent;
+}
+
+.notification-compact:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.notification-compact.error {
+  border-left-color: #e53e3e;
+}
+
+.notification-compact.pending_askue {
+  border-left-color: #ed8936;
+}
+
+.notification-compact.success {
+  border-left-color: #38a169;
+}
+
+.notification-compact.unread {
+  background: linear-gradient(to right, #f8f9fb 0%, white 10%);
+}
+
+/* Содержимое компактных уведомлений */
+.notification-compact-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notification-main-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-location {
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.notification-location .label {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.notification-pu {
+  font-size: 18px;
+  color: #2c3e50;
+}
+
+.notification-pu strong {
+  font-size: 20px;
+  color: #667eea;
+}
+
+/* Строка с действиями */
+.notification-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ===================================================== 
+   ИНДИКАТОРЫ ФАЗ - ВСЕ ЗЕЛЕНЫЕ ПО УМОЛЧАНИЮ!
+   ===================================================== */
+
+.phase-indicators {
+  display: flex;
+  gap: 8px;
+}
+
+.phase-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  /* ВСЕ ФАЗЫ ЗЕЛЕНЫЕ ПО УМОЛЧАНИЮ! */
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Зеленое свечение для всех фаз по умолчанию */
+.phase-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(72, 187, 120, 0.3) 0%, transparent 70%);
+  animation: greenGlow 3s ease-in-out infinite;
+}
+
+@keyframes greenGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
   }
-
-  const renderContent = () => {
-     switch (activeSection) {
-    case 'structure':
-      return <NetworkStructure selectedRes={selectedRes} />;
-    case 'upload':
-      return <FileUpload selectedRes={selectedRes} />;
-    case 'tech_pending':
-      return <Notifications filterType="error" />;
-    case 'askue_pending':
-      return <Notifications filterType="pending_askue" />;
-    case 'documents':
-      return <UploadedDocuments />; // НОВОЕ!
-    case 'reports':
-      return <Reports />;
-    case 'settings':
-      return <Settings />;
-    default:
-      return <NetworkStructure selectedRes={selectedRes} />;
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
   }
-  };
+}
 
-  return (
-    <AuthContext.Provider value={{ user, selectedRes }}>
-      <div className="app">
-        <MainMenu 
-          activeSection={activeSection} 
-          onSectionChange={setActiveSection}
-          userRole={user.role}
-        />
-        
-        <div className="main-content">
-          <header className="app-header">
-            <div className="header-left">
-              <h1>Система контроля уровня напрежения в сетях 0,4 кВ</h1>
-              {user.role === 'admin' && (
-                <select 
-                  value={selectedRes || ''}
-                  onChange={(e) => setSelectedRes(e.target.value ? parseInt(e.target.value) : null)}
-                >
-                  <option value="">Все РЭСы</option>
-                  {resList.map(res => (
-                    <option key={res.id} value={res.id}>{res.name}</option>
-                  ))}
-                </select>
-              )}
-              {user.resId && (
-                <span className="res-name">
-                  {resList.find(r => r.id === user.resId)?.name || user.resName}
-                </span>
-              )}
-            </div>
-            
-            <div className="header-right">
-              <span>{user.fio}</span>
-              <span className="user-role">
-                ({user.role === 'admin' ? 'Администратор' : 
-                  user.role === 'uploader' ? 'Загрузчик' : 'Ответственный'})
-              </span>
-              <button onClick={handleLogout} className="logout-btn">
-                Выйти
-              </button>
-            </div>
-          </header>
-          
-          <main className="content">
-            {renderContent()}
-          </main>
-        </div>
-      </div>
-    </AuthContext.Provider>
+/* ТОЛЬКО если есть ошибка - красный */
+.phase-indicator.phase-error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+  animation: phaseError 2s ease-in-out infinite;
+}
+
+.phase-indicator.phase-error::before {
+  background: radial-gradient(circle at center, rgba(245, 101, 101, 0.4) 0%, transparent 70%);
+  animation: redPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes phaseError {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 2px 16px rgba(245, 101, 101, 0.6);
+  }
+}
+
+@keyframes redPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Большие индикаторы фаз в модальном окне */
+.phase-indicators-large {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.phase-indicators-large .phase-indicator {
+  width: 60px;
+  height: 60px;
+  font-size: 24px;
+  /* Тоже все зеленые по умолчанию */
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 3px 12px rgba(72, 187, 120, 0.3);
+}
+
+.phase-indicators-large .phase-indicator.phase-error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  box-shadow: 0 3px 12px rgba(245, 101, 101, 0.3);
+  animation: phaseError 2s ease-in-out infinite;
+}
+
+/* Кнопки в уведомлениях */
+.notification-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-details,
+.btn-complete,
+.btn-delete,
+.btn-upload {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f1f3f5;
+  color: #4a5568;
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-details:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.btn-complete {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+}
+
+.btn-complete:hover {
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.btn-delete {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+}
+
+.btn-delete:hover {
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+}
+
+.btn-upload {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  padding: 8px 16px;
+}
+
+.btn-upload:hover {
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.btn-upload:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Компактные уведомления АСКУЭ */
+.notification-compact-content.askue {
+  background: linear-gradient(to right, #fff5f5 0%, white 100%);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+/* ===================================================== 
+   МОДАЛЬНЫЕ ОКНА
+   ===================================================== */
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  padding: 0;
+  border-radius: 16px;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid #e1e4e8;
+  background: #f8f9fb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #718096;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.close-btn:hover {
+  background-color: #e2e8f0;
+  color: #2d3748;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(90vh - 140px);
+}
+.modal-body {
+  padding: 24px 32px; /* Увеличиваем боковые отступы */
+  overflow-y: auto;
+  max-height: calc(90vh - 140px);
+}
+
+.modal-info {
+  padding-left: 8px; /* Дополнительный отступ для информации */
+}
+
+.error-summary {
+  padding: 0 8px; /* Отступы для текста ошибки */
+}
+
+.error-summary .error-text {
+  padding-left: 12px; /* Отступ для самого текста */
+  line-height: 1.6;
+}
+.modal-footer {
+  padding: 20px 24px;
+  border-top: 1px solid #e1e4e8;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: #f8f9fb;
+}
+
+/* Модальное окно деталей */
+.details-modal .detail-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f3f5;
+  font-size: 15px;
+}
+
+.details-modal .detail-row:last-child {
+  border-bottom: none;
+}
+
+.details-modal .detail-row strong {
+  color: #2d3748;
+  margin-right: 8px;
+}
+
+.error-details-box {
+  margin-top: 20px;
+  padding: 16px;
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 8px;
+}
+
+.error-details-box strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #c53030;
+}
+
+.highlight-box {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.highlight-box strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #2d3748;
+}
+
+/* ===================================================== 
+   НАСТРОЙКИ СИСТЕМЫ
+   ===================================================== */
+
+.settings-container {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.settings-container h2 {
+  padding: 24px;
+  margin: 0;
+  border-bottom: 1px solid #e1e4e8;
+  color: #2c3e50;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+/* Табы настроек */
+.settings-tabs {
+  display: flex;
+  background: #f8f9fb;
+  border-bottom: 1px solid #e1e4e8;
+  padding: 0 24px;
+}
+
+.settings-tabs button {
+  padding: 16px 24px;
+  background: none;
+  border: none;
+  color: #718096;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.settings-tabs button:hover {
+  color: #2d3748;
+  background: rgba(0,0,0,0.02);
+}
+
+.settings-tabs button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: none;
+}
+
+/* Контент настроек */
+.settings-content {
+  padding: 32px;
+  min-height: 400px;
+}
+
+.settings-section {
+  max-width: 100%;
+  padding: 0 20px;
+}
+
+.settings-section h3 {
+  margin-bottom: 24px;
+  color: #2c3e50;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.section-description {
+  margin-bottom: 24px;
+  color: #718096;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Зона загрузки файлов */
+.upload-area {
+  margin-bottom: 24px;
+}
+
+.upload-area input[type="file"] {
+  display: none;
+}
+
+.file-label {
+  display: block;
+  padding: 40px;
+  border: 2px dashed #cbd5e0;
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #718096;
+  font-size: 16px;
+}
+
+.file-label:hover {
+  border-color: #667eea;
+  background: #f7fafc;
+  color: #667eea;
+}
+
+/* Опции настроек */
+.settings-option {
+  margin-bottom: 20px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 15px;
+  color: #4a5568;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-right: 12px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  user-select: none;
+}
+
+/* Статистика загрузки */
+.upload-stats {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.upload-stats h4 {
+  margin-bottom: 16px;
+  color: #2d3748;
+  font-size: 18px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.stat-label {
+  color: #718096;
+  font-size: 14px;
+}
+
+.stat-value {
+  color: #2d3748;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* Таблица пользователей */
+.users-table-container {
+  margin-top: 24px;
+  border: 1px solid #e1e4e8;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th {
+  background: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.users-table td {
+  padding: 16px;
+  border-top: 1px solid #f1f3f5;
+}
+
+.users-table tr:hover {
+  background: #f8f9fb;
+}
+
+/* Роли пользователей */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 140px;
+}
+
+.role-badge.role-admin {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.role-badge.role-uploader {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+}
+
+.role-badge.role-res_responsible {
+  background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+  color: white;
+}
+
+/* Кнопки действий */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #f1f3f5;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.btn-icon:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.btn-icon.danger {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.btn-icon.danger:hover {
+  background: #feb2b2;
+}
+
+/* Заголовок секции с действиями */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Кнопки */
+.primary-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.secondary-btn {
+  background: #f1f3f5;
+  color: #4a5568;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.secondary-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.danger-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(245, 101, 101, 0.3);
+}
+
+.cancel-btn,
+.action-btn,
+.confirm-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.cancel-btn {
+  background: #f1f3f5;
+  color: #4a5568;
+}
+
+.cancel-btn:hover {
+  background: #e2e8f0;
+}
+
+.action-btn,
+.confirm-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.action-btn:hover,
+.confirm-btn:hover {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Карточки обслуживания */
+.maintenance-card {
+  padding: 24px;
+  border: 1px solid #e1e4e8;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  background: #f8f9fb;
+}
+
+.maintenance-card.danger {
+  background: #fff5f5;
+  border-color: #feb2b2;
+}
+
+.maintenance-card h4 {
+  margin-bottom: 12px;
+  color: #2d3748;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.maintenance-card p {
+  color: #718096;
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.warning-text {
+  color: #e53e3e;
+  font-weight: 500;
+}
+
+/* Модальное окно пользователя */
+.user-modal {
+  max-width: 500px;
+}
+
+.user-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Сообщения об успехе/ошибке */
+.success-message {
+  background: linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%);
+  border: 1px solid #9ae6b4;
+  color: #22543d;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-message {
+  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border: 1px solid #feb2b2;
+  color: #742a2a;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+/* Поиск */
+.search-box {
+  position: relative;
+}
+
+.search-input {
+  width: 300px;
+  padding: 10px 16px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Загрузка */
+.loading {
+  text-align: center;
+  padding: 60px;
+  color: #718096;
+  font-size: 16px;
+}
+
+/* Дополнительные стили для загрузки файлов */
+.upload-info {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.upload-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.upload-info .hint {
+  color: #667eea;
+  font-weight: 500;
+}
+
+.file-input-wrapper {
+  margin: 20px 0;
+}
+
+.file-info {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.file-info p {
+  margin: 4px 0;
+  color: #4a5568;
+}
+
+.file-info strong {
+  color: #2d3748;
+}
+
+.file-info .pu-number strong {
+  color: #667eea;
+  font-size: 18px;
+}
+
+.upload-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.upload-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.upload-btn:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+}
+
+.upload-result {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.upload-result.success {
+  background: #f0fff4;
+  border-color: #9ae6b4;
+  color: #22543d;
+}
+
+.upload-result.error {
+  background: #fff5f5;
+  border-color: #feb2b2;
+  color: #742a2a;
+}
+
+.upload-result h3 {
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+
+.upload-result p {
+  margin: 8px 0;
+}
+
+.upload-result details {
+  margin-top: 16px;
+}
+
+.upload-result summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #667eea;
+}
+
+.upload-result pre {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+/* Стили для отчетов */
+.report-controls {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-group label {
+  color: #4a5568;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.control-group select,
+.control-group input[type="date"] {
+  padding: 8px 12px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.control-group select:focus,
+.control-group input[type="date"]:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.report-summary {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-bottom: 24px;
+}
+
+.report-summary h3 {
+  margin-bottom: 8px;
+  color: #2c3e50;
+  font-size: 24px;
+}
+
+.report-summary p {
+  color: #718096;
+  font-size: 16px;
+}
+
+.report-table {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.report-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th {
+  background: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+}
+
+.report-table td {
+  
+vertical-align: middle !important;  /* Центр по вертикали */
+  padding: 12px 16px;      /* Равные отступы сверху и снизу */
+}
+
+.report-table tr:hover {
+  background: #f8f9fb;
+}
+
+.report-table .error-cell {
+  color: #e53e3e;
+  font-weight: 500;
+}
+
+.no-data {
+  text-align: center;
+  padding: 60px;
+  color: #718096;
+}
+
+.no-data p {
+  font-size: 16px;
+}
+
+/* Дополнительные утилиты */
+.edit-hint {
+  color: #667eea;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.delete-selected-btn {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+}
+
+.delete-selected-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+}
+
+.checkbox-column {
+  width: 50px;
+  text-align: center;
+}
+
+.checkbox-column input[type="checkbox"] {
+  cursor: pointer;
+  transform: scale(1.2);
+}
+
+tr.selected {
+  background: #f0f4ff;
+}
+
+.edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-cell input {
+  padding: 4px 8px;
+  border: 1px solid #667eea;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100px;
+}
+
+.edit-cell button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  width: auto;
+  min-width: 30px;
+}
+
+.save-btn {
+  background: #48bb78;
+  color: white;
+}
+
+.save-btn:hover {
+  background: #38a169;
+}
+
+.cancel-btn {
+  background: #f56565;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #e53e3e;
+}
+
+.word-count {
+  display: block;
+  margin-top: 8px;
+  color: #718096;
+  font-size: 13px;
+}
+
+.work-info {
+  background: #f7fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.work-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.work-info strong {
+  color: #2d3748;
+}
+
+.askue-details-content h4 {
+  color: #ed8936;
+  margin-bottom: 16px;
+  font-size: 20px;
+}
+
+.delete-modal .warning {
+  color: #e53e3e;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.delete-modal ul {
+  margin-left: 24px;
+  margin-bottom: 16px;
+  color: #4a5568;
+}
+
+.delete-modal ul li {
+  margin: 4px 0;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .app {
+    flex-direction: column;
+  }
+  
+  .main-menu {
+    width: 100%;
+    padding: 16px;
+  }
+  
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .structure-table {
+    overflow-x: auto;
+  }
+  
+  .notification-actions-row {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .report-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group {
+    width: 100%;
+  }
+  
+  .control-group input,
+  .control-group select {
+    width: 100%;
+  }
+}
+
+/* Анимации */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-compact {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Скроллбар */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f3f5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Утилиты */
+.text-center {
+  text-align: center;
+}
+
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.mt-4 {
+  margin-top: 32px;
+}
+
+.warning {
+  color: #e53e3e;
+  font-weight: 600;
+}
+
+/* Дополнительная анимация для успешных уведомлений */
+.notification-compact.success {
+  animation: slideIn 0.3s ease-out, successPulse 2s ease-in-out;
+}
+
+@keyframes successPulse {
+  0%, 100% {
+    border-left-color: #38a169;
+  }
+  50% {
+    border-left-color: #68d391;
+    background: linear-gradient(to right, #f0fff4 0%, white 10%);
+  }
+}
+
+.success-icon,
+.info-icon {
+  font-size: 24px;
+  margin-right: 12px;
+}
+
+.success-text,
+.info-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+}
+/* для массовой загрузки файлов */
+.selected-files {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.upload-progress {
+  padding: 12px;
+  background: #e6f4ff;
+  border-radius: 8px;
+  text-align: center;
+  margin: 16px 0;
+}
+.structure-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+/* Стили для файлов прикреп */
+.attached-files-list {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f7fafc;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.attached-file-item {
+  padding: 4px 0;
+  color: #4a5568;
+}
+
+.file-preview {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.file-preview:hover {
+  transform: scale(1.05);
+}
+
+/* Кнопка просмотра файлов в таблице */
+.btn-view-files {
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.btn-view-files:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(66, 153, 225, 0.3);
+}
+
+.no-files {
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+/* Просмотрщик файлов */
+.file-viewer-backdrop {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.file-viewer-container {
+  background: white;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-viewer-header {
+  padding: 20px;
+  border-bottom: 1px solid #e1e4e8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-viewer-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: #f8f9fb;
+  overflow: auto;
+}
+
+.file-viewer-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.pdf-viewer {
+  width: 100%;
+  text-align: center;
+}
+
+.pdf-download-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.pdf-download-link:hover {
+  text-decoration: underline;
+}
+
+.file-viewer-info {
+  padding: 15px 20px;
+  background: #f8f9fb;
+  border-top: 1px solid #e1e4e8;
+  font-size: 14px;
+}
+
+.file-viewer-info p {
+  margin: 5px 0;
+}
+
+.file-viewer-navigation {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 20px;
+  border-top: 1px solid #e1e4e8;
+}
+
+.nav-btn {
+  padding: 8px 20px;
+  background: #f1f3f5;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+}
+
+.nav-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+/* Управление файлами */
+.file-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: #f7fafc;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.stat-card h4 {
+  color: #718096;
+  font-size: 14px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.stat-card .stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.file-card {
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.file-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.file-thumbnail {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.file-icon {
+  width: 100%;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fb;
+  font-size: 48px;
+}
+
+.file-info {
+  padding: 15px;
+}
+
+.file-name {
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 13px;
+  color: #718096;
+  line-height: 1.5;
+}
+
+.file-actions {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  border-top: 1px solid #f1f3f5;
+  justify-content: center;
+}
+
+.file-not-supported {
+  text-align: center;
+  padding: 40px;
+}
+
+.download-link {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.download-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* ===================================================== 
+   ЗАГРУЖЕННЫЕ ДОКУМЕНТЫ
+   ===================================================== */
+
+.uploaded-documents {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.uploaded-documents h2 {
+  margin-bottom: 24px;
+  color: #2c3e50;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.documents-info {
+  background: #f7fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  border: 1px solid #e2e8f0;
+}
+
+.documents-table {
+  overflow-x: auto;
+}
+
+.documents-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.documents-table th {
+  background: #f8f9fb;
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e1e4e8;
+}
+
+.documents-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.documents-table tr:hover {
+  background: #f8f9fb;
+}
+
+.comment-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-badge.status-completed {
+  background: #d4f8e8;
+  color: #065f46;
+padding: 16px 19px;
+}
+
+.status-badge.status-awaiting_recheck {
+  background: #fef3c7;
+  color: #92400e;
+padding: 16px 12px;
+}
+
+.file-count {
+  color: #667eea;
+  font-weight: 500;
+}
+
+.btn-view {
+  padding: 4px 8px;
+  background: #dbeafe;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.btn-view:hover {
+  background: #3182ce;
+}
+
+.btn-delete-small {
+  padding: 4px 8px;
+  background: #f56565;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.btn-delete-small:hover {
+  background: #e53e3e;
+}
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Фоновое изображение - замените URL на свое */
+  background-image: url('/images/login-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Градиент от прозрачного к темно-синему */
+  filter: brightness(0.7);
+  z-index: 1;
+}
+.login-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Диагональный градиент от прозрачного к темно-синему */
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0) 0%,
+    rgba(28, 43, 81, 0.4) 30%,
+    rgba(28, 43, 81, 0.7) 60%,
+    rgba(28, 43, 81, 0.95) 100%
   );
+  z-index: 2;
+}
+.report-table th:nth-child(5),  /* Заголовок */
+.report-table td:nth-child(5) {  /* Ячейки */
+  display: none;
+}
+/* ===================================================== 
+   СТАТУСЫ В ТАБЛИЦЕ ОТЧЕТОВ
+   ===================================================== */
+
+/* Зеленый статус "Исправлено" */
+.report-table .status-ok {
+  background: #d4f8e8;
+  color: #065f46;
+  padding: 4px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-block;
+  margin: 0 auto;
+  width: fit-content;
+
+}
+
+/* Красный статус "Не исправлено" */
+.report-table .status-error {
+  background: #fee;
+  color: #c53030;
+  padding: 4px 12px;
+  border-radius: 0px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-block;
+  margin: 0 auto;
+  width: fit-content;
+}
+.report-table .status-ok,
+.report-table .status-error {
+  background: #d4f8e8;
+  color: #065f46;
+  padding: 6px 16px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 500;
+  display: block;          /* Изменено с inline-block */
+  margin: 0 auto;          /* Центрирует блок */
+  width: fit-content;      /* Ширина по содержимому */
+}
+/* Зеленый статус "Исправлено" */
+.report-table .status-ok {
+  background: #d4f8e8;
+  color: #065f46;
+  border: 1px solid #6ee7b7;  /* Тонкая рамка для четкости */
+}
+/* Красный статус "Не исправлено" */
+.report-table .status-error {
+  background: #fee;
+  color: #c53030;
+  border: 1px solid #fca5a5;  /* Тонкая рамка для четкости */
+}
+.report-table td:nth-child(11) {
+  vertical-align: middle !important;
+  text-align: center;
+}
+.report-table td.status-ok,
+.report-table td.status-error {
+  vertical-align: middle !important;  /* Как у остальных ячеек */
+  padding-top: 16px !important;       /* Такой же отступ сверху */
+  padding-bottom: 16px !important;    /* И снизу */
+}
+/* Увеличиваем высоту блоков статуса */
+.report-table span.status-ok,
+.report-table span.status-error {
+  padding: 12px 24px;  /* Было 6px 16px - увеличили вдвое */
+  display: inline-block;
+}
+/* Эффект при наведении */
+.report-table .status-ok:hover {
+  background: #bbf7d0;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+.report-table .status-error:hover {
+  background: #fecaca;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+/* Тень для объема */
+.report-table .status-ok,
+.report-table .status-error {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ===================================================== 
+   КНОПКА ФАЙЛОВ В ТАБЛИЦЕ ОТЧЕТОВ - BADGE СТИЛЬ
+   ===================================================== */
+
+.report-table .btn-view-files {
+  display: inline-block;
+  padding: 24px 14px;         /* Увеличенные отступы для ширины */
+  border-radius: 0px;        /* Скругленные края как у статусов */
+  font-size: 13px;            
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+
+  
+  /* Нежно-синий цвет */
+  background: #dbeafe;        
+  color: #1e40af;            
+  border: 1px solid #93c5fd; 
+  
+  /* Убираем стандартные стили кнопки */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  
+  /* Убираем стандартные отступы кнопки */
+  margin: 0;
+  width: auto;
+  text-transform: none;
+}
+
+/* Эффект при наведении */
+.report-table .btn-view-files:hover {
+  background: #bfdbfe;        
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(59, 130, 246, 0.2);
+}
+
+/* Эффект при нажатии */
+.report-table .btn-view-files:active {
+  transform: translateY(0);
+}
+.report-table th:nth-child(8),  /* Заголовок "Комментарий РЭС" */
+.report-table td:nth-child(8) {  /* Ячейки с комментариями */
+  display: none;
+}
+/* Кликабельные статусы */
+.report-table .status-ok.clickable,
+.report-table .status-error.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.report-table .status-ok.clickable:hover,
+.report-table .status-error.clickable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Модальное окно комментария */
+.comment-modal {
+  max-width: 600px;
+}
+
+.comment-info {
+  background: #f7fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.comment-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.comment-content {
+  padding: 16px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border: 1px solid #e1e4e8;
+}
+
+.comment-content h4 {
+  margin-bottom: 12px;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.comment-content p {
+  color: #4a5568;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Подсказка при наведении */
+.report-table .clickable::after {
+  content: "Клик для деталей";
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d3748;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.report-table .clickable:hover::after {
+  opacity: 1;
+}
+
+.report-table td {
+  position: relative;
+}
+/* Убираем правый отступ у РЭС */
+.structure-table th:nth-child(2),
+.structure-table td:nth-child(2) {
+  padding-right: 10px;
+}
+
+/* И добавляем отрицательный margin к ТП */
+.structure-table th:nth-child(3),
+.structure-table td:nth-child(3) {
+  padding-left: 0px;
+  margin-left: 0px;  /* Подберите нужное значение */
 }
