@@ -981,6 +981,7 @@ function Notifications({ filterType, onSectionChange }) {
 
   useEffect(() => {
     loadNotifications();
+     markAsRead();
     
     // Слушаем события обновления
     const handleUpdate = () => loadNotifications();
@@ -999,6 +1000,22 @@ function Notifications({ filterType, onSectionChange }) {
       clearInterval(interval);
     };
   }, [loadNotifications]);
+
+  const markAsRead = async () => {
+  try {
+    // Отмечаем уведомления как прочитанные при открытии
+    await api.put('/api/notifications/mark-read', { 
+      type: filterType === 'error' ? 'error' : 
+            filterType === 'pending_askue' ? 'pending_askue' : 
+            'all'
+    });
+    
+    // Обновляем счетчики
+    window.dispatchEvent(new CustomEvent('notificationsUpdated'));
+  } catch (error) {
+    console.error('Error marking as read:', error);
+  }
+};
 
   const handleCompleteWork = async () => {
     const wordCount = comment.trim().split(' ').filter(word => word.length > 0).length;
