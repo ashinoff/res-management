@@ -436,7 +436,7 @@ const CheckHistory = sequelize.define('CheckHistory', {
     attachments: {
       type: DataTypes.JSON,  // Будем хранить массив объектов с url и public_id
       defaultValue: []
-  }
+  },
   failureCount: {
     type: DataTypes.INTEGER,
     defaultValue: 1  // Первая ошибка уже считается
