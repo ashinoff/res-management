@@ -118,10 +118,11 @@ function LoginForm({ onLogin }) {
 
 function MainMenu({ activeSection, onSectionChange, userRole }) {
   const menuItems = [
-    { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
+      { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
     { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
     { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
+    { id: 'problem_vl', label: '🚨 Проблемные ВЛ', roles: ['admin'] },  // НОВОЕ
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
@@ -1929,6 +1930,269 @@ function Reports() {
   );
 
 }
+
+// =====================================================
+// КОМПОНЕНТ ПРОБЛЕМНЫХ ВЛ (2+ НЕУДАЧНЫХ ПРОВЕРКИ)
+// =====================================================
+
+function ProblemVL() {
+  const [problemVLs, setProblemVLs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedProblem, setSelectedProblem] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsProblem, setDetailsProblem] = useState(null);
+
+  useEffect(() => {
+    loadProblemVLs();
+    
+    const handleUpdate = () => loadProblemVLs();
+    window.addEventListener('problemVLUpdated', handleUpdate);
+    
+    return () => {
+      window.removeEventListener('problemVLUpdated', handleUpdate);
+    };
+  }, []);
+
+  const loadProblemVLs = async () => {
+    try {
+      const response = await api.get('/api/problem-vl/list');
+      setProblemVLs(response.data);
+    } catch (error) {
+      console.error('Error loading problem VLs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    try {
+      await api.put(`/api/problem-vl/${selectedProblem.id}/dismiss`, {
+        password: deletePassword
+      });
+      
+      alert('Проблема отклонена');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setSelectedProblem(null);
+      loadProblemVLs();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  if (loading) return <div className="loading">Загрузка проблемных ВЛ...</div>;
+
+  return (
+    <div className="problem-vl-container">
+      <h2>🚨 Проблемные ВЛ (2+ неудачных проверки)</h2>
+      
+      <div className="problem-info">
+        <p>В этом разделе отображаются ВЛ, которые не прошли проверку 2 и более раз после выполнения мероприятий РЭС.</p>
+        <p>Это требует особого внимания и возможного выезда на место.</p>
+      </div>
+      
+      <div className="problem-stats">
+        <div className="stat-card critical">
+          <h4>Активных проблем</h4>
+          <p className="stat-value">{problemVLs.filter(p => p.status === 'active').length}</p>
+        </div>
+        <div className="stat-card">
+          <h4>Всего зарегистрировано</h4>
+          <p className="stat-value">{problemVLs.length}</p>
+        </div>
+      </div>
+      
+      {problemVLs.length === 0 ? (
+        <div className="no-data">
+          <p>🎉 Отлично! Нет проблемных ВЛ</p>
+        </div>
+      ) : (
+        <div className="problem-list">
+          {problemVLs.map(problem => (
+            <div key={problem.id} className="problem-card">
+              <div className="problem-header">
+                <div>
+                  <h3>{problem.tpName} - {problem.vlName}</h3>
+                  <span className="res-badge">{problem.ResUnit?.name}</span>
+                </div>
+                <span className="failure-badge critical">
+                  ❌ {problem.failureCount} неудачных проверок
+                </span>
+              </div>
+              
+              <div className="problem-details">
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <span className="label">ПУ №:</span>
+                    <span className="value">{problem.puNumber}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Позиция:</span>
+                    <span className="value">
+                      {problem.position === 'start' ? 'Начало' :
+                       problem.position === 'middle' ? 'Середина' : 'Конец'}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Первое обращение:</span>
+                    <span className="value">
+                      {new Date(problem.firstReportDate).toLocaleDateString('ru-RU')}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="label">Последняя проверка:</span>
+                    <span className="value">
+                      {new Date(problem.lastErrorDate).toLocaleDateString('ru-RU')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="problem-error">
+                <strong>Последняя ошибка:</strong>
+                <p>{problem.lastErrorDetails}</p>
+              </div>
+              
+              {problem.resComment && (
+                <div className="problem-comment">
+                  <strong>Комментарий РЭС:</strong>
+                  <p>{problem.resComment}</p>
+                </div>
+              )}
+              
+              <div className="problem-actions">
+                <button 
+                  className="btn-details"
+                  onClick={() => {
+                    setDetailsProblem(problem);
+                    setShowDetailsModal(true);
+                  }}
+                >
+                  🔍 Подробности
+                </button>
+                <button 
+                  className="btn-dismiss"
+                  onClick={() => {
+                    setSelectedProblem(problem);
+                    setShowDeleteModal(true);
+                  }}
+                >
+                  ✕ Отклонить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Модальное окно подтверждения отклонения */}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Отклонить проблему</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы уверены, что хотите отклонить эту проблему?</p>
+              <div className="problem-summary">
+                <p><strong>{selectedProblem?.tpName} - {selectedProblem?.vlName}</strong></p>
+                <p>ПУ №{selectedProblem?.puNumber} ({selectedProblem?.failureCount} ошибок)</p>
+              </div>
+              <p className="warning">⚠️ Это уберет проблему из активного списка!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDismiss}
+                disabled={!deletePassword}
+              >
+                Отклонить проблему
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно с подробностями */}
+      {showDetailsModal && detailsProblem && (
+        <div className="modal-backdrop" onClick={() => setShowDetailsModal(false)}>
+          <div className="modal-content details-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подробная информация о проблемной ВЛ</h3>
+              <button className="close-btn" onClick={() => setShowDetailsModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <h4>{detailsProblem.tpName} - {detailsProblem.vlName}</h4>
+              
+              <div className="detail-section">
+                <h5>Общая информация:</h5>
+                <div className="detail-row">
+                  <strong>РЭС:</strong> {detailsProblem.ResUnit?.name}
+                </div>
+                <div className="detail-row">
+                  <strong>ПУ №:</strong> {detailsProblem.puNumber}
+                </div>
+                <div className="detail-row">
+                  <strong>Позиция:</strong> {
+                    detailsProblem.position === 'start' ? 'Начало' :
+                    detailsProblem.position === 'middle' ? 'Середина' : 'Конец'
+                  }
+                </div>
+              </div>
+              
+              <div className="detail-section">
+                <h5>История проблемы:</h5>
+                <div className="detail-row">
+                  <strong>Первое обращение:</strong> {new Date(detailsProblem.firstReportDate).toLocaleString('ru-RU')}
+                </div>
+                <div className="detail-row">
+                  <strong>Последняя проверка:</strong> {new Date(detailsProblem.lastErrorDate).toLocaleString('ru-RU')}
+                </div>
+                <div className="detail-row">
+                  <strong>Количество неудачных проверок:</strong> <span className="failure-count">{detailsProblem.failureCount}</span>
+                </div>
+              </div>
+              
+              <div className="error-details-box">
+                <strong>Последняя ошибка:</strong>
+                <p>{detailsProblem.lastErrorDetails}</p>
+              </div>
+              
+              {detailsProblem.resComment && (
+                <div className="comment-box">
+                  <strong>Последний комментарий РЭС:</strong>
+                  <p>{detailsProblem.resComment}</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="action-btn" onClick={() => setShowDetailsModal(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 
 // =====================================================
