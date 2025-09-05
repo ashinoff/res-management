@@ -117,12 +117,43 @@ function LoginForm({ onLogin }) {
 // =====================================================
 
 function MainMenu({ activeSection, onSectionChange, userRole }) {
+  const [notificationCounts, setNotificationCounts] = useState({
+    tech_pending: 0,
+    askue_pending: 0,
+    problem_vl: 0
+  });
+
+  // Загружаем количество уведомлений
+  useEffect(() => {
+    loadNotificationCounts();
+    
+    const interval = setInterval(loadNotificationCounts, 30000); // Обновляем каждые 30 сек
+    
+    // Слушаем события обновления
+    const handleUpdate = () => loadNotificationCounts();
+    window.addEventListener('notificationsUpdated', handleUpdate);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notificationsUpdated', handleUpdate);
+    };
+  }, []);
+
+  const loadNotificationCounts = async () => {
+    try {
+      const response = await api.get('/api/notifications/counts');
+      setNotificationCounts(response.data);
+    } catch (error) {
+      console.error('Error loading notification counts:', error);
+    }
+  };
+
   const menuItems = [
-      { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'structure', label: 'Структура сети', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'upload', label: 'Загрузить файлы', roles: ['admin', 'uploader'] },
-    { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'] },
-    { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'] },
-    { id: 'problem_vl', label: '🚨 Проблемные ВЛ', roles: ['admin'] },  // НОВОЕ
+    { id: 'tech_pending', label: 'Ожидающие мероприятий', roles: ['admin', 'res_responsible'], badge: notificationCounts.tech_pending },
+    { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'], badge: notificationCounts.askue_pending },
+    { id: 'problem_vl', label: 'Проблемные ВЛ', roles: ['admin'], badge: notificationCounts.problem_vl },
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
@@ -137,9 +168,12 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
         <button
           key={item.id}
           onClick={() => onSectionChange(item.id)}
-          className={activeSection === item.id ? 'active' : ''}
+          className={`menu-item ${activeSection === item.id ? 'active' : ''}`}
         >
-          {item.label}
+          <span className="menu-label">{item.label}</span>
+          {item.badge > 0 && (
+            <span className="notification-badge">{item.badge > 99 ? '99+' : item.badge}</span>
+          )}
         </button>
       ))}
     </nav>
