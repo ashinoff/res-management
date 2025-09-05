@@ -1569,6 +1569,7 @@ function Reports() {
 
   const [reportType, setReportType] = useState('pending_work');
   const [reportData, setReportData] = useState([]);
+  
   const [loading, setLoading] = useState(false);
   const [dateFrom, setDateFrom] = useState(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -1778,89 +1779,100 @@ function Reports() {
         <p>Найдено записей: {filteredData.length}</p>
       </div>
       
-      <div className="report-table">
-        <table>
-          <thead>
-            <tr>
-              <th>РЭС</th>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>Позиция</th>
-              <th>Номер ПУ</th>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-              {(reportType === 'pending_askue' || reportType === 'completed') && (
-                <>
-                  <th>Комментарий РЭС</th>
-                  <th>Дата завершения мероприятий</th>
-                </>
-              )}
-              {reportType === 'completed' && (
-                <>
-                  <th>Дата перепроверки</th>
-                  <th>Результат</th>
-                  <th>Файлы</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((item, idx) => (
-              <tr key={idx}>
-                <td>{item.resName}</td>
-                <td>{item.tpName}</td>
-                <td>{item.vlName}</td>
-                <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
-                <td>{item.puNumber}</td>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-                {(reportType === 'pending_askue' || reportType === 'completed') && (
-                  <>
-                    <td>{item.resComment}</td>
-                    <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                  </>
-                )}
-                {reportType === 'completed' && (
-  			<>
-    			<td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
-   			 <td className="status-cell">
-   			   <span 
-    			    className={item.recheckResult === 'ok' ? 'status-ok clickable' : 'status-error clickable'}
-     			   onClick={() => {
-     			     setSelectedComment({
-       			     comment: item.resComment,
-        			 tpName: item.tpName,
-        			    vlName: item.vlName,
-        			    puNumber: item.puNumber,
-        			    result: item.recheckResult
-       				   });
-        			  setShowCommentModal(true);
-       				 }}
-       			 style={{ cursor: 'pointer' }}
-       			 title="Нажмите для просмотра комментария"
-     			 >
-     			   {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-    			  </span>
-   			 </td>
-   			 <td>
-                      {item.attachments && item.attachments.length > 0 ? (
-                        <button 
-                          className="btn-view-files"
-                          onClick={() => viewAttachments(item.attachments)}
-                        >
-                          📎 {item.attachments.length} файл(ов)
-                        </button>
-                      ) : (
-                        <span className="no-files">—</span>
-                      )}
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="report-table-wrapper" style={{ position: 'relative' }}>
+  {loading && (
+    <div className="loading-overlay">
+      <div className="loading-spinner">
+        <div className="spinner"></div>
+        <span>Обновление данных...</span>
       </div>
+    </div>
+  )}
+  
+  <div className={`report-table ${loading ? 'loading' : ''}`}>
+    <table>
+      <thead>
+        <tr>
+          <th>РЭС</th>
+          <th>ТП</th>
+          <th>ВЛ</th>
+          <th>Позиция</th>
+          <th>Номер ПУ</th>
+          <th>Ошибка</th>
+          <th>Дата обнаружения</th>
+          {(reportType === 'pending_askue' || reportType === 'completed') && (
+            <>
+              <th>Комментарий РЭС</th>
+              <th>Дата завершения мероприятий</th>
+            </>
+          )}
+          {reportType === 'completed' && (
+            <>
+              <th>Дата перепроверки</th>
+              <th>Результат</th>
+              <th>Файлы</th>
+            </>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {filteredData.map((item, idx) => (
+          <tr key={idx}>
+            <td>{item.resName}</td>
+            <td>{item.tpName}</td>
+            <td>{item.vlName}</td>
+            <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
+            <td>{item.puNumber}</td>
+            <td className="error-cell">{item.errorDetails}</td>
+            <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+            {(reportType === 'pending_askue' || reportType === 'completed') && (
+              <>
+                <td>{item.resComment}</td>
+                <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+              </>
+            )}
+            {reportType === 'completed' && (
+              <>
+                <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
+                <td className="status-cell">
+                  <span 
+                    className={item.recheckResult === 'ok' ? 'status-ok clickable' : 'status-error clickable'}
+                    onClick={() => {
+                      setSelectedComment({
+                        comment: item.resComment,
+                        tpName: item.tpName,
+                        vlName: item.vlName,
+                        puNumber: item.puNumber,
+                        result: item.recheckResult
+                      });
+                      setShowCommentModal(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Нажмите для просмотра комментария"
+                  >
+                    {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+                  </span>
+                </td>
+                <td>
+                  {item.attachments && item.attachments.length > 0 ? (
+                    <button 
+                      className="btn-view-files"
+                      onClick={() => viewAttachments(item.attachments)}
+                    >
+                      📎 {item.attachments.length} файл(ов)
+                    </button>
+                  ) : (
+                    <span className="no-files">—</span>
+                  )}
+                </td>
+              </>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
       
       {filteredData.length === 0 && (
         <div className="no-data">
