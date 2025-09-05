@@ -911,7 +911,7 @@ for (let i = 0; i < files.length; i++) {
 // КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
 // =====================================================
 
-function Notifications({ filterType }) {
+function Notifications({ filterType, onSectionChange }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -1309,6 +1309,84 @@ function Notifications({ filterType }) {
                 return <div className="error-text">Ошибка отображения</div>;
               }
             })()}
+
+            {/* УВЕДОМЛЕНИЯ О ПРОБЛЕМНЫХ ВЛ */}
+{notif.type === 'problem_vl' && (() => {
+  try {
+    const data = JSON.parse(notif.message);
+    return (
+      <div className="notification-compact-content problem-vl">
+        <div className="problem-vl-alert">
+          <span className="critical-icon">🚨</span>
+          <div className="problem-vl-header">
+            <h4>Критическая проблема!</h4>
+            <span className="failure-count">{data.failureCount} неудачных проверок</span>
+          </div>
+        </div>
+        
+        <div className="notification-main-info">
+          <div className="notification-location">
+            <span className="label">РЭС:</span> {data.resName} | 
+            <span className="label"> ТП:</span> {data.tpName} | 
+            <span className="label"> ВЛ:</span> {data.vlName}
+          </div>
+          <div className="notification-pu">
+            <span className="label">ПУ №:</span> <strong>{data.puNumber}</strong> | 
+            <span className="label"> Позиция:</span> {
+              data.position === 'start' ? 'Начало' :
+              data.position === 'middle' ? 'Середина' : 'Конец'
+            }
+          </div>
+        </div>
+        
+        <div className="problem-error-details">
+          <p className="error-label">Последняя ошибка:</p>
+          <p className="error-text">{data.errorDetails}</p>
+        </div>
+        
+        {data.resComment && (
+          <div className="problem-res-comment">
+            <p className="comment-label">Комментарий РЭС:</p>
+            <p className="comment-text">{data.resComment}</p>
+          </div>
+        )}
+        
+        <div className="notification-actions-row">
+          <div className="notification-buttons">
+            <button 
+              className="btn-view-problem"
+              onClick={() => {
+                // Если есть функция смены раздела, используем её
+                if (typeof onSectionChange === 'function') {
+                  onSectionChange('problem_vl');
+                }
+              }}
+              title="Перейти к проблемным ВЛ"
+            >
+              📊 К проблемным ВЛ
+            </button>
+            
+            {user.role === 'admin' && (
+              <button
+                className="btn-delete"
+                onClick={() => {
+                  setDeleteNotificationId(notif.id);
+                  setShowDeleteModal(true);
+                }}
+                title="Удалить уведомление"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  } catch (e) {
+    console.error('Error parsing problem VL notification:', e);
+    return <div className="error-text">Ошибка отображения уведомления</div>;
+  }
+})()}
             
             {/* УСПЕШНЫЕ УВЕДОМЛЕНИЯ */}
             {notif.type === 'success' && (
@@ -1589,21 +1667,32 @@ function Reports() {
   const loadReports = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/reports/detailed', {
-        params: {
-          type: reportType,
-          dateFrom,
-          dateTo
-        }
-      });
-      setReportData(response.data);
-    } catch (error) {
-      console.error('Error loading reports:', error);
-      setReportData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      let response;
+    
+      if (reportType === 'problem_vl') {
+        // Для проблемных ВЛ используем отдельный endpoint
+        response = await api.get('/api/reports/problem-vl', {
+          params: { dateFrom, dateTo }
+        });
+      } else {
+        // Для остальных используем существующий endpoint
+        response = await api.get('/api/reports/detailed', {
+          params: {
+            type: reportType,
+            dateFrom,
+            dateTo
+          }
+        });
+      }
+    
+    setReportData(response.data);
+  } catch (error) {
+    console.error('Error loading reports:', error);
+    setReportData([]);
+  } finally {
+    setLoading(false);
+  }
+};
   
   // Функция для открытия просмотра файлов
   const viewAttachments = (attachments) => {
@@ -1619,80 +1708,120 @@ function Reports() {
   
   // Обновленная функция exportToExcel в компоненте Reports
   const exportToExcel = () => {
-    if (filteredData.length === 0) {
-      alert('Нет данных для экспорта');
-      return;
-    }
+  if (filteredData.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
 
-    // Подготавливаем данные для экспорта
-    const exportData = filteredData.map(item => {
-      const base = {
-        'РЭС': item.resName || '',
-        'ТП': item.tpName || '',
-        'ВЛ': item.vlName || '',
-        'Позиция': item.position === 'start' ? 'Начало' : 
-                   item.position === 'middle' ? 'Середина' : 'Конец',
-        'Номер ПУ': item.puNumber || '',
+  // Подготавливаем данные для экспорта
+  const exportData = filteredData.map(item => {
+    const base = {
+      'РЭС': item.resName || '',
+      'ТП': item.tpName || '',
+      'ВЛ': item.vlName || '',
+      'Позиция': item.position === 'start' ? 'Начало' : 
+                 item.position === 'middle' ? 'Середина' : 'Конец',
+      'Номер ПУ': item.puNumber || ''
+    };
+
+    // Добавляем специфичные поля в зависимости от типа отчета
+    if (reportType === 'problem_vl') {
+      return {
+        ...base,
+        'Количество неудачных проверок': item.failureCount || 0,
+        'Дата первого обращения': formatDate(item.firstReportDate),
+        'Дата последней проверки': formatDate(item.lastErrorDate),
+        'Последняя ошибка': item.lastErrorDetails || '',
+        'Статус проблемы': item.status || ''
+      };
+    } else if (reportType === 'pending_work') {
+      return {
+        ...base,
         'Ошибка': item.errorDetails || '',
         'Дата обнаружения': formatDate(item.errorDate)
       };
+    } else if (reportType === 'pending_askue') {
+      return {
+        ...base,
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate),
+        'Комментарий РЭС': item.resComment || '',
+        'Дата завершения мероприятий': formatDate(item.workCompletedDate)
+      };
+    } else if (reportType === 'completed') {
+      return {
+        ...base,
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate),
+        'Комментарий РЭС': item.resComment || '',
+        'Дата завершения мероприятий': formatDate(item.workCompletedDate),
+        'Дата перепроверки': formatDate(item.recheckDate),
+        'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
+      };
+    }
+  });
 
-      // Добавляем дополнительные поля в зависимости от типа отчета
-      if (reportType === 'pending_askue' || reportType === 'completed') {
-        base['Комментарий РЭС'] = item.resComment || '';
-        base['Дата завершения мероприятий'] = formatDate(item.workCompletedDate);
-      }
-
-      if (reportType === 'completed') {
-        base['Дата перепроверки'] = formatDate(item.recheckDate);
-        base['Результат'] = item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено';
-      }
-
-      return base;
-    });
-
-    // Создаем новую книгу Excel
-    const wb = XLSX.utils.book_new();
-    
-    // Создаем лист с данными
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    // Устанавливаем ширину колонок
-    const columnWidths = [
-      { wch: 20 }, // РЭС
-      { wch: 15 }, // ТП
-      { wch: 15 }, // ВЛ
-      { wch: 12 }, // Позиция
-      { wch: 15 }, // Номер ПУ
+  // Создаем новую книгу Excel
+  const wb = XLSX.utils.book_new();
+  
+  // Создаем лист с данными
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  
+  // Устанавливаем ширину колонок в зависимости от типа отчета
+  let columnWidths = [
+    { wch: 20 }, // РЭС
+    { wch: 15 }, // ТП
+    { wch: 15 }, // ВЛ
+    { wch: 12 }, // Позиция
+    { wch: 15 }, // Номер ПУ
+  ];
+  
+  if (reportType === 'problem_vl') {
+    columnWidths.push(
+      { wch: 25 }, // Количество неудачных проверок
+      { wch: 20 }, // Дата первого обращения
+      { wch: 20 }, // Дата последней проверки
+      { wch: 50 }, // Последняя ошибка
+      { wch: 15 }  // Статус проблемы
+    );
+  } else if (reportType === 'pending_work') {
+    columnWidths.push(
+      { wch: 50 }, // Ошибка
+      { wch: 18 }  // Дата обнаружения
+    );
+  } else if (reportType === 'pending_askue') {
+    columnWidths.push(
       { wch: 50 }, // Ошибка
       { wch: 18 }, // Дата обнаружения
-    ];
-    
-    if (reportType === 'pending_askue' || reportType === 'completed') {
-      columnWidths.push({ wch: 40 }); // Комментарий РЭС
-      columnWidths.push({ wch: 25 }); // Дата завершения мероприятий
-    }
-    
-    if (reportType === 'completed') {
-      columnWidths.push({ wch: 18 }); // Дата перепроверки
-      columnWidths.push({ wch: 15 }); // Результат
-    }
-    
-    ws['!cols'] = columnWidths;
-    
-    // Добавляем лист в книгу
-    const sheetName = getReportTitle();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    
-    // Генерируем имя файла
-    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-    
-    // Сохраняем файл
-    XLSX.writeFile(wb, fileName);
-    
-    // Показываем уведомление
-    alert(`Отчет успешно экспортирован в файл: ${fileName}`);
-  };
+      { wch: 40 }, // Комментарий РЭС
+      { wch: 25 }  // Дата завершения мероприятий
+    );
+  } else if (reportType === 'completed') {
+    columnWidths.push(
+      { wch: 50 }, // Ошибка
+      { wch: 18 }, // Дата обнаружения
+      { wch: 40 }, // Комментарий РЭС
+      { wch: 25 }, // Дата завершения мероприятий
+      { wch: 18 }, // Дата перепроверки
+      { wch: 15 }  // Результат
+    );
+  }
+  
+  ws['!cols'] = columnWidths;
+  
+  // Добавляем лист в книгу
+  const sheetName = getReportTitle();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  
+  // Генерируем имя файла
+  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+  
+  // Сохраняем файл
+  XLSX.writeFile(wb, fileName);
+  
+  // Показываем уведомление
+  alert(`Отчет успешно экспортирован в файл: ${fileName}`);
+};
 
   // Вспомогательная функция для форматирования даты
   const formatDate = (dateString) => {
@@ -1714,9 +1843,11 @@ function Reports() {
         return 'Ожидающие проверки АСКУЭ';
       case 'completed':
         return 'Завершенные проверки';
+      case 'problem_vl':
+        return 'Проблемные ВЛ (2+ неудачных проверки)';
       default:
         return 'Отчет';
-    }
+      }
   };
 
   // Фильтрация по ТП с мемоизацией
@@ -1739,6 +1870,7 @@ function Reports() {
             <option value="pending_work">Ожидающие мероприятий</option>
             <option value="pending_askue">Ожидающие проверки АСКУЭ</option>
             <option value="completed">Завершенные проверки</option>
+            <option value="problem_vl">Проблемные ВЛ (2+ ошибки)</option>
           </select>
         </div>
         
@@ -1799,21 +1931,39 @@ function Reports() {
           <th>ВЛ</th>
           <th>Позиция</th>
           <th>Номер ПУ</th>
-          <th>Ошибка</th>
-          <th>Дата обнаружения</th>
-          {(reportType === 'pending_askue' || reportType === 'completed') && (
+          
+          {/* Разные колонки для разных типов отчетов */}
+          {reportType === 'problem_vl' ? (
             <>
+              <th>Кол-во ошибок</th>
+              <th>Первое обращение</th>
+              <th>Последняя проверка</th>
+              <th>Последняя ошибка</th>
+              <th>Статус</th>
+            </>
+          ) : reportType === 'pending_work' ? (
+            <>
+              <th>Ошибка</th>
+              <th>Дата обнаружения</th>
+            </>
+          ) : reportType === 'pending_askue' ? (
+            <>
+              <th>Ошибка</th>
+              <th>Дата обнаружения</th>
               <th>Комментарий РЭС</th>
               <th>Дата завершения мероприятий</th>
             </>
-          )}
-          {reportType === 'completed' && (
+          ) : reportType === 'completed' ? (
             <>
+              <th>Ошибка</th>
+              <th>Дата обнаружения</th>
+              <th>Комментарий РЭС</th>
+              <th>Дата завершения мероприятий</th>
               <th>Дата перепроверки</th>
               <th>Результат</th>
               <th>Файлы</th>
             </>
-          )}
+          ) : null}
         </tr>
       </thead>
       <tbody>
@@ -1824,16 +1974,50 @@ function Reports() {
             <td>{item.vlName}</td>
             <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
             <td>{item.puNumber}</td>
-            <td className="error-cell">{item.errorDetails}</td>
-            <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-            {(reportType === 'pending_askue' || reportType === 'completed') && (
+            
+            {/* Данные для проблемных ВЛ */}
+            {reportType === 'problem_vl' ? (
               <>
+                <td>
+                  <span className="failure-count-badge">{item.failureCount}</span>
+                </td>
+                <td>{new Date(item.firstReportDate).toLocaleDateString('ru-RU')}</td>
+                <td>{new Date(item.lastErrorDate).toLocaleDateString('ru-RU')}</td>
+                <td className="error-cell">{item.lastErrorDetails}</td>
+                <td>
+                  <span className={`status-badge ${
+                    item.status === 'Активная' ? 'status-active' : 
+                    item.status === 'Решена' ? 'status-resolved' : 
+                    'status-dismissed'
+                  }`}>
+                    {item.status}
+                  </span>
+                </td>
+              </>
+            
+            /* Данные для ожидающих мероприятий */
+            ) : reportType === 'pending_work' ? (
+              <>
+                <td className="error-cell">{item.errorDetails}</td>
+                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+              </>
+            
+            /* Данные для ожидающих АСКУЭ */
+            ) : reportType === 'pending_askue' ? (
+              <>
+                <td className="error-cell">{item.errorDetails}</td>
+                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
                 <td>{item.resComment}</td>
                 <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
               </>
-            )}
-            {reportType === 'completed' && (
+            
+            /* Данные для завершенных проверок */
+            ) : reportType === 'completed' ? (
               <>
+                <td className="error-cell">{item.errorDetails}</td>
+                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                <td>{item.resComment}</td>
+                <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
                 <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
                 <td className="status-cell">
                   <span 
@@ -1867,7 +2051,7 @@ function Reports() {
                   )}
                 </td>
               </>
-            )}
+            ) : null}
           </tr>
         ))}
       </tbody>
@@ -3352,17 +3536,19 @@ export default function App() {
   }
 
   const renderContent = () => {
-     switch (activeSection) {
+  switch (activeSection) {
     case 'structure':
       return <NetworkStructure selectedRes={selectedRes} />;
     case 'upload':
       return <FileUpload selectedRes={selectedRes} />;
     case 'tech_pending':
-      return <Notifications filterType="error" />;
+      return <Notifications filterType="error" onSectionChange={setActiveSection} />;
     case 'askue_pending':
-      return <Notifications filterType="pending_askue" />;
+      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
+    case 'problem_vl':
+      return <ProblemVL />;
     case 'documents':
-      return <UploadedDocuments />; // НОВОЕ!
+      return <UploadedDocuments />;
     case 'reports':
       return <Reports />;
     case 'settings':
@@ -3370,7 +3556,7 @@ export default function App() {
     default:
       return <NetworkStructure selectedRes={selectedRes} />;
   }
-  };
+};
 
   return (
     <AuthContext.Provider value={{ user, selectedRes }}>
