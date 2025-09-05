@@ -1858,8 +1858,15 @@ app.get('/api/reports/problem-vl',
 // Анализ файлов через Python скрипты
 async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null) {
   return new Promise((resolve, reject) => {
-    let scriptPath;
     
+
+    // Вспомогательная функция для получения названия месяца
+function getMonthName(monthNum) {
+  const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  return months[monthNum] || '';
+}
+    let scriptPath;
     // Используем правильный путь для Render
     const analyzersDir = path.join(process.cwd(), 'analyzers');
     
@@ -2243,13 +2250,8 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
     resId: networkStructure.resId
   });
 } // <-- Закрываем if (existingNotification)
-
-// Вспомогательная функция для получения названия месяца
-function getMonthName(monthNum) {
-  const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
-                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-  return months[monthNum] || '';
 }
+
 
 // Добавляем в processed
 processed.push({
