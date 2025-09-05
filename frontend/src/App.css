@@ -3095,3 +3095,107 @@ padding: 16px 12px;
   padding: 6px 16px;
   border-radius: 20px;
 }
+/* ===================================================== 
+   NOTIFICATION BADGES (iOS Style)
+   ===================================================== */
+
+.menu-item {
+  position: relative;
+  width: 100%;
+  padding: 14px 20px;
+  margin-bottom: 8px;
+  background: transparent;
+  color: rgba(255,255,255,0.8);
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 15px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible; /* Важно для отображения badge */
+}
+
+.menu-label {
+  flex: 1;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ff3b30; /* Красный цвет iOS */
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  animation: badgeAppear 0.3s ease-out;
+  z-index: 10;
+}
+
+@keyframes badgeAppear {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Пульсация для новых уведомлений */
+.notification-badge.pulse {
+  animation: badgeAppear 0.3s ease-out, badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4);
+  }
+}
+
+/* Для активного пункта меню */
+.menu-item.active .notification-badge {
+  background: white;
+  color: #ff3b30;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Анимация исчезновения badge */
+.notification-badge.fade-out {
+  animation: badgeFadeOut 0.3s ease-out forwards;
+}
+
+@keyframes badgeFadeOut {
+  to {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+/* Большие цифры */
+.notification-badge.large-count {
+  font-size: 10px;
+  min-width: 26px;
+  height: 20px;
+  padding: 0 8px;
+}
