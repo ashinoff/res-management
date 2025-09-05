@@ -299,7 +299,7 @@ const Notification = sequelize.define('Notification', {
     }
   },
   type: {
-    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'pending_askue'),
+    type: DataTypes.ENUM('error', 'success', 'info', 'pending_check', 'pending_askue', 'problem_vl'), // ← ЗДЕСЬ ДОБАВИТЬ 'problem_vl'
     allowNull: false
   },
   message: {
@@ -437,7 +437,74 @@ const CheckHistory = sequelize.define('CheckHistory', {
       type: DataTypes.JSON,  // Будем хранить массив объектов с url и public_id
       defaultValue: []
   }
+  failureCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 1  // Первая ошибка уже считается
+  }
 
+});
+
+// 8. Модель проблемных ВЛ (2+ неудачных проверки)
+const ProblemVL = sequelize.define('ProblemVL', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  networkStructureId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: NetworkStructure,
+      key: 'id'
+    }
+  },
+  resId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: ResUnit,
+      key: 'id'
+    }
+  },
+  tpName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  vlName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  position: {
+    type: DataTypes.ENUM('start', 'middle', 'end'),
+    allowNull: false
+  },
+  puNumber: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  failureCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 2
+  },
+  lastErrorDate: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  lastErrorDetails: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  firstReportDate: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  resComment: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  status: {
+    type: DataTypes.ENUM('active', 'resolved', 'dismissed'),
+    defaultValue: 'active'
+  }
 });
 
 // =====================================================
@@ -459,6 +526,8 @@ UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 CheckHistory.belongsTo(User, { as: 'uploadedByUser', foreignKey: 'resId' });
+ProblemVL.belongsTo(ResUnit, { foreignKey: 'resId' });
+ProblemVL.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -1679,6 +1748,110 @@ app.post('/api/users/create-test', authenticateToken, checkRole(['admin']), asyn
 });
 
 // =====================================================
+// API ДЛЯ ПРОБЛЕМНЫХ ВЛ
+// =====================================================
+
+// Получение списка проблемных ВЛ
+app.get('/api/problem-vl/list', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const problemVLs = await ProblemVL.findAll({
+        where: { status: 'active' },
+        include: [ResUnit, NetworkStructure],
+        order: [['failureCount', 'DESC'], ['lastErrorDate', 'DESC']]
+      });
+      res.json(problemVLs);
+    } catch (error) {
+      console.error('Get problem VLs error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Отклонение проблемы
+app.put('/api/problem-vl/:id/dismiss', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      await ProblemVL.update(
+        { status: 'dismissed' },
+        { where: { id: req.params.id } }
+      );
+      
+      // Удаляем связанные уведомления
+      await Notification.destroy({
+        where: {
+          type: 'problem_vl',
+          message: {
+            [Op.like]: `%"puNumber":"${req.params.id}"%`
+          }
+        }
+      });
+      
+      res.json({ success: true, message: 'Проблема отклонена' });
+    } catch (error) {
+      console.error('Dismiss problem VL error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Отчет по проблемным ВЛ
+app.get('/api/reports/problem-vl', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+      
+      let whereClause = {};
+      if (dateFrom || dateTo) {
+        whereClause.lastErrorDate = {};
+        if (dateFrom) whereClause.lastErrorDate[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          whereClause.lastErrorDate[Op.lte] = endDate;
+        }
+      }
+      
+      // Добавляем фильтр по РЭС для не-админов
+      if (req.user.role !== 'admin') {
+        whereClause.resId = req.user.resId;
+      }
+      
+      const problemVLs = await ProblemVL.findAll({
+        where: whereClause,
+        include: [ResUnit],
+        order: [['failureCount', 'DESC']]
+      });
+      
+      const reportData = problemVLs.map(p => ({
+        resName: p.ResUnit?.name,
+        tpName: p.tpName,
+        vlName: p.vlName,
+        position: p.position === 'start' ? 'Начало' : p.position === 'middle' ? 'Середина' : 'Конец',
+        puNumber: p.puNumber,
+        failureCount: p.failureCount,
+        firstReportDate: p.firstReportDate,
+        lastErrorDate: p.lastErrorDate,
+        lastErrorDetails: p.lastErrorDetails,
+        status: p.status === 'active' ? 'Активная' : p.status === 'resolved' ? 'Решена' : 'Отклонена'
+      }));
+      
+      res.json(reportData);
+    } catch (error) {
+      console.error('Problem VL report error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+// =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
 
@@ -1923,23 +2096,41 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
   // УДАЛЯЕМ УВЕДОМЛЕНИЕ ТОЛЬКО ЕСЛИ ПЕРИОД ПРАВИЛЬНЫЙ!
   await existingNotification.destroy();
   console.log('Marked ASKUE notification as read');
+
+   const checkHistory = await CheckHistory.findOne({
+    where: { 
+      puNumber: fileName,
+      status: 'awaiting_recheck'
+    }
+  });           
   
   // Обработка результата перепроверки
   if (!result.has_errors) {
-    // Ошибки исправлены
-    console.log(`Recheck successful - errors fixed for PU ${fileName}`);
-    
-    // Обновляем запись в истории
-    await CheckHistory.update({
-      recheckDate: new Date(),
-      recheckResult: 'ok',
-      status: 'completed'
-    }, {
-      where: {
+  // Ошибки исправлены
+  console.log(`Recheck successful - errors fixed for PU ${fileName}`);
+  
+  // Обновляем запись в истории
+  await CheckHistory.update({
+    recheckDate: new Date(),
+    recheckResult: 'ok',
+    status: 'completed'
+  }, {
+    where: {
+      puNumber: fileName,
+      status: 'awaiting_recheck'
+    }
+  });
+  
+  // Если была проблемная ВЛ - отмечаем как решенную
+  await ProblemVL.update(
+    { status: 'resolved' },
+    { 
+      where: { 
         puNumber: fileName,
-        status: 'awaiting_recheck'
+        status: 'active'
       }
-    });
+    }
+  );
     
     // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
     await Notification.update(
@@ -1968,28 +2159,89 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
   } else {
     // Ошибки НЕ исправлены - возвращаем в мероприятия
     console.log(`Recheck failed - errors still present for PU ${fileName}`);
+
+    // Увеличиваем счетчик ошибок
+    const newFailureCount = checkHistory ? checkHistory.failureCount + 1 : 2;
     
     // Обновляем запись в истории
-    await CheckHistory.update({
-      recheckDate: new Date(),
-      recheckResult: 'error',
-      status: 'completed'
-    }, {
-      where: {
+  await CheckHistory.update({
+    recheckDate: new Date(),
+    recheckResult: 'error',
+    status: 'completed',
+    failureCount: newFailureCount
+  }, {
+    where: {
+      puNumber: fileName,
+      status: 'awaiting_recheck'
+    }
+  });
+  
+  // Если 2+ ошибки - создаем/обновляем запись о проблемной ВЛ
+  if (newFailureCount >= 2) {
+    const [problemVL, created] = await ProblemVL.findOrCreate({
+      where: { 
         puNumber: fileName,
-        status: 'awaiting_recheck'
+        status: 'active'
+      },
+      defaults: {
+        networkStructureId: networkStructure.id,
+        resId: networkStructure.resId,
+        tpName: networkStructure.tpName,
+        vlName: networkStructure.vlName,
+        position: position,
+        puNumber: fileName,
+        failureCount: newFailureCount,
+        lastErrorDate: new Date(),
+        lastErrorDetails: result.summary,
+        firstReportDate: checkHistory?.initialCheckDate || new Date(),
+        resComment: checkHistory?.resComment || notifData.completedComment
       }
     });
     
-    // Создаем новое уведомление об ошибке для ответственных
-    errors.push({
-      puNumber: fileName,
-      error: result.summary,
-      details: result.details,
-      networkStructureId: networkStructure.id,
-      resId: networkStructure.resId
+    if (!created) {
+      // Обновляем существующую запись
+      await problemVL.update({
+        failureCount: newFailureCount,
+        lastErrorDate: new Date(),
+        lastErrorDetails: result.summary
+      });
+    }
+    
+    // Создаем уведомление для админов
+    const admins = await User.findAll({
+      where: { role: 'admin' }
     });
+    
+    for (const admin of admins) {
+      await Notification.create({
+        fromUserId: 1,
+        toUserId: admin.id,
+        resId: networkStructure.resId,
+        networkStructureId: networkStructure.id,
+        type: 'problem_vl',
+        message: JSON.stringify({
+          tpName: networkStructure.tpName,
+          vlName: networkStructure.vlName,
+          puNumber: fileName,
+          position: position,
+          failureCount: newFailureCount,
+          errorDetails: result.summary,
+          resComment: checkHistory?.resComment || notifData.completedComment,
+          resName: networkStructure.ResUnit.name
+        }),
+        isRead: false
+      });
+    }
   }
+  
+  // Создаем новое уведомление об ошибке для ответственных
+  errors.push({
+    puNumber: fileName,
+    error: result.summary,
+    details: result.details,
+    networkStructureId: networkStructure.id,
+    resId: networkStructure.resId
+  });
 } // <-- Закрываем if (existingNotification)
 
 // Вспомогательная функция для получения названия месяца
