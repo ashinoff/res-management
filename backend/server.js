@@ -1904,6 +1904,38 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
   }
 });
 
+// роут Отметить уведомления как прочитанные
+app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.body;
+    let whereClause = {};
+    
+    if (req.user.role === 'admin') {
+      whereClause = type === 'all' ? {} : { type };
+    } else if (req.user.role === 'res_responsible') {
+      whereClause = {
+        resId: req.user.resId,
+        [Op.or]: [
+          { toUserId: null },
+          { toUserId: req.user.id }
+        ]
+      };
+      if (type !== 'all') whereClause.type = type;
+    } else {
+      whereClause = { toUserId: req.user.id };
+      if (type !== 'all') whereClause.type = type;
+    }
+    
+    await Notification.update(
+      { isRead: true },
+      { where: whereClause }
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
