@@ -1802,8 +1802,9 @@ app.put('/api/problem-vl/:id/dismiss',
       res.status(500).json({ error: error.message });
     }
 });
-
+// =====================================================
 // Отчет по проблемным ВЛ
+// =====================================================
 app.get('/api/reports/problem-vl', 
   authenticateToken, 
   async (req, res) => {
@@ -1851,6 +1852,59 @@ app.get('/api/reports/problem-vl',
       res.status(500).json({ error: error.message });
     }
 });
+// Получение количества непрочитанных уведомлений
+app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
+  try {
+    let whereClause = {};
+    
+    if (req.user.role === 'admin') {
+      // Админ видит все
+      whereClause = { isRead: false };
+    } else if (req.user.role === 'res_responsible') {
+      // res_responsible видит уведомления своего РЭС
+      whereClause = {
+        resId: req.user.resId,
+        isRead: false,
+        [Op.or]: [
+          { toUserId: null },
+          { toUserId: req.user.id }
+        ]
+      };
+    } else {
+      // uploader видит только свои
+      whereClause = { 
+        toUserId: req.user.id,
+        isRead: false
+      };
+    }
+    
+    // Считаем по типам
+    const techPending = await Notification.count({
+      where: { ...whereClause, type: 'error' }
+    });
+    
+    const askuePending = await Notification.count({
+      where: { ...whereClause, type: 'pending_askue' }
+    });
+    
+    const problemVL = req.user.role === 'admin' 
+      ? await Notification.count({
+          where: { ...whereClause, type: 'problem_vl' }
+        })
+      : 0;
+    
+    res.json({
+      tech_pending: techPending,
+      askue_pending: askuePending,
+      problem_vl: problemVL
+    });
+  } catch (error) {
+    console.error('Error counting notifications:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
