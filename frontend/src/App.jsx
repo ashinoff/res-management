@@ -3342,6 +3342,8 @@ function UploadedDocuments() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const { user } = useContext(AuthContext);
+  const [deleteRecordId, setDeleteRecordId] = useState(null); // ДОБАВИТЬ
+  const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
   
   useEffect(() => {
     loadDocuments();
@@ -3460,6 +3462,135 @@ function UploadedDocuments() {
           <p>Пока нет загруженных документов</p>
         </div>
       )}
+
+const handleDeleteRecord = async () => {
+    try {
+      await api.delete(`/api/documents/record/${deleteRecordId}`, {
+        data: { password: deletePassword }
+      });
+      
+      alert('Запись удалена успешно');
+      setShowDeleteRecordModal(false);
+      setDeletePassword('');
+      setDeleteRecordId(null);
+      loadDocuments();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  return (
+    <div className="uploaded-documents">
+      <h2>📄 Загруженные документы</h2>
+      
+      <div className="documents-info">
+        <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
+      </div>
+      
+      <div className="documents-table">
+        <table>
+          <thead>
+            <tr>
+              <th>ТП</th>
+              <th>ВЛ</th>
+              <th>ПУ №</th>
+              <th>Загрузил</th>
+              <th>Дата загрузки</th>
+              <th>Комментарий</th>
+              <th>Статус</th>
+              <th>Файлы</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {documents.map((doc) => (
+              <tr key={doc.id}>
+                <td>{doc.tpName}</td>
+                <td>{doc.vlName}</td>
+                <td><strong>{doc.puNumber}</strong></td>
+                <td>{doc.uploadedBy}</td>
+                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                <td className="comment-cell">{doc.resComment}</td>
+                <td>
+                  <span className={`status-badge status-${doc.status}`}>
+                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
+                  </span>
+                </td>
+                <td>
+                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
+                </td>
+                <td>
+                  <div className="action-buttons">
+                    {doc.attachments && doc.attachments.length > 0 && (
+                      <button 
+                        className="btn-view"
+                        onClick={() => handleViewFile(doc.attachments)}
+                        title="Просмотреть"
+                      >
+                        👁️
+                      </button>
+                    )}
+                    {user.role === 'admin' && (
+                      <>
+                        <button 
+                          className="btn-delete-small"
+                          onClick={() => {
+                            setDeleteRecordId(doc.id);
+                            setShowDeleteRecordModal(true);
+                          }}
+                          title="Удалить запись"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Модальное окно удаления записи */}
+      {showDeleteRecordModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteRecordModal(false)}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления записи</h3>
+              <button className="close-btn" onClick={() => setShowDeleteRecordModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить всю запись вместе со всеми файлами.</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowDeleteRecordModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleDeleteRecord}
+                disabled={!deletePassword}
+              >
+                Удалить запись
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       
       {/* Модальное окно удаления */}
       {showDeleteModal && (
