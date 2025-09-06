@@ -1049,19 +1049,20 @@ app.post('/api/notifications/:id/complete-work',
       
       // Создаем запись в истории проверок
       await CheckHistory.create({
-        resId: notification.resId,
-        networkStructureId: notification.networkStructureId,
-        puNumber: errorData.puNumber,
-        tpName: errorData.tpName,
-        vlName: errorData.vlName,
-        position: errorData.position,
-        initialError: errorData.errorDetails,
-        initialCheckDate: notification.createdAt,
-        resComment: comment,
-        workCompletedDate: new Date(),
-        status: 'awaiting_recheck',
-        attachments: attachments
-      }, { transaction });
+  resId: notification.resId,
+  networkStructureId: notification.networkStructureId,
+  puNumber: errorData.puNumber,
+  tpName: errorData.tpName,
+  vlName: errorData.vlName,
+  position: errorData.position,
+  initialError: errorData.errorDetails,
+  initialCheckDate: notification.createdAt,
+  resComment: comment,
+  workCompletedDate: new Date(),
+  checkFromDate: checkFromDate ? new Date(checkFromDate) : new Date(), // ДОБАВИТЬ ЭТО
+  status: 'awaiting_recheck',
+  attachments: attachments
+}, { transaction });
       console.log('CheckHistory created with attachments:', attachments.length);
       // Обновляем статус ПУ на pending_recheck
       await PuStatus.update(
@@ -1941,19 +1942,17 @@ app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
 
-// Анализ файлов через Python скрипты
 async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null) {
   return new Promise((resolve, reject) => {
     
-
     // Вспомогательная функция для получения названия месяца
-function getMonthName(monthNum) {
-  const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
-                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-  return months[monthNum] || '';
-}
+    function getMonthName(monthNum) {
+      const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+      return months[monthNum] || '';
+    }
+    
     let scriptPath;
-    // Используем правильный путь для Render
     const analyzersDir = path.join(process.cwd(), 'analyzers');
     
     switch(type) {
@@ -1976,7 +1975,7 @@ function getMonthName(monthNum) {
         });
     }
     
-    // Проверяем существование директории analyzers
+    // Проверки существования директории и скрипта
     if (!fs.existsSync(analyzersDir)) {
       console.error('Analyzers directory not found:', analyzersDir);
       return resolve({
@@ -1985,7 +1984,6 @@ function getMonthName(monthNum) {
       });
     }
     
-    // Проверяем существование Python скрипта
     if (!fs.existsSync(scriptPath)) {
       console.error('Python script not found:', scriptPath);
       return resolve({
@@ -1994,7 +1992,7 @@ function getMonthName(monthNum) {
       });
     }
     
-    // Пробуем запустить Python
+    // Запуск Python
     let python;
     try {
       python = spawn('python3', [scriptPath, filePath]);
@@ -2039,9 +2037,6 @@ function getMonthName(monthNum) {
 
     python.on('close', async (code) => {
       console.log('Python process closed with code:', code);
-      console.log('Final output length:', output.length);
-      console.log('Final output:', output);
-      console.log('Final errors:', errorOutput);
       
       if (code !== 0) {
         return resolve({
@@ -2086,303 +2081,299 @@ function getMonthName(monthNum) {
             if (networkStructure.endPu === fileName) position = 'end';
             else if (networkStructure.middlePu === fileName) position = 'middle';
             
-            console.log(`PU position determined: ${position}`);
+            console.log(`PU position: ${position}`);
             
-            // Создаем или обновляем статус ПУ
-            const [puStatus, created] = await PuStatus.upsert({
-              puNumber: fileName,
-              networkStructureId: networkStructure.id,
-              position: position,
-              status: result.has_errors ? 'checked_error' : 'checked_ok',
-              errorDetails: result.has_errors ? result.summary : null,
-              lastCheck: new Date()
+            // Проверяем последнюю запись в истории
+            const lastCheckHistory = await CheckHistory.findOne({
+              where: { 
+                puNumber: fileName,
+                [Op.or]: [
+                  { status: 'awaiting_work' },
+                  { status: 'awaiting_recheck' },
+                  { status: 'completed' }
+                ]
+              },
+              order: [['createdAt', 'DESC']]
             });
             
-            console.log(`PU ${fileName} ${created ? 'created' : 'updated'} with status: ${result.has_errors ? 'ERROR' : 'OK'}`);
-            
-            // Проверяем, не является ли это перепроверкой
-            const existingNotification = await Notification.findOne({
-              where: {
-                type: 'pending_askue',
-                isRead: false,
-                message: {
-                  [Op.like]: `%"puNumber":"${fileName}"%`
+            // ПРОВЕРКА 1: Это перепроверка?
+            if (lastCheckHistory && lastCheckHistory.status === 'awaiting_recheck') {
+              console.log(`This is a recheck for PU ${fileName}`);
+              
+              // ПРОВЕРКА ПЕРИОДА при перепроверке
+              if (result.has_errors) {
+                // Сначала проверим дату
+                const checkFromDate = lastCheckHistory.workCompletedDate;
+                if (checkFromDate) {
+                  const requiredDate = new Date(checkFromDate);
+                  const requiredMonth = requiredDate.getMonth() + 1;
+                  const requiredYear = requiredDate.getFullYear();
+                  
+                  const errorText = result.summary;
+                  const monthMap = {
+                    'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
+                    'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
+                  };
+                  
+                  const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
+                  const foundMonths = errorText.match(monthPattern);
+                  
+                  if (foundMonths && foundMonths.length > 0) {
+                    const lastErrorMonth = foundMonths[foundMonths.length - 1];
+                    const lastErrorMonthNum = monthMap[lastErrorMonth];
+                    
+                    if (lastErrorMonthNum < requiredMonth) {
+                      console.log(`PERIOD MISMATCH: Required from month ${requiredMonth}, but errors end at month ${lastErrorMonthNum}`);
+                      
+                      try {
+                        fs.unlinkSync(filePath);
+                      } catch (err) {
+                        console.error('Error deleting file:', err);
+                      }
+                      
+                      return resolve({
+                        processed: [{
+                          puNumber: fileName,
+                          status: 'wrong_period',
+                          error: `❌ Неверный период! Требуется журнал событий с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату. Необходимо выгрузить полный журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
+                        }],
+                        errors: []
+                      });
+                    }
+                  }
                 }
               }
-            });
-
-            if (existingNotification) {
-  console.log(`Found pending ASKUE notification for PU ${fileName} - this is a recheck`);
-  
-  // НЕ УДАЛЯЕМ СРАЗУ! Сначала проверяем период
-  const notifData = JSON.parse(existingNotification.message);
-  
-  // ПРОВЕРКА ПЕРИОДА:
-  const requiredDate = new Date(notifData.checkFromDate);
-  const requiredMonth = requiredDate.getMonth() + 1;
-  const requiredYear = requiredDate.getFullYear();
-  
-  // Проверяем период в ошибке
-  if (result.has_errors) {
-    const errorText = result.summary;
-    
-    // Мапа месяцев
-    const monthMap = {
-      'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
-      'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
-    };
-    
-    // Ищем месяцы в тексте ошибки (например: "Мар-Май")
-    const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
-    const foundMonths = errorText.match(monthPattern);
-    
-    if (foundMonths && foundMonths.length > 0) {
-  // Объявляем переменные в начале блока, чтобы они были видны везде
-  const lastErrorMonth = foundMonths[foundMonths.length - 1];
-  const lastErrorMonthNum = monthMap[lastErrorMonth];
-  
-  // Первая проверка
-  if (lastErrorMonthNum < requiredMonth) {
-    console.log(`PERIOD MISMATCH: Required from month ${requiredMonth} (${getMonthName(requiredMonth)}), but errors end at month ${lastErrorMonthNum} (${lastErrorMonth})`);
-    
-    try {
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.error('Error deleting file:', err);
-    }
-    
-    return resolve({
-      processed: [{
-        puNumber: fileName,
-        status: 'wrong_period',
-        error: `❌ Неверный период! Требуется журнал событий с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату. Необходимо выгрузить полный журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
-      }],
-      errors: []
-    });
-  }
-  
-  // Дополнительная проверка: если есть диапазон месяцев
-  if (foundMonths.length >= 2) {
-    const firstErrorMonth = foundMonths[0];
-    const firstErrorMonthNum = monthMap[firstErrorMonth];
-    
-    // Теперь lastErrorMonth и lastErrorMonthNum видны здесь!
-    if (requiredMonth > lastErrorMonthNum) {
-      console.log(`Required month ${requiredMonth} is after error period ${firstErrorMonth}-${lastErrorMonth}`);
-      
-      return resolve({
-        processed: [{
-          puNumber: fileName,
-          status: 'wrong_period', 
-              error: `❌ Неверный период! 
-              Требуется: журнал с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату
-              Загружен: данные до ${lastErrorMonth} ${requiredYear}
-              Необходимо выгрузить полный журнал событий начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
-            }],
-            errors: []
-          });
-        }
-      }
-    }
-  }
-  
-  // УДАЛЯЕМ УВЕДОМЛЕНИЕ ТОЛЬКО ЕСЛИ ПЕРИОД ПРАВИЛЬНЫЙ!
-  await existingNotification.destroy();
-  console.log('Marked ASKUE notification as read');
-
-   const checkHistory = await CheckHistory.findOne({
-    where: { 
-      puNumber: fileName,
-      status: 'awaiting_recheck'
-    }
-  });           
-  
-  // Обработка результата перепроверки
-  if (!result.has_errors) {
-  // Ошибки исправлены
-  console.log(`Recheck successful - errors fixed for PU ${fileName}`);
-  
-  // Обновляем запись в истории
-  await CheckHistory.update({
-    recheckDate: new Date(),
-    recheckResult: 'ok',
-    status: 'completed'
-  }, {
-    where: {
-      puNumber: fileName,
-      status: 'awaiting_recheck'
-    }
-  });
-  
-  // Если была проблемная ВЛ - отмечаем как решенную
-  await ProblemVL.update(
-    { status: 'resolved' },
-    { 
-      where: { 
-        puNumber: fileName,
-        status: 'active'
-      }
-    }
-  );
-    
-    // Помечаем ВСЕ уведомления об ошибке для этого ПУ как прочитанные
-    await Notification.update(
-      { isRead: true },
-      {
-        where: {
-          type: 'error',
-          message: {
-            [Op.like]: `%"puNumber":"${fileName}"%`
-          }
-        }
-      }
-    );
-    
-    // Отправляем уведомление ответственному что проблема решена
-    await Notification.create({
-      fromUserId: 1, // Системное уведомление
-      toUserId: notifData.completedBy,
-      resId: networkStructure.resId,
-      networkStructureId: networkStructure.id,
-      type: 'success',
-      message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
-      isRead: false
-    });
-    
-  } else {
-    // Ошибки НЕ исправлены - возвращаем в мероприятия
-    console.log(`Recheck failed - errors still present for PU ${fileName}`);
-
-    // Увеличиваем счетчик ошибок
-    const newFailureCount = checkHistory ? checkHistory.failureCount + 1 : 2;
-    
-    // Обновляем запись в истории
-  await CheckHistory.update({
-    recheckDate: new Date(),
-    recheckResult: 'error',
-    status: 'completed',
-    failureCount: newFailureCount
-  }, {
-    where: {
-      puNumber: fileName,
-      status: 'awaiting_recheck'
-    }
-  });
-  
-  // Если 2+ ошибки - создаем/обновляем запись о проблемной ВЛ
-  if (newFailureCount >= 2) {
-    const [problemVL, created] = await ProblemVL.findOrCreate({
-      where: { 
-        puNumber: fileName,
-        status: 'active'
-      },
-      defaults: {
-        networkStructureId: networkStructure.id,
-        resId: networkStructure.resId,
-        tpName: networkStructure.tpName,
-        vlName: networkStructure.vlName,
-        position: position,
-        puNumber: fileName,
-        failureCount: newFailureCount,
-        lastErrorDate: new Date(),
-        lastErrorDetails: result.summary,
-        firstReportDate: checkHistory?.initialCheckDate || new Date(),
-        resComment: checkHistory?.resComment || notifData.completedComment
-      }
-    });
-    
-    if (!created) {
-      // Обновляем существующую запись
-      await problemVL.update({
-        failureCount: newFailureCount,
-        lastErrorDate: new Date(),
-        lastErrorDetails: result.summary
-      });
-    }
-    
-    // Создаем уведомление для админов
-    const admins = await User.findAll({
-      where: { role: 'admin' }
-    });
-    
-    for (const admin of admins) {
-      await Notification.create({
-        fromUserId: 1,
-        toUserId: admin.id,
-        resId: networkStructure.resId,
-        networkStructureId: networkStructure.id,
-        type: 'problem_vl',
-        message: JSON.stringify({
-          tpName: networkStructure.tpName,
-          vlName: networkStructure.vlName,
-          puNumber: fileName,
-          position: position,
-          failureCount: newFailureCount,
-          errorDetails: result.summary,
-          resComment: checkHistory?.resComment || notifData.completedComment,
-          resName: networkStructure.ResUnit.name
-        }),
-        isRead: false
-      });
-    }
-  }
-  
-  // Создаем новое уведомление об ошибке для ответственных
-  errors.push({
-    puNumber: fileName,
-    error: result.summary,
-    details: result.details,
-    networkStructureId: networkStructure.id,
-    resId: networkStructure.resId
-  });
-} // <-- Закрываем if (existingNotification)
-}
-
-
-// Добавляем в processed
-processed.push({
-  puNumber: fileName,
-  status: result.has_errors ? 'checked_error' : 'checked_ok',
-  error: result.has_errors ? result.summary : null
-});
-            
-            // Если есть ошибки и это НЕ перепроверка - добавляем для уведомлений
-            if (result.has_errors && !existingNotification) {
-              // Флаг для определения, нужно ли создавать уведомление
-              let shouldCreateNotification = true;
-  
-              // НОВОЕ: Проверяем, есть ли уже такая же ошибка
-              const duplicateCheck = await Notification.findOne({
+              
+              // Удаляем уведомления АСКУЭ в любом случае
+              await Notification.destroy({
                 where: {
-                  type: 'error',
-                  isRead: false,
+                  type: 'pending_askue',
                   message: {
                     [Op.like]: `%"puNumber":"${fileName}"%`
                   }
                 }
               });
-  
-              if (duplicateCheck) {
-                const oldErrorData = JSON.parse(duplicateCheck.message);
-    
-                // Сравниваем текст ошибок
-                if (oldErrorData.errorDetails === result.summary) {
-                  console.log(`DUPLICATE: Identical error already exists for PU ${fileName}`);
-      
-                  // Добавляем в processed с пометкой о дубликате
-                  processed.push({
+              console.log('Deleted ASKUE notifications');
+              
+              // ОБРАБОТКА РЕЗУЛЬТАТА ПЕРЕПРОВЕРКИ
+              if (!result.has_errors) {
+                // УСПЕШНАЯ перепроверка
+                console.log(`Recheck successful - errors fixed for PU ${fileName}`);
+                
+                // Обновляем историю
+                await CheckHistory.update({
+                  recheckDate: new Date(),
+                  recheckResult: 'ok',
+                  status: 'completed'
+                }, {
+                  where: {
                     puNumber: fileName,
-                    status: 'duplicate_error',
-                    error: 'Данный файл ранее уже был использован! Ошибка не изменилась.'
+                    status: 'awaiting_recheck'
+                  }
+                });
+                
+                // Обновляем статус ПУ
+                await PuStatus.update({
+                  status: 'checked_ok',
+                  errorDetails: null,
+                  lastCheck: new Date()
+                }, {
+                  where: { puNumber: fileName }
+                });
+                
+                // Решаем проблемную ВЛ если была
+                await ProblemVL.update(
+                  { status: 'resolved' },
+                  { where: { puNumber: fileName, status: 'active' } }
+                );
+                
+                // Создаем успешное уведомление для всех ответственных РЭС
+                await Notification.create({
+                  fromUserId: 1,
+                  toUserId: null, // для всех ответственных РЭС
+                  resId: networkStructure.resId,
+                  networkStructureId: networkStructure.id,
+                  type: 'success',
+                  message: `✅ Проблема с ПУ ${fileName} (${networkStructure.tpName} - ${networkStructure.vlName}) успешно устранена!`,
+                  isRead: false
+                });
+                
+              } else {
+                // НЕУСПЕШНАЯ перепроверка
+                console.log(`Recheck failed - errors still present for PU ${fileName}`);
+                
+                const newFailureCount = (lastCheckHistory.failureCount || 1) + 1;
+                
+                // Обновляем историю
+                await CheckHistory.update({
+                  recheckDate: new Date(),
+                  recheckResult: 'error',
+                  status: 'awaiting_work', // Возвращаем в работу!
+                  failureCount: newFailureCount
+                }, {
+                  where: {
+                    puNumber: fileName,
+                    status: 'awaiting_recheck'
+                  }
+                });
+                
+                // Обновляем статус ПУ
+                await PuStatus.update({
+                  status: 'checked_error',
+                  errorDetails: result.summary,
+                  lastCheck: new Date()
+                }, {
+                  where: { puNumber: fileName }
+                });
+                
+                // Создаем уведомление об ошибке для РЭС
+                await Notification.create({
+                  fromUserId: 1,
+                  toUserId: null, // для всех ответственных РЭС
+                  resId: networkStructure.resId,
+                  networkStructureId: networkStructure.id,
+                  type: 'error',
+                  message: JSON.stringify({
+                    puNumber: fileName,
+                    position: position,
+                    tpName: networkStructure.tpName,
+                    vlName: networkStructure.vlName,
+                    resName: networkStructure.ResUnit.name,
+                    errorDetails: result.summary,
+                    details: result.details
+                  }),
+                  isRead: false
+                });
+                console.log('Created error notification for RES after failed recheck');
+                
+                // Проверяем на проблемную ВЛ (2+ ошибки)
+                if (newFailureCount >= 2) {
+                  const [problemVL, created] = await ProblemVL.findOrCreate({
+                    where: { 
+                      puNumber: fileName,
+                      status: 'active'
+                    },
+                    defaults: {
+                      networkStructureId: networkStructure.id,
+                      resId: networkStructure.resId,
+                      tpName: networkStructure.tpName,
+                      vlName: networkStructure.vlName,
+                      position: position,
+                      puNumber: fileName,
+                      failureCount: newFailureCount,
+                      lastErrorDate: new Date(),
+                      lastErrorDetails: result.summary,
+                      firstReportDate: lastCheckHistory.initialCheckDate,
+                      resComment: lastCheckHistory.resComment
+                    }
                   });
-      
-                  // Помечаем, что НЕ нужно создавать уведомление
-                  shouldCreateNotification = false;
+                  
+                  if (!created) {
+                    await problemVL.update({
+                      failureCount: newFailureCount,
+                      lastErrorDate: new Date(),
+                      lastErrorDetails: result.summary
+                    });
+                  }
+                  
+                  // Уведомление админам о проблемной ВЛ
+                  const admins = await User.findAll({ where: { role: 'admin' } });
+                  for (const admin of admins) {
+                    await Notification.create({
+                      fromUserId: 1,
+                      toUserId: admin.id,
+                      resId: networkStructure.resId,
+                      networkStructureId: networkStructure.id,
+                      type: 'problem_vl',
+                      message: JSON.stringify({
+                        tpName: networkStructure.tpName,
+                        vlName: networkStructure.vlName,
+                        puNumber: fileName,
+                        position: position,
+                        failureCount: newFailureCount,
+                        errorDetails: result.summary,
+                        resComment: lastCheckHistory.resComment,
+                        resName: networkStructure.ResUnit.name
+                      }),
+                      isRead: false
+                    });
+                  }
+                  console.log('Created problem VL notification for admins');
                 }
               }
-  
-              // Создаем уведомление только если это не дубликат
-              if (shouldCreateNotification) {
+              
+            } else {
+              // НЕ ПЕРЕПРОВЕРКА - обычная проверка или повторная проверка
+              
+              // ПРОВЕРКА ДУБЛИКАТА
+              if (result.has_errors && lastCheckHistory) {
+                // Проверяем, не та же ли это ошибка
+                if (lastCheckHistory.initialError === result.summary && 
+                    lastCheckHistory.status !== 'completed') {
+                  console.log(`DUPLICATE: Same error already being processed for PU ${fileName}`);
+                  
+                  try {
+                    fs.unlinkSync(filePath);
+                  } catch (err) {
+                    console.error('Error deleting file:', err);
+                  }
+                  
+                  return resolve({
+                    processed: [{
+                      puNumber: fileName,
+                      status: 'duplicate_error',
+                      error: '❌ Данный файл ранее уже был загружен! Ошибка не изменилась.'
+                    }],
+                    errors: []
+                  });
+                }
+                
+                // Также проверяем активные уведомления
+                const activeError = await Notification.findOne({
+                  where: {
+                    type: 'error',
+                    isRead: false,
+                    message: {
+                      [Op.like]: `%"puNumber":"${fileName}"%`
+                    }
+                  }
+                });
+                
+                if (activeError) {
+                  const errorData = JSON.parse(activeError.message);
+                  if (errorData.errorDetails === result.summary) {
+                    console.log(`DUPLICATE: Active error notification exists for PU ${fileName}`);
+                    
+                    try {
+                      fs.unlinkSync(filePath);
+                    } catch (err) {
+                      console.error('Error deleting file:', err);
+                    }
+                    
+                    return resolve({
+                      processed: [{
+                        puNumber: fileName,
+                        status: 'duplicate_error',
+                        error: '❌ Данная ошибка уже находится в обработке!'
+                      }],
+                      errors: []
+                    });
+                  }
+                }
+              }
+              
+              // Обновляем статус ПУ
+              await PuStatus.upsert({
+                puNumber: fileName,
+                networkStructureId: networkStructure.id,
+                position: position,
+                status: result.has_errors ? 'checked_error' : 'checked_ok',
+                errorDetails: result.has_errors ? result.summary : null,
+                lastCheck: new Date()
+              });
+              
+              // Если есть ошибки - добавляем для создания уведомлений
+              if (result.has_errors) {
                 errors.push({
                   puNumber: fileName,
                   error: result.summary,
@@ -2390,14 +2381,20 @@ processed.push({
                   networkStructureId: networkStructure.id,
                   resId: networkStructure.resId
                 });
-                console.log('Added error for notification:', fileName);
+                console.log('Added error for notification creation');
               }
             }
-          } else {
-            console.log(`WARNING: NetworkStructure not found for PU: ${fileName}`);
-            console.log('This PU will not be processed and no notifications will be created!');
             
-            // Все равно добавляем в processed чтобы показать что файл обработан
+            // Добавляем в processed
+            processed.push({
+              puNumber: fileName,
+              status: result.has_errors ? 'checked_error' : 'checked_ok',
+              error: result.has_errors ? result.summary : null
+            });
+            
+          } else {
+            // ПУ не найден в структуре сети
+            console.log(`WARNING: NetworkStructure not found for PU: ${fileName}`);
             processed.push({
               puNumber: fileName,
               status: 'not_in_structure',
@@ -2405,7 +2402,7 @@ processed.push({
             });
           }
           
-          // Удаляем файл после обработки
+          // Удаляем временный файл
           try {
             fs.unlinkSync(filePath);
             console.log('Temporary file deleted');
