@@ -961,6 +961,7 @@ function Notifications({ filterType, onSectionChange }) {
   const [detailsNotification, setDetailsNotification] = useState(null);
   const [uploadingPu, setUploadingPu] = useState(null);
   const [attachedFiles, setAttachedFiles] = useState([]); // ДОБАВЛЕНО!
+  const [submitting, setSubmitting] = useState(false);
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
@@ -1024,6 +1025,8 @@ function Notifications({ filterType, onSectionChange }) {
       return;
     }
 
+     setSubmitting(true);
+    
     try {
       const formData = new FormData();
       formData.append('comment', comment);
@@ -1037,7 +1040,14 @@ function Notifications({ filterType, onSectionChange }) {
       await api.post(`/api/notifications/${selectedNotification.id}/complete-work`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-    
+
+      // Закрываем модальное окно сразу
+    setShowCompleteModal(false);
+    setComment('');
+    setAttachedFiles([]);
+    setSelectedNotification(null);
+
+      
       alert('Мероприятия отмечены как выполненные');
       setShowCompleteModal(false);
       setComment('');
@@ -1048,8 +1058,10 @@ function Notifications({ filterType, onSectionChange }) {
       
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
-    }
-  };
+    } finally {
+    setSubmitting(false); // ДОБАВИТЬ - разблокируем кнопку в любом случае
+  }
+};
 
   const handleDeleteNotification = async () => {
     try {
@@ -1633,14 +1645,16 @@ function Notifications({ filterType, onSectionChange }) {
             <div className="modal-footer">
               <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
                 Отмена
-              </button>
               <button 
                 className="confirm-btn" 
                 onClick={handleCompleteWork}
-                disabled={comment.trim().split(' ').filter(w => w.length > 0).length < 5}
+                  disabled={
+                  comment.trim().split(' ').filter(w => w.length > 0).length < 5 ||
+                  submitting
+                }
               >
-                Подтвердить выполнение
-              </button>
+                {submitting ? 'Отправка...' : 'Подтвердить выполнение'}
+                </button>
             </div>
           </div>
         </div>
