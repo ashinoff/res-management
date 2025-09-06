@@ -2646,13 +2646,13 @@ app.get('/api/admin/files',
   });
 
 // API для удаления файла из документа
-app.delete('/api/documents/:recordId/:fileIndex', 
+app.delete('/api/documents/record/:recordId', 
   authenticateToken, 
   checkRole(['admin']), 
   async (req, res) => {
     try {
       const { password } = req.body;
-      const { recordId, fileIndex } = req.params;
+      const { recordId } = req.params;
       
       if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
@@ -2663,27 +2663,79 @@ app.delete('/api/documents/:recordId/:fileIndex',
         return res.status(404).json({ error: 'Запись не найдена' });
       }
       
-      const fileToDelete = record.attachments[parseInt(fileIndex)];
-      if (!fileToDelete) {
-        return res.status(404).json({ error: 'Файл не найден' });
+      // Удаляем все файлы из Cloudinary
+      if (record.attachments && record.attachments.length > 0) {
+        for (const file of record.attachments) {
+          try {
+            await cloudinary.uploader.destroy(file.public_id);
+            console.log(`Deleted file from Cloudinary: ${file.public_id}`);
+          } catch (err) {
+            console.error('Error deleting file from Cloudinary:', err);
+          }
+        }
       }
       
-      // Удаляем из Cloudinary
-      await cloudinary.uploader.destroy(fileToDelete.public_id);
+      // Удаляем запись из БД
+      await record.destroy();
       
-      // Удаляем из массива
-      const newAttachments = record.attachments.filter((_, idx) => idx !== parseInt(fileIndex));
-      
-      // ЕСЛИ ФАЙЛОВ БОЛЬШЕ НЕТ - УДАЛЯЕМ ВСЮ ЗАПИСЬ
-      if (newAttachments.length === 0) {
-        await record.destroy();
-        res.json({ success: true, message: 'Запись полностью удалена' });
-      } else {
-        await record.update({ attachments: newAttachments });
-        res.json({ success: true, message: 'Файл удален' });
-      }
+      res.json({ 
+        success: true, 
+        message: 'Запись и все связанные файлы удалены' 
+      });
       
     } catch (error) {
+      console.error('Delete record error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// ИСПРАВЛЕННЫЙ эндпоинт для управления файлами в настройках
+app.delete('/api/admin/files/:public_id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      const { public_id } = req.params;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      console.log(`Attempting to delete file with public_id: ${public_id}`);
+      
+      // Удаляем из Cloudinary
+      await cloudinary.uploader.destroy(public_id);
+      console.log('File deleted from Cloudinary');
+      
+      // Находим все записи в CheckHistory с этим файлом
+      const records = await CheckHistory.findAll();
+      let updatedCount = 0;
+      
+      for (const record of records) {
+        if (record.attachments && Array.isArray(record.attachments)) {
+          const originalLength = record.attachments.length;
+          const newAttachments = record.attachments.filter(
+            file => file.public_id !== public_id
+          );
+          
+          if (newAttachments.length < originalLength) {
+            await record.update({ attachments: newAttachments });
+            updatedCount++;
+          }
+        }
+      }
+      
+      console.log(`Updated ${updatedCount} records`);
+      
+      res.json({ 
+        success: true, 
+        message: 'Файл удален',
+        updatedRecords: updatedCount
+      });
+      
+    } catch (error) {
+      console.error('Delete file error:', error);
       res.status(500).json({ error: error.message });
     }
 });
