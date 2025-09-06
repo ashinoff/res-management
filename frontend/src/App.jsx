@@ -2506,21 +2506,25 @@ function FileManagement() {
   };
   
   const handleDeleteFile = async () => {
-    try {
-      await api.delete(`/api/admin/files/${selectedFile.public_id}`, {
-        data: { password: deletePassword }
-      });
-      
-      alert('Файл удален успешно');
-      setShowDeleteModal(false);
-      setDeletePassword('');
-      setSelectedFile(null);
-      loadFiles();
-      
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-    }
-  };
+  try {
+    // ИЗМЕНИТЬ ЭТУ СТРОКУ - добавить encodeURIComponent
+    const publicId = selectedFile.public_id || selectedFile.filename;
+    
+    await api.delete(`/api/admin/files/${encodeURIComponent(publicId)}`, {
+      data: { password: deletePassword }
+    });
+    
+    alert('Файл удален успешно');
+    setShowDeleteModal(false);
+    setDeletePassword('');
+    setSelectedFile(null);
+    loadFiles();
+    
+  } catch (error) {
+    console.error('Delete error:', error);
+    alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+  }
+};
   
   const getTotalSize = () => {
     const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
