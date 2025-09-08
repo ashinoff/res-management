@@ -3362,6 +3362,8 @@ function UploadedDocuments() {
   const { user } = useContext(AuthContext);
   const [deleteRecordId, setDeleteRecordId] = useState(null); // ДОБАВИТЬ
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]); // ДОБАВИТЬ - для выбранных записей
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false); // ДОБАВИТЬ - для массового удаления
   
   useEffect(() => {
     loadDocuments();
@@ -3570,6 +3572,177 @@ const handleDeleteRecord = async () => {
           </tbody>
         </table>
       </div>
+
+
+  // ДОБАВИТЬ - обработка выбора записей
+  const handleSelectRecord = (id) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === documents.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(documents.map(doc => doc.id));
+    }
+  };
+
+  // ДОБАВИТЬ - массовое удаление
+  const handleBulkDelete = async () => {
+    try {
+      await api.post('/api/documents/delete-bulk', {
+        ids: selectedIds,
+        password: deletePassword
+      });
+      
+      alert(`Удалено записей: ${selectedIds.length}`);
+      setShowBulkDeleteModal(false);
+      setDeletePassword('');
+      setSelectedIds([]);
+      loadDocuments();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  return (
+    <div className="uploaded-documents">
+      <h2>📄 Загруженные документы</h2>
+      
+      <div className="documents-controls">
+        <div className="documents-info">
+          <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
+        </div>
+        
+        {/* ДОБАВИТЬ - кнопка удаления выбранных */}
+        {user.role === 'admin' && selectedIds.length > 0 && (
+          <button 
+            className="delete-selected-btn"
+            onClick={() => setShowBulkDeleteModal(true)}
+          >
+            🗑️ Удалить выбранные ({selectedIds.length})
+          </button>
+        )}
+      </div>
+      
+      <div className="documents-table">
+        <table>
+          <thead>
+            <tr>
+              {/* ДОБАВИТЬ - колонку с чекбоксом */}
+              {user.role === 'admin' && (
+                <th className="checkbox-column">
+                  <input 
+                    type="checkbox"
+                    checked={selectedIds.length === documents.length && documents.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+              )}
+              <th>ТП</th>
+              <th>ВЛ</th>
+              <th>ПУ №</th>
+              <th>Загрузил</th>
+              <th>Дата загрузки</th>
+              <th>Комментарий</th>
+              <th>Статус</th>
+              <th>Файлы</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {documents.map((doc) => (
+              <tr key={doc.id} className={selectedIds.includes(doc.id) ? 'selected' : ''}>
+                {/* ДОБАВИТЬ - чекбокс для каждой записи */}
+                {user.role === 'admin' && (
+                  <td className="checkbox-column">
+                    <input 
+                      type="checkbox"
+                      checked={selectedIds.includes(doc.id)}
+                      onChange={() => handleSelectRecord(doc.id)}
+                    />
+                  </td>
+                )}
+                <td>{doc.tpName}</td>
+                <td>{doc.vlName}</td>
+                <td><strong>{doc.puNumber}</strong></td>
+                <td>{doc.uploadedBy}</td>
+                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                <td className="comment-cell">{doc.resComment}</td>
+                <td>
+                  <span className={`status-badge status-${doc.status}`}>
+                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
+                  </span>
+                </td>
+                <td>
+                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
+                </td>
+                <td>
+                  <div className="action-buttons">
+                    {doc.attachments && doc.attachments.length > 0 && (
+                      <button 
+                        className="btn-view"
+                        onClick={() => handleViewFile(doc.attachments)}
+                        title="Просмотреть"
+                      >
+                        👁️
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* ДОБАВИТЬ - модальное окно массового удаления */}
+      {showBulkDeleteModal && (
+        <div className="modal-backdrop" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления</h3>
+              <button className="close-btn" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить {selectedIds.length} записей.</p>
+              <p>Все связанные файлы также будут удалены.</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleBulkDelete}
+                disabled={!deletePassword}
+              >
+                Удалить выбранные
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       
       {/* Модальное окно удаления записи */}
       {showDeleteRecordModal && (
