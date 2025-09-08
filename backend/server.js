@@ -444,6 +444,8 @@ const CheckHistory = sequelize.define('CheckHistory', {
 
 });
 
+
+
 // 8. Модель проблемных ВЛ (2+ неудачных проверки)
 const ProblemVL = sequelize.define('ProblemVL', {
   id: {
@@ -507,6 +509,42 @@ const ProblemVL = sequelize.define('ProblemVL', {
   }
 });
 
+// 9. Модель прочтений уведомлений (НОВАЯ)
+const NotificationRead = sequelize.define('NotificationRead', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  notificationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: Notification,
+      key: 'id'
+    }
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: User,
+      key: 'id'
+    }
+  },
+  readAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  }
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ['notificationId', 'userId'] // один пользователь может прочитать одно уведомление только раз
+    }
+  ]
+});
+
 // =====================================================
 // СВЯЗИ МЕЖДУ МОДЕЛЯМИ
 // =====================================================
@@ -528,6 +566,9 @@ CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 CheckHistory.belongsTo(User, { as: 'uploadedByUser', foreignKey: 'resId' });
 ProblemVL.belongsTo(ResUnit, { foreignKey: 'resId' });
 ProblemVL.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
+Notification.hasMany(NotificationRead, { foreignKey: 'notificationId' });
+NotificationRead.belongsTo(Notification, { foreignKey: 'notificationId' });
+NotificationRead.belongsTo(User, { foreignKey: 'userId' });
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -970,10 +1011,8 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
     let whereClause = {};
     
     if (req.user.role === 'admin') {
-      // Админ видит все уведомления
       whereClause = {};
     } else if (req.user.role === 'res_responsible') {
-      // res_responsible видит уведомления своего РЭС где toUserId = null или его ID
       whereClause = {
         resId: req.user.resId,
         [Op.or]: [
@@ -982,7 +1021,6 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         ]
       };
     } else {
-      // uploader видит только свои персональные уведомления
       whereClause = { toUserId: req.user.id };
     }
     
@@ -992,13 +1030,26 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         { model: User, as: 'fromUser' },
         { model: User, as: 'toUser' },
         ResUnit,
-        NetworkStructure
+        NetworkStructure,
+        NotificationRead // Добавляем прочтения
       ],
       order: [['createdAt', 'DESC']],
       limit: 100
     });
     
-    res.json(notifications);
+    // Добавляем информацию о прочтении для текущего пользователя
+    const notificationsWithReadStatus = notifications.map(notif => {
+      const isRead = notif.NotificationReads?.some(read => 
+        read.userId === req.user.id
+      ) || false;
+      
+      return {
+        ...notif.toJSON(),
+        isRead: isRead // Персональный статус прочтения
+      };
+    });
+    
+    res.json(notificationsWithReadStatus);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1859,45 +1910,57 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
     let whereClause = {};
     
     if (req.user.role === 'admin') {
-      // Админ видит все
-      whereClause = { isRead: false };
+      whereClause = {};
     } else if (req.user.role === 'res_responsible') {
-      // res_responsible видит уведомления своего РЭС
       whereClause = {
         resId: req.user.resId,
-        isRead: false,
         [Op.or]: [
           { toUserId: null },
           { toUserId: req.user.id }
         ]
       };
     } else {
-      // uploader видит только свои
       whereClause = { 
-        toUserId: req.user.id,
-        isRead: false
+        toUserId: req.user.id
       };
     }
     
-    // Считаем по типам
-    const techPending = await Notification.count({
-      where: { ...whereClause, type: 'error' }
+    // Получаем все доступные уведомления
+    const allNotifications = await Notification.findAll({
+      where: whereClause,
+      attributes: ['id', 'type']
     });
     
-    const askuePending = await Notification.count({
-      where: { ...whereClause, type: 'pending_askue' }
+    // Получаем прочитанные текущим пользователем
+    const readNotifications = await NotificationRead.findAll({
+      where: {
+        userId: req.user.id,
+        notificationId: {
+          [Op.in]: allNotifications.map(n => n.id)
+        }
+      },
+      attributes: ['notificationId']
     });
     
-    const problemVL = req.user.role === 'admin' 
-      ? await Notification.count({
-          where: { ...whereClause, type: 'problem_vl' }
-        })
-      : 0;
+    const readIds = new Set(readNotifications.map(r => r.notificationId));
+    
+    // Считаем непрочитанные по типам
+    let techPending = 0;
+    let askuePending = 0;
+    let problemVL = 0;
+    
+    allNotifications.forEach(notif => {
+      if (!readIds.has(notif.id)) { // Если не прочитано текущим пользователем
+        if (notif.type === 'error') techPending++;
+        else if (notif.type === 'pending_askue') askuePending++;
+        else if (notif.type === 'problem_vl') problemVL++;
+      }
+    });
     
     res.json({
       tech_pending: techPending,
       askue_pending: askuePending,
-      problem_vl: problemVL
+      problem_vl: req.user.role === 'admin' ? problemVL : 0
     });
   } catch (error) {
     console.error('Error counting notifications:', error);
@@ -1911,6 +1974,7 @@ app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
     const { type } = req.body;
     let whereClause = {};
     
+    // Определяем какие уведомления должны быть помечены
     if (req.user.role === 'admin') {
       whereClause = type === 'all' ? {} : { type };
     } else if (req.user.role === 'res_responsible') {
@@ -1927,10 +1991,23 @@ app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
       if (type !== 'all') whereClause.type = type;
     }
     
-    await Notification.update(
-      { isRead: true },
-      { where: whereClause }
-    );
+    // Получаем все уведомления для пометки
+    const notificationsToMark = await Notification.findAll({
+      where: whereClause,
+      attributes: ['id']
+    });
+    
+    // Создаем записи о прочтении
+    const readRecords = notificationsToMark.map(notif => ({
+      notificationId: notif.id,
+      userId: req.user.id,
+      readAt: new Date()
+    }));
+    
+    // Массовое создание с игнорированием дубликатов
+    await NotificationRead.bulkCreate(readRecords, {
+      ignoreDuplicates: true // игнорируем если уже прочитано
+    });
     
     res.json({ success: true });
   } catch (error) {
