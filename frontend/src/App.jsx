@@ -3361,10 +3361,10 @@ function UploadedDocuments() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const { user } = useContext(AuthContext);
-  const [deleteRecordId, setDeleteRecordId] = useState(null); // ДОБАВИТЬ
+  const [deleteRecordId, setDeleteRecordId] = useState(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
-  const [selectedIds, setSelectedIds] = useState([]); // ДОБАВИТЬ - для выбранных записей
-  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false); // ДОБАВИТЬ - для массового удаления
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   
   useEffect(() => {
     loadDocuments();
@@ -3404,87 +3404,7 @@ function UploadedDocuments() {
     }
   };
   
-  if (loading) return <div className="loading">Загрузка документов...</div>;
-  
-  return (
-    <div className="uploaded-documents">
-      <h2>📄 Загруженные документы</h2>
-      
-      <div className="documents-info">
-        <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
-      </div>
-      
-      <div className="documents-table">
-        <table>
-          <thead>
-            <tr>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>ПУ №</th>
-              <th>Загрузил</th>
-              <th>Дата загрузки</th>
-              <th>Комментарий</th>
-              <th>Статус</th>
-              <th>Файлы</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.map((doc) => (
-              <tr key={doc.id}>
-                <td>{doc.tpName}</td>
-                <td>{doc.vlName}</td>
-                <td><strong>{doc.puNumber}</strong></td>
-                <td>{doc.uploadedBy}</td>
-                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                <td className="comment-cell">{doc.resComment}</td>
-                <td>
-                  <span className={`status-badge status-${doc.status}`}>
-                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
-                  </span>
-                </td>
-                <td>
-                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    {doc.attachments && doc.attachments.length > 0 && (
-                      <button 
-                        className="btn-view"
-                        onClick={() => handleViewFile(doc.attachments)}
-                        title="Просмотреть"
-                      >
-                        👁️
-                      </button>
-                    )}
-                    {user.role === 'admin' && doc.attachments && doc.attachments.map((file, idx) => (
-                      <button 
-                        key={idx}
-                        className="btn-delete-small"
-                        onClick={() => {
-                          setSelectedFile({ ...file, recordId: doc.id, fileIndex: idx });
-                          setShowDeleteModal(true);
-                        }}
-                        title={`Удалить ${file.original_name}`}
-                      >
-                        🗑️
-                      </button>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {documents.length === 0 && (
-        <div className="no-data">
-          <p>Пока нет загруженных документов</p>
-        </div>
-      )}
-
-const handleDeleteRecord = async () => {
+  const handleDeleteRecord = async () => {
     try {
       await api.delete(`/api/documents/record/${deleteRecordId}`, {
         data: { password: deletePassword }
@@ -3500,82 +3420,7 @@ const handleDeleteRecord = async () => {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
-  
-  return (
-    <div className="uploaded-documents">
-      <h2>📄 Загруженные документы</h2>
-      
-      <div className="documents-info">
-        <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
-      </div>
-      
-      <div className="documents-table">
-        <table>
-          <thead>
-            <tr>
-              <th>ТП</th>
-              <th>ВЛ</th>
-              <th>ПУ №</th>
-              <th>Загрузил</th>
-              <th>Дата загрузки</th>
-              <th>Комментарий</th>
-              <th>Статус</th>
-              <th>Файлы</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.map((doc) => (
-              <tr key={doc.id}>
-                <td>{doc.tpName}</td>
-                <td>{doc.vlName}</td>
-                <td><strong>{doc.puNumber}</strong></td>
-                <td>{doc.uploadedBy}</td>
-                <td>{new Date(doc.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                <td className="comment-cell">{doc.resComment}</td>
-                <td>
-                  <span className={`status-badge status-${doc.status}`}>
-                    {doc.status === 'completed' ? '✅ Завершен' : '⏳ На проверке'}
-                  </span>
-                </td>
-                <td>
-                  <span className="file-count">{doc.attachments?.length || 0} файл(ов)</span>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    {doc.attachments && doc.attachments.length > 0 && (
-                      <button 
-                        className="btn-view"
-                        onClick={() => handleViewFile(doc.attachments)}
-                        title="Просмотреть"
-                      >
-                        👁️
-                      </button>
-                    )}
-                    {user.role === 'admin' && (
-                      <>
-                        <button 
-                          className="btn-delete-small"
-                          onClick={() => {
-                            setDeleteRecordId(doc.id);
-                            setShowDeleteRecordModal(true);
-                          }}
-                          title="Удалить запись"
-                        >
-                          🗑️
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-
-  // ДОБАВИТЬ - обработка выбора записей
   const handleSelectRecord = (id) => {
     setSelectedIds(prev => {
       if (prev.includes(id)) {
@@ -3594,7 +3439,6 @@ const handleDeleteRecord = async () => {
     }
   };
 
-  // ДОБАВИТЬ - массовое удаление
   const handleBulkDelete = async () => {
     try {
       await api.post('/api/documents/delete-bulk', {
@@ -3612,7 +3456,9 @@ const handleDeleteRecord = async () => {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
-
+  
+  if (loading) return <div className="loading">Загрузка документов...</div>;
+  
   return (
     <div className="uploaded-documents">
       <h2>📄 Загруженные документы</h2>
@@ -3622,7 +3468,6 @@ const handleDeleteRecord = async () => {
           <p>Всего документов: <strong>{documents.reduce((sum, doc) => sum + (doc.attachments?.length || 0), 0)}</strong></p>
         </div>
         
-        {/* ДОБАВИТЬ - кнопка удаления выбранных */}
         {user.role === 'admin' && selectedIds.length > 0 && (
           <button 
             className="delete-selected-btn"
@@ -3637,7 +3482,6 @@ const handleDeleteRecord = async () => {
         <table>
           <thead>
             <tr>
-              {/* ДОБАВИТЬ - колонку с чекбоксом */}
               {user.role === 'admin' && (
                 <th className="checkbox-column">
                   <input 
@@ -3661,7 +3505,6 @@ const handleDeleteRecord = async () => {
           <tbody>
             {documents.map((doc) => (
               <tr key={doc.id} className={selectedIds.includes(doc.id) ? 'selected' : ''}>
-                {/* ДОБАВИТЬ - чекбокс для каждой записи */}
                 {user.role === 'admin' && (
                   <td className="checkbox-column">
                     <input 
@@ -3704,7 +3547,13 @@ const handleDeleteRecord = async () => {
         </table>
       </div>
       
-      {/* ДОБАВИТЬ - модальное окно массового удаления */}
+      {documents.length === 0 && (
+        <div className="no-data">
+          <p>Пока нет загруженных документов</p>
+        </div>
+      )}
+
+      {/* Модальное окно массового удаления */}
       {showBulkDeleteModal && (
         <div className="modal-backdrop" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
@@ -3743,8 +3592,6 @@ const handleDeleteRecord = async () => {
         </div>
       )}
 
-
-      
       {/* Модальное окно удаления записи */}
       {showDeleteRecordModal && (
         <div className="modal-backdrop" onClick={() => setShowDeleteRecordModal(false)}>
@@ -3782,9 +3629,8 @@ const handleDeleteRecord = async () => {
           </div>
         </div>
       )}
-
       
-      {/* Модальное окно удаления */}
+      {/* Модальное окно удаления файла */}
       {showDeleteModal && (
         <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
