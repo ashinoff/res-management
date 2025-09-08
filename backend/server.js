@@ -1938,6 +1938,65 @@ app.put('/api/notifications/mark-read', authenticateToken, async (req, res) => {
   }
 });
 
+// API для массового удаления записей
+app.post('/api/documents/delete-bulk', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { ids, password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'Не выбраны записи для удаления' });
+      }
+      
+      // Получаем все записи для удаления
+      const records = await CheckHistory.findAll({
+        where: { id: { [Op.in]: ids } },
+        transaction
+      });
+      
+      // Удаляем все файлы из Cloudinary
+      for (const record of records) {
+        if (record.attachments && record.attachments.length > 0) {
+          for (const file of record.attachments) {
+            try {
+              await cloudinary.uploader.destroy(file.public_id);
+              console.log(`Deleted file from Cloudinary: ${file.public_id}`);
+            } catch (err) {
+              console.error('Error deleting file from Cloudinary:', err);
+            }
+          }
+        }
+      }
+      
+      // Удаляем записи из БД
+      const deletedCount = await CheckHistory.destroy({
+        where: { id: { [Op.in]: ids } },
+        transaction
+      });
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `Удалено записей: ${deletedCount}`,
+        deletedCount
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Bulk delete error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
