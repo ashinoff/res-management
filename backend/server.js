@@ -2365,61 +2365,73 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
               // НЕ ПЕРЕПРОВЕРКА - обычная проверка или повторная проверка
               
               // ПРОВЕРКА ДУБЛИКАТА
-              if (result.has_errors && lastCheckHistory) {
-                // Проверяем, не та же ли это ошибка
-                if (lastCheckHistory.initialError === result.summary && 
-                    lastCheckHistory.status !== 'completed') {
-                  console.log(`DUPLICATE: Same error already being processed for PU ${fileName}`);
-                  
-                  try {
-                    fs.unlinkSync(filePath);
-                  } catch (err) {
-                    console.error('Error deleting file:', err);
-                  }
-                  
-                  return resolve({
-                    processed: [{
-                      puNumber: fileName,
-                      status: 'duplicate_error',
-                      error: '❌ Данный файл ранее уже был загружен! Ошибка не изменилась.'
-                    }],
-                    errors: []
-                  });
-                }
-                
-                // Также проверяем активные уведомления
-                const activeError = await Notification.findOne({
-                  where: {
-                    type: 'error',
-                    isRead: false,
-                    message: {
-                      [Op.like]: `%"puNumber":"${fileName}"%`
-                    }
-                  }
-                });
-                
-                if (activeError) {
-                  const errorData = JSON.parse(activeError.message);
-                  if (errorData.errorDetails === result.summary) {
-                    console.log(`DUPLICATE: Active error notification exists for PU ${fileName}`);
-                    
-                    try {
-                      fs.unlinkSync(filePath);
-                    } catch (err) {
-                      console.error('Error deleting file:', err);
-                    }
-                    
-                    return resolve({
-                      processed: [{
-                        puNumber: fileName,
-                        status: 'duplicate_error',
-                        error: '❌ Данная ошибка уже находится в обработке!'
-                      }],
-                      errors: []
-                    });
-                  }
-                }
-              }
+              if (result.has_errors) {
+  // Проверяем ВСЕ активные записи, не только последнюю
+  const activeRecords = await CheckHistory.findAll({
+    where: { 
+      puNumber: fileName,
+      [Op.or]: [
+        { status: 'awaiting_work' },
+        { status: 'awaiting_recheck' }
+      ]
+    }
+  });
+  
+  // Проверяем совпадение ошибки в любой активной записи
+  for (const record of activeRecords) {
+    if (record.initialError === result.summary && record.status === 'awaiting_work') {
+      console.log(`DUPLICATE: Same error already in CheckHistory for PU ${fileName}`);
+      
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Error deleting file:', err);
+      }
+      
+      return resolve({
+        processed: [{
+          puNumber: fileName,
+          status: 'duplicate_error', 
+          error: '❌ Данная ошибка уже находится в обработке! Статус: ожидает мероприятий РЭС.'
+        }],
+        errors: []
+      });
+    }
+  }
+  
+  // Проверяем ВСЕ уведомления об ошибках (не только непрочитанные)
+  const allErrorNotifications = await Notification.findAll({
+    where: {
+      type: 'error',
+      message: {
+        [Op.like]: `%"puNumber":"${fileName}"%`
+      }
+    },
+    order: [['createdAt', 'DESC']]
+  });
+  
+  for (const notif of allErrorNotifications) {
+    const errorData = JSON.parse(notif.message);
+    if (errorData.errorDetails === result.summary) {
+      console.log(`DUPLICATE: Error notification exists for PU ${fileName}`);
+      
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Error deleting file:', err);
+      }
+      
+      return resolve({
+        processed: [{
+          puNumber: fileName,
+          status: 'duplicate_error',
+          error: '❌ Данная ошибка уже была загружена ранее! Проверьте раздел "Ожидающие мероприятий".'
+        }],
+        errors: []
+      });
+    }
+  }
+}
               
               // Обновляем статус ПУ
               await PuStatus.upsert({
