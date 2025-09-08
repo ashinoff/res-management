@@ -3199,3 +3199,19 @@ padding: 16px 12px;
   height: 20px;
   padding: 0 8px;
 }
+/* В App.css добавьте */
+.documents-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.documents-table tr.selected {
+  background-color: #e3f2fd;
+}
+
+.checkbox-column {
+  width: 40px;
+  text-align: center;
+}
