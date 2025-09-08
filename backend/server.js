@@ -2284,56 +2284,118 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
           
           // НОВАЯ ПРОВЕРКА: История загрузок
           const recentUploads = await PuUploadHistory.findAll({
-            where: {
-              puNumber: fileName,
-              uploadedAt: {
-                [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // последние 30 дней
-              }
-            },
-            order: [['uploadedAt', 'DESC']]
-          });
-          
-          // Извлекаем период из текущего файла
-          const currentPeriod = result.has_errors ? extractPeriodFromError(result.summary) : null;
-          
-          // Проверяем дубликаты
-          for (const upload of recentUploads) {
-            // Проверка той же ошибки
-            if (upload.hasErrors && upload.errorSummary === result.summary) {
-              console.log(`DUPLICATE: Same error already uploaded for PU ${fileName}`);
-              
-              // Записываем попытку загрузки дубликата
-              if (userId) {
-                await PuUploadHistory.create({
-                  puNumber: fileName,
-                  uploadedBy: userId,
-                  fileName: originalFileName || 'unknown',
-                  fileType: type,
-                  periodStart: currentPeriod?.start,
-                  periodEnd: currentPeriod?.end,
-                  hasErrors: result.has_errors,
-                  errorSummary: result.summary,
-                  errorDetails: result.details,
-                  uploadStatus: 'duplicate'
-                });
-              }
-              
-              try {
-                fs.unlinkSync(filePath);
-              } catch (err) {
-                console.error('Error deleting file:', err);
-              }
-              
-              return resolve({
-                processed: [{
-                  puNumber: fileName,
-                  status: 'duplicate_error',
-                  error: `❌ Данная ошибка уже была загружена ${new Date(upload.uploadedAt).toLocaleDateString('ru-RU')}! Проверьте статус обработки.`
-                }],
-                errors: []
-              });
-            }
-          }
+  where: {
+    puNumber: fileName,
+    uploadedAt: {
+      [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // последние 30 дней
+    }
+  },
+  order: [['uploadedAt', 'DESC']]
+});
+
+// Извлекаем период из текущего файла
+const currentPeriod = result.has_errors ? extractPeriodFromError(result.summary) : null;
+
+// Проверяем дубликаты ТОЛЬКО если текущий файл с ошибкой
+if (result.has_errors) {
+  // Ищем такую же ошибку в истории
+  const sameErrorUpload = recentUploads.find(upload => 
+    upload.errorSummary === result.summary && upload.hasErrors
+  );
+  
+  if (sameErrorUpload) {
+    console.log(`Found same error in history for PU ${fileName}, checking if it was fixed...`);
+    
+    // Проверяем, была ли загрузка БЕЗ ошибок после этой ошибки
+    const successfulUploadAfter = recentUploads.find(upload => 
+      !upload.hasErrors && 
+      new Date(upload.uploadedAt) > new Date(sameErrorUpload.uploadedAt)
+    );
+    
+    if (successfulUploadAfter) {
+      // Ошибка была исправлена, но теперь появилась снова
+      console.log(`Error was fixed on ${successfulUploadAfter.uploadedAt} but now appeared again`);
+      // Разрешаем загрузку - это повторное появление ошибки
+    } else {
+      // Ошибка не была исправлена - это дубликат
+      console.log(`DUPLICATE: Same error still not fixed for PU ${fileName}`);
+      
+      // Записываем попытку загрузки дубликата
+      if (userId) {
+        await PuUploadHistory.create({
+          puNumber: fileName,
+          uploadedBy: userId,
+          fileName: originalFileName || 'unknown',
+          fileType: type,
+          periodStart: currentPeriod?.start,
+          periodEnd: currentPeriod?.end,
+          hasErrors: result.has_errors,
+          errorSummary: result.summary,
+          errorDetails: result.details,
+          uploadStatus: 'duplicate'
+        });
+      }
+      
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('Error deleting file:', err);
+      }
+      
+      return resolve({
+        processed: [{
+          puNumber: fileName,
+          status: 'duplicate_error',
+          error: `❌ Данная ошибка уже была загружена ${new Date(sameErrorUpload.uploadedAt).toLocaleDateString('ru-RU')}! Проверьте статус обработки.`
+        }],
+        errors: []
+      });
+    }
+  }
+  
+  // Дополнительная проверка: есть ли активные уведомления или записи в CheckHistory
+  const activeCheckHistory = await CheckHistory.findOne({
+    where: { 
+      puNumber: fileName,
+      initialError: result.summary,
+      status: ['awaiting_work', 'awaiting_recheck']
+    }
+  });
+  
+  if (activeCheckHistory) {
+    console.log(`DUPLICATE: Active CheckHistory record exists for this error`);
+    
+    if (userId) {
+      await PuUploadHistory.create({
+        puNumber: fileName,
+        uploadedBy: userId,
+        fileName: originalFileName || 'unknown',
+        fileType: type,
+        periodStart: currentPeriod?.start,
+        periodEnd: currentPeriod?.end,
+        hasErrors: result.has_errors,
+        errorSummary: result.summary,
+        errorDetails: result.details,
+        uploadStatus: 'duplicate'
+      });
+    }
+    
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error('Error deleting file:', err);
+    }
+    
+    return resolve({
+      processed: [{
+        puNumber: fileName,
+        status: 'duplicate_error',
+        error: '❌ Данная ошибка уже находится в обработке!'
+      }],
+      errors: []
+    });
+  }
+}
           
           // Ищем ПУ в структуре сети
           const networkStructure = await NetworkStructure.findOne({
