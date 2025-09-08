@@ -545,6 +545,65 @@ const NotificationRead = sequelize.define('NotificationRead', {
   ]
 });
 
+// 10. Модель истории загрузок для каждого ПУ (НОВАЯ)
+const PuUploadHistory = sequelize.define('PuUploadHistory', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  puNumber: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    index: true
+  },
+  uploadedBy: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: User,
+      key: 'id'
+    }
+  },
+  fileName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  fileType: {
+    type: DataTypes.ENUM('rim_single', 'rim_mass', 'nartis', 'energomera'),
+    allowNull: false
+  },
+  periodStart: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  periodEnd: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  hasErrors: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  errorSummary: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  errorDetails: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  uploadStatus: {
+    type: DataTypes.ENUM('success', 'duplicate', 'wrong_period', 'error'),
+    defaultValue: 'success'
+  },
+  uploadedAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  }
+});
+
+
+
 // =====================================================
 // СВЯЗИ МЕЖДУ МОДЕЛЯМИ
 // =====================================================
@@ -569,6 +628,7 @@ ProblemVL.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 Notification.hasMany(NotificationRead, { foreignKey: 'notificationId' });
 NotificationRead.belongsTo(Notification, { foreignKey: 'notificationId' });
 NotificationRead.belongsTo(User, { foreignKey: 'userId' });
+PuUploadHistory.belongsTo(User, { foreignKey: 'uploadedBy' });
 
 // =====================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -858,6 +918,7 @@ app.post('/api/upload/analyze',
         type, 
         req.file.originalname, // передаем оригинальное имя
         requiredPeriod
+        userId
       );
       
       console.log('Analysis result:', {
@@ -2078,7 +2139,7 @@ app.post('/api/documents/delete-bulk',
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АНАЛИЗА
 // =====================================================
 
-async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null) {
+async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null, userId = null) {
   return new Promise((resolve, reject) => {
     
     // Вспомогательная функция для получения названия месяца
@@ -2086,6 +2147,30 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
       const months = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
                       'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
       return months[monthNum] || '';
+    }
+    
+    // Функция для извлечения периода из текста ошибки
+    function extractPeriodFromError(errorText) {
+      const monthMap = {
+        'Янв': 1, 'Фев': 2, 'Мар': 3, 'Апр': 4, 'Май': 5, 'Июн': 6,
+        'Июл': 7, 'Авг': 8, 'Сен': 9, 'Окт': 10, 'Ноя': 11, 'Дек': 12
+      };
+      
+      const monthPattern = /(Янв|Фев|Мар|Апр|Май|Июн|Июл|Авг|Сен|Окт|Ноя|Дек)/g;
+      const foundMonths = errorText.match(monthPattern);
+      
+      if (foundMonths && foundMonths.length > 0) {
+        const firstMonth = monthMap[foundMonths[0]];
+        const lastMonth = monthMap[foundMonths[foundMonths.length - 1]];
+        const currentYear = new Date().getFullYear();
+        
+        return {
+          start: new Date(currentYear, firstMonth - 1, 1),
+          end: new Date(currentYear, lastMonth - 1, 28)
+        };
+      }
+      
+      return null;
     }
     
     let scriptPath;
@@ -2196,6 +2281,59 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
             : path.basename(filePath, path.extname(filePath));
           
           console.log('Extracted PU number from filename:', fileName);
+          
+          // НОВАЯ ПРОВЕРКА: История загрузок
+          const recentUploads = await PuUploadHistory.findAll({
+            where: {
+              puNumber: fileName,
+              uploadedAt: {
+                [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // последние 30 дней
+              }
+            },
+            order: [['uploadedAt', 'DESC']]
+          });
+          
+          // Извлекаем период из текущего файла
+          const currentPeriod = result.has_errors ? extractPeriodFromError(result.summary) : null;
+          
+          // Проверяем дубликаты
+          for (const upload of recentUploads) {
+            // Проверка той же ошибки
+            if (upload.hasErrors && upload.errorSummary === result.summary) {
+              console.log(`DUPLICATE: Same error already uploaded for PU ${fileName}`);
+              
+              // Записываем попытку загрузки дубликата
+              if (userId) {
+                await PuUploadHistory.create({
+                  puNumber: fileName,
+                  uploadedBy: userId,
+                  fileName: originalFileName || 'unknown',
+                  fileType: type,
+                  periodStart: currentPeriod?.start,
+                  periodEnd: currentPeriod?.end,
+                  hasErrors: result.has_errors,
+                  errorSummary: result.summary,
+                  errorDetails: result.details,
+                  uploadStatus: 'duplicate'
+                });
+              }
+              
+              try {
+                fs.unlinkSync(filePath);
+              } catch (err) {
+                console.error('Error deleting file:', err);
+              }
+              
+              return resolve({
+                processed: [{
+                  puNumber: fileName,
+                  status: 'duplicate_error',
+                  error: `❌ Данная ошибка уже была загружена ${new Date(upload.uploadedAt).toLocaleDateString('ru-RU')}! Проверьте статус обработки.`
+                }],
+                errors: []
+              });
+            }
+          }
           
           // Ищем ПУ в структуре сети
           const networkStructure = await NetworkStructure.findOne({
@@ -2441,75 +2579,6 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
             } else {
               // НЕ ПЕРЕПРОВЕРКА - обычная проверка или повторная проверка
               
-              // ПРОВЕРКА ДУБЛИКАТА
-              if (result.has_errors) {
-  // Проверяем ВСЕ активные записи, не только последнюю
-  const activeRecords = await CheckHistory.findAll({
-    where: { 
-      puNumber: fileName,
-      [Op.or]: [
-        { status: 'awaiting_work' },
-        { status: 'awaiting_recheck' }
-      ]
-    }
-  });
-  
-  // Проверяем совпадение ошибки в любой активной записи
-  for (const record of activeRecords) {
-    if (record.initialError === result.summary && record.status === 'awaiting_work') {
-      console.log(`DUPLICATE: Same error already in CheckHistory for PU ${fileName}`);
-      
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error('Error deleting file:', err);
-      }
-      
-      return resolve({
-        processed: [{
-          puNumber: fileName,
-          status: 'duplicate_error', 
-          error: '❌ Данная ошибка уже находится в обработке! Статус: ожидает мероприятий РЭС.'
-        }],
-        errors: []
-      });
-    }
-  }
-  
-  // Проверяем ВСЕ уведомления об ошибках (не только непрочитанные)
-  const allErrorNotifications = await Notification.findAll({
-    where: {
-      type: 'error',
-      message: {
-        [Op.like]: `%"puNumber":"${fileName}"%`
-      }
-    },
-    order: [['createdAt', 'DESC']]
-  });
-  
-  for (const notif of allErrorNotifications) {
-    const errorData = JSON.parse(notif.message);
-    if (errorData.errorDetails === result.summary) {
-      console.log(`DUPLICATE: Error notification exists for PU ${fileName}`);
-      
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error('Error deleting file:', err);
-      }
-      
-      return resolve({
-        processed: [{
-          puNumber: fileName,
-          status: 'duplicate_error',
-          error: '❌ Данная ошибка уже была загружена ранее! Проверьте раздел "Ожидающие мероприятий".'
-        }],
-        errors: []
-      });
-    }
-  }
-}
-              
               // Обновляем статус ПУ
               await PuStatus.upsert({
                 puNumber: fileName,
@@ -2531,6 +2600,23 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
                 });
                 console.log('Added error for notification creation');
               }
+            }
+            
+            // Записываем успешную загрузку в историю
+            if (userId) {
+              await PuUploadHistory.create({
+                puNumber: fileName,
+                uploadedBy: req.user.id,
+                fileName: originalFileName || 'unknown',
+                fileType: type,
+                periodStart: currentPeriod?.start,
+                periodEnd: currentPeriod?.end,
+                hasErrors: result.has_errors,
+                errorSummary: result.has_errors ? result.summary : null,
+                errorDetails: result.has_errors ? result.details : null,
+                uploadStatus: 'success'
+              });
+              console.log(`Upload history recorded for PU ${fileName}`);
             }
             
             // Добавляем в processed
