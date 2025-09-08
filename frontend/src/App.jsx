@@ -1645,6 +1645,7 @@ function Notifications({ filterType, onSectionChange }) {
             <div className="modal-footer">
               <button className="cancel-btn" onClick={() => setShowCompleteModal(false)}>
                 Отмена
+                </button>
               <button 
                 className="confirm-btn" 
                 onClick={handleCompleteWork}
