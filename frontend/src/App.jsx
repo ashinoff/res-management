@@ -4006,16 +4006,31 @@ function SystemHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const { user } = useContext(AuthContext);
+  const [resList, setResList] = useState([]);
   
   // Фильтры
   const [filters, setFilters] = useState({
     puNumber: '',
     tpName: '',
+    resId: '',
     dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     dateTo: new Date().toISOString().split('T')[0],
     fileType: '',
     status: ''
   });
+
+  useEffect(() => {
+    loadResList();
+  }, []);
+  
+  const loadResList = async () => {
+    try {
+      const response = await api.get('/api/res/list');
+      setResList(response.data);
+    } catch (error) {
+      console.error('Error loading RES list:', error);
+    }
+  };
   
   useEffect(() => {
     loadData();
@@ -4038,6 +4053,9 @@ function SystemHistory() {
         const params = new URLSearchParams({
           page: currentPage,
           limit: 50,
+          puNumber: filters.puNumber, // ДОБАВИТЬ
+          resId: filters.resId,       // ДОБАВИТЬ
+          tpName: filters.tpName,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
           status: filters.status
@@ -4121,7 +4139,7 @@ function SystemHistory() {
   
   return (
     <div className="system-history">
-      <h2>📜 История системы</h2>
+      <h2>История системы</h2>
       
       <div className="history-tabs">
         <button 
@@ -4154,6 +4172,21 @@ function SystemHistory() {
               onChange={(e) => handleFilterChange('puNumber', e.target.value)}
               placeholder="Поиск по ПУ"
             />
+          </div>
+
+          {/* ДОБАВИТЬ выбор РЭС */}
+          <div className="filter-group">
+            <label>РЭС:</label>
+            <select 
+              value={filters.resId}
+              onChange={(e) => handleFilterChange('resId', e.target.value)}
+              disabled={user.role !== 'admin'} // Не-админы видят только свой РЭС
+            >
+              <option value="">Все РЭС</option>
+              {resList.map(res => (
+                <option key={res.id} value={res.id}>{res.name}</option>
+              ))}
+            </select>
           </div>
           
           {activeTab === 'uploads' && (
@@ -4199,6 +4232,18 @@ function SystemHistory() {
           )}
           
           {activeTab === 'checks' && (
+          <>
+              {/* ДОБАВИТЬ поле ТП для истории проверок */}
+              <div className="filter-group">
+                <label>ТП:</label>
+                <input 
+                  type="text"
+                  value={filters.tpName}
+                  onChange={(e) => handleFilterChange('tpName', e.target.value)}
+                  placeholder="Поиск по ТП"
+                />
+              </div>
+      
             <div className="filter-group">
               <label>Статус:</label>
               <select 
