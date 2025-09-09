@@ -193,6 +193,12 @@ function NetworkStructure({ selectedRes }) {
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedPosition, setSelectedPosition] = useState(null);
+  const [showExtendedModal, setShowExtendedModal] = useState(false);
+  const [selectedPuData, setSelectedPuData] = useState(null);
+  const [activeTab, setActiveTab] = useState('current'); // current, uploads, checks
+  const [uploadHistory, setUploadHistory] = useState([]);
+  const [checkHistory, setCheckHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   
   // Для редактирования
   const [editingCell, setEditingCell] = useState(null);
@@ -244,14 +250,49 @@ function NetworkStructure({ selectedRes }) {
   };
 
   const handleCellClick = (item, position) => {
-    const puNumber = position === 'start' ? item.startPu : 
-                     position === 'middle' ? item.middlePu : 
-                     item.endPu;
+  const puNumber = position === 'start' ? item.startPu : 
+                   position === 'middle' ? item.middlePu : 
+                   item.endPu;
+  
+  if (puNumber && item.PuStatuses) {
+    const status = item.PuStatuses.find(s => 
+      s.puNumber === puNumber && s.position === position
+    );
     
-    if (puNumber && item.PuStatuses) {
-      const status = item.PuStatuses.find(s => 
-        s.puNumber === puNumber && s.position === position
-      );
+    // НОВАЯ ЛОГИКА - открываем расширенное окно для всех
+    setSelectedPuData({
+      puNumber,
+      position,
+      tpName: item.tpName,
+      vlName: item.vlName,
+      resName: item.ResUnit?.name,
+      status: status || { status: 'not_checked' },
+      item
+    });
+    setShowExtendedModal(true);
+    setActiveTab('current');
+    loadPuHistory(puNumber);
+  }
+};
+  
+  // Функция загрузки истории
+  const loadPuHistory = async (puNumber) => {
+    setHistoryLoading(true);
+    try {
+      const [uploadsRes, checksRes] = await Promise.all([
+        api.get(`/api/history/uploads/${puNumber}`),
+        api.get(`/api/history/checks/${puNumber}`)
+      ]);
+      
+      setUploadHistory(uploadsRes.data);
+      setCheckHistory(checksRes.data);
+    } catch (error) {
+      console.error('Error loading PU history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
       
       if (status && status.status === 'checked_error') {
         setSelectedDetails(status);
@@ -563,6 +604,24 @@ function NetworkStructure({ selectedRes }) {
         vlName={selectedItem?.vlName}
         position={selectedPosition}
       />
+
+{showExtendedModal && selectedPuData && (
+        <ExtendedPuModal
+          isOpen={showExtendedModal}
+          onClose={() => {
+            setShowExtendedModal(false);
+            setSelectedPuData(null);
+            setUploadHistory([]);
+            setCheckHistory([]);
+          }}
+          puData={selectedPuData}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          uploadHistory={uploadHistory}
+          checkHistory={checkHistory}
+          loading={historyLoading}
+        />
+      )}
       
       {/* Модальное окно для удаления */}
       {showDeleteModal && (
@@ -3682,6 +3741,265 @@ function UploadedDocuments() {
     </div>
   );
 }
+
+
+// Новый компонент расширенного модального окна
+function ExtendedPuModal({ 
+  isOpen, 
+  onClose, 
+  puData, 
+  activeTab, 
+  setActiveTab, 
+  uploadHistory, 
+  checkHistory, 
+  loading 
+}) {
+  if (!isOpen || !puData) return null;
+  
+  // Парсим детали ошибки для отображения фаз
+  const getPhaseErrors = () => {
+    const phases = { A: false, B: false, C: false };
+    
+    if (puData.status.errorDetails) {
+      try {
+        const parsed = JSON.parse(puData.status.errorDetails);
+        const errorSummary = parsed.summary || puData.status.errorDetails;
+        
+        if (errorSummary.indexOf('Фаза A') !== -1) phases.A = true;
+        if (errorSummary.indexOf('Фаза B') !== -1) phases.B = true;
+        if (errorSummary.indexOf('Фаза C') !== -1) phases.C = true;
+      } catch (e) {
+        // Если не JSON, проверяем как текст
+        const errorText = puData.status.errorDetails;
+        if (errorText.indexOf('Фаза A') !== -1) phases.A = true;
+        if (errorText.indexOf('Фаза B') !== -1) phases.B = true;
+        if (errorText.indexOf('Фаза C') !== -1) phases.C = true;
+      }
+    }
+    
+    return phases;
+  };
+  
+  const phaseErrors = getPhaseErrors();
+  
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-content extended-pu-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>ПУ #{puData.puNumber} - Детальная информация</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        
+        {/* Информация о местоположении */}
+        <div className="pu-location-info">
+          <p><strong>РЭС:</strong> {puData.resName}</p>
+          <p><strong>ТП:</strong> {puData.tpName}</p>
+          <p><strong>Фидер:</strong> {puData.vlName}</p>
+          <p><strong>Позиция:</strong> {
+            puData.position === 'start' ? 'Начало' : 
+            puData.position === 'middle' ? 'Середина' : 'Конец'
+          }</p>
+        </div>
+        
+        {/* Вкладки */}
+        <div className="modal-tabs">
+          <button 
+            className={`tab-btn ${activeTab === 'current' ? 'active' : ''}`}
+            onClick={() => setActiveTab('current')}
+          >
+            Текущее состояние
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'uploads' ? 'active' : ''}`}
+            onClick={() => setActiveTab('uploads')}
+          >
+            История загрузок ({uploadHistory.length})
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'checks' ? 'active' : ''}`}
+            onClick={() => setActiveTab('checks')}
+          >
+            История проверок ({checkHistory.length})
+          </button>
+        </div>
+        
+        <div className="modal-body">
+          {loading ? (
+            <div className="loading">Загрузка истории...</div>
+          ) : (
+            <>
+              {/* Вкладка текущего состояния */}
+              {activeTab === 'current' && (
+                <div className="tab-content">
+                  {puData.status.status === 'checked_error' ? (
+                    <>
+                      <div className="phase-indicators-large">
+                        <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+                        <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+                        <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+                      </div>
+                      
+                      <div className="error-details-box">
+                        <h4>Обнаруженные отклонения:</h4>
+                        <div className="error-text">
+                          {(() => {
+                            try {
+                              const parsed = JSON.parse(puData.status.errorDetails);
+                              return parsed.summary || puData.status.errorDetails;
+                            } catch {
+                              return puData.status.errorDetails;
+                            }
+                          })()}
+                        </div>
+                      </div>
+                      
+                      <div className="error-meta">
+                        <p><strong>Последняя проверка:</strong> {
+                          puData.status.lastCheck 
+                            ? new Date(puData.status.lastCheck).toLocaleString('ru-RU')
+                            : 'Неизвестно'
+                        }</p>
+                      </div>
+                    </>
+                  ) : puData.status.status === 'checked_ok' ? (
+                    <div className="success-state">
+                      <div className="success-icon">✅</div>
+                      <h4>Проверен без ошибок</h4>
+                      <p>Последняя проверка: {
+                        puData.status.lastCheck 
+                          ? new Date(puData.status.lastCheck).toLocaleString('ru-RU')
+                          : 'Неизвестно'
+                      }</p>
+                    </div>
+                  ) : puData.status.status === 'pending_recheck' ? (
+                    <div className="pending-state">
+                      <div className="pending-icon">⏳</div>
+                      <h4>Ожидает перепроверки АСКУЭ</h4>
+                      <p>Мероприятия выполнены РЭС, требуется загрузить новый файл для проверки</p>
+                    </div>
+                  ) : (
+                    <div className="not-checked-state">
+                      <div className="not-checked-icon">❓</div>
+                      <h4>Не проверялся</h4>
+                      <p>Для этого ПУ еще не загружались файлы для анализа</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Вкладка истории загрузок */}
+              {activeTab === 'uploads' && (
+                <div className="tab-content">
+                  {uploadHistory.length === 0 ? (
+                    <p className="no-data">Нет истории загрузок</p>
+                  ) : (
+                    <div className="history-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Дата</th>
+                            <th>Загрузил</th>
+                            <th>Файл</th>
+                            <th>Статус</th>
+                            <th>Ошибка</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {uploadHistory.map((upload, idx) => (
+                            <tr key={idx} className={upload.uploadStatus}>
+                              <td>{new Date(upload.uploadedAt).toLocaleString('ru-RU')}</td>
+                              <td>{upload.User?.fio || 'Неизвестно'}</td>
+                              <td>{upload.fileName}</td>
+                              <td>
+                                <span className={`status-badge status-${upload.uploadStatus}`}>
+                                  {upload.uploadStatus === 'success' ? '✅ Успешно' :
+                                   upload.uploadStatus === 'duplicate' ? '🔄 Дубликат' :
+                                   upload.uploadStatus === 'wrong_period' ? '📅 Неверный период' :
+                                   '❌ Ошибка'}
+                                </span>
+                              </td>
+                              <td className="error-cell">
+                                {upload.hasErrors ? (
+                                  <details>
+                                    <summary>Показать ошибку</summary>
+                                    <pre>{upload.errorSummary}</pre>
+                                  </details>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Вкладка истории проверок */}
+              {activeTab === 'checks' && (
+                <div className="tab-content">
+                  {checkHistory.length === 0 ? (
+                    <p className="no-data">Нет истории проверок</p>
+                  ) : (
+                    <div className="history-timeline">
+                      {checkHistory.map((check, idx) => (
+                        <div key={idx} className="timeline-item">
+                          <div className="timeline-date">
+                            {new Date(check.initialCheckDate).toLocaleDateString('ru-RU')}
+                          </div>
+                          
+                          <div className="timeline-content">
+                            <div className="timeline-step error">
+                              <h5>🔴 Обнаружена ошибка</h5>
+                              <p>{check.initialError}</p>
+                            </div>
+                            
+                            {check.workCompletedDate && (
+                              <div className="timeline-step work">
+                                <h5>🔧 Мероприятия выполнены</h5>
+                                <p><strong>Дата:</strong> {new Date(check.workCompletedDate).toLocaleDateString('ru-RU')}</p>
+                                <p><strong>Комментарий:</strong> {check.resComment}</p>
+                                {check.attachments && check.attachments.length > 0 && (
+                                  <p><strong>Файлов:</strong> {check.attachments.length}</p>
+                                )}
+                              </div>
+                            )}
+                            
+                            {check.recheckDate && (
+                              <div className={`timeline-step recheck ${check.recheckResult}`}>
+                                <h5>{check.recheckResult === 'ok' ? '✅ Перепроверка успешна' : '❌ Ошибка не устранена'}</h5>
+                                <p><strong>Дата:</strong> {new Date(check.recheckDate).toLocaleDateString('ru-RU')}</p>
+                              </div>
+                            )}
+                            
+                            <div className="timeline-status">
+                              <strong>Текущий статус:</strong> {
+                                check.status === 'awaiting_work' ? 'Ожидает мероприятий' :
+                                check.status === 'awaiting_recheck' ? 'Ожидает перепроверки' :
+                                'Завершено'
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        
+        <div className="modal-footer">
+          <button className="action-btn" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 
 // экспорт файлов
