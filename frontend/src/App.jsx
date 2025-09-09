@@ -295,14 +295,7 @@ function NetworkStructure({ selectedRes }) {
   };
 
       
-      if (status && status.status === 'checked_error') {
-        setSelectedDetails(status);
-        setSelectedItem(item);
-        setSelectedPosition(position);
-        setModalOpen(true);
-      }
-    
-  };
+      
   
   // Начать редактирование
   const startEdit = (item, position) => {
