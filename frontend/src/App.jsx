@@ -301,7 +301,7 @@ function NetworkStructure({ selectedRes }) {
         setSelectedPosition(position);
         setModalOpen(true);
       }
-    }
+    
   };
   
   // Начать редактирование
