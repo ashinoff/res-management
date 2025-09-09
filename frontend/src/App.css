@@ -3601,3 +3601,16 @@ padding: 16px 12px;
   border: none;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
+.btn-email {
+  background: #2563eb;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-email:hover {
+  background: #1d4ed8;
+}
