@@ -1117,6 +1117,7 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
 });
 
 // 8. ВЫПОЛНЕНИЕ МЕРОПРИЯТИЙ
+
 app.post('/api/notifications/:id/complete-work', 
   authenticateToken, 
   checkRole(['res_responsible']),
@@ -3053,4 +3054,173 @@ initializeDatabase().then(() => {
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
   process.exit(1);
+});
+
+// API для получения истории загрузок по конкретному ПУ
+app.get('/api/history/uploads/:puNumber', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { puNumber } = req.params;
+      
+      const uploads = await PuUploadHistory.findAll({
+        where: { puNumber },
+        include: [{
+          model: User,
+          attributes: ['fio', 'login']
+        }],
+        order: [['uploadedAt', 'DESC']],
+        limit: 20
+      });
+      
+      res.json(uploads);
+    } catch (error) {
+      console.error('Get upload history error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// API для получения истории проверок по конкретному ПУ
+app.get('/api/history/checks/:puNumber', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { puNumber } = req.params;
+      
+      const checks = await CheckHistory.findAll({
+        where: { puNumber },
+        include: [ResUnit],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      res.json(checks);
+    } catch (error) {
+      console.error('Get check history error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// API для получения всей истории загрузок с фильтрами
+app.get('/api/history/uploads', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { resId, tpName, puNumber, dateFrom, dateTo, fileType, status, page = 1, limit = 50 } = req.query;
+      
+      let whereClause = {};
+      
+      // Фильтры
+      if (puNumber) whereClause.puNumber = { [Op.like]: `%${puNumber}%` };
+      if (fileType) whereClause.fileType = fileType;
+      if (status) whereClause.uploadStatus = status;
+      
+      if (dateFrom || dateTo) {
+        whereClause.uploadedAt = {};
+        if (dateFrom) whereClause.uploadedAt[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          whereClause.uploadedAt[Op.lte] = endDate;
+        }
+      }
+      
+      // Для не-админов фильтруем по их РЭС
+      if (req.user.role !== 'admin') {
+        // Нужно добавить resId в PuUploadHistory через join с NetworkStructure
+      }
+      
+      const offset = (page - 1) * limit;
+      
+      const { count, rows } = await PuUploadHistory.findAndCountAll({
+        where: whereClause,
+        include: [{
+          model: User,
+          attributes: ['fio', 'login', 'resId'],
+          include: [ResUnit]
+        }],
+        order: [['uploadedAt', 'DESC']],
+        limit: parseInt(limit),
+        offset
+      });
+      
+      // Добавляем информацию о ТП/ВЛ через NetworkStructure
+      const uploadsWithStructure = await Promise.all(
+        rows.map(async (upload) => {
+          const structure = await NetworkStructure.findOne({
+            where: {
+              [Op.or]: [
+                { startPu: upload.puNumber },
+                { middlePu: upload.puNumber },
+                { endPu: upload.puNumber }
+              ]
+            },
+            include: [ResUnit]
+          });
+          
+          return {
+            ...upload.toJSON(),
+            tpName: structure?.tpName,
+            vlName: structure?.vlName,
+            resName: structure?.ResUnit?.name
+          };
+        })
+      );
+      
+      res.json({
+        uploads: uploadsWithStructure,
+        total: count,
+        page: parseInt(page),
+        totalPages: Math.ceil(count / limit)
+      });
+      
+    } catch (error) {
+      console.error('Get all uploads history error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// API для получения всей истории проверок
+app.get('/api/history/checks', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { resId, dateFrom, dateTo, status, page = 1, limit = 50 } = req.query;
+      
+      let whereClause = {};
+      
+      if (status) whereClause.status = status;
+      if (resId && req.user.role === 'admin') whereClause.resId = resId;
+      else if (req.user.role !== 'admin') whereClause.resId = req.user.resId;
+      
+      if (dateFrom || dateTo) {
+        whereClause.createdAt = {};
+        if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          whereClause.createdAt[Op.lte] = endDate;
+        }
+      }
+      
+      const offset = (page - 1) * limit;
+      
+      const { count, rows } = await CheckHistory.findAndCountAll({
+        where: whereClause,
+        include: [ResUnit],
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit),
+        offset
+      });
+      
+      res.json({
+        checks: rows,
+        total: count,
+        page: parseInt(page),
+        totalPages: Math.ceil(count / limit)
+      });
+      
+    } catch (error) {
+      console.error('Get all checks history error:', error);
+      res.status(500).json({ error: error.message });
+    }
 });
