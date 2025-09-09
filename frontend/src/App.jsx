@@ -2246,6 +2246,8 @@ function ProblemVL() {
   const [deletePassword, setDeletePassword] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsProblem, setDetailsProblem] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailProblem, setEmailProblem] = useState(null);
 
   useEffect(() => {
     loadProblemVLs();
@@ -2258,6 +2260,17 @@ function ProblemVL() {
     };
   }, []);
 
+const handleSendEmail = async () => {
+    try {
+      await api.post(`/api/problem-vl/${emailProblem.id}/send-email`);
+      alert('Письмо отправлено ответственному РЭС');
+      setShowEmailModal(false);
+      setEmailProblem(null);
+    } catch (error) {
+      alert('Ошибка отправки письма: ' + error.response?.data?.error || error.message);
+    }
+  };
+  
   const loadProblemVLs = async () => {
     try {
       const response = await api.get('/api/problem-vl/list');
@@ -2289,7 +2302,7 @@ function ProblemVL() {
 
   return (
     <div className="problem-vl-container">
-      <h2>🚨 Проблемные ВЛ (2+ неудачных проверки)</h2>
+      <h2>Проблемные ВЛ (2 и более неудачных проверки)</h2>
       
       <div className="problem-info">
         <p>В этом разделе отображаются ВЛ, которые не прошли проверку 2 и более раз после выполнения мероприятий РЭС.</p>
@@ -2375,6 +2388,15 @@ function ProblemVL() {
                 >
                   🔍 Подробности
                 </button>
+               <button 
+                  className="btn-email"
+                  onClick={() => {
+                    setEmailProblem(problem);
+                    setShowEmailModal(true);
+                  }}
+                >
+                  📧 Направить письмо исполнителю
+                </button>
                 <button 
                   className="btn-dismiss"
                   onClick={() => {
@@ -2382,7 +2404,7 @@ function ProblemVL() {
                     setShowDeleteModal(true);
                   }}
                 >
-                  ✕ Отклонить
+                  ✅ Рассмотреть без объяснительной
                 </button>
               </div>
             </div>
@@ -2395,16 +2417,16 @@ function ProblemVL() {
         <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Отклонить проблему</h3>
+              <h3>Рассмотреть без объяснительной</h3>
               <button className="close-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <p>Вы уверены, что хотите отклонить эту проблему?</p>
+              <p>Вы уверены, что хотите закрыть эту проблему без объяснительной записки?</p>
               <div className="problem-summary">
                 <p><strong>{selectedProblem?.tpName} - {selectedProblem?.vlName}</strong></p>
                 <p>ПУ №{selectedProblem?.puNumber} ({selectedProblem?.failureCount} ошибок)</p>
               </div>
-              <p className="warning">⚠️ Это уберет проблему из активного списка!</p>
+              <p className="warning">⚠️ Проблема будет закрыта без дальнейших действий!</p>
               <div className="form-group">
                 <label>Введите пароль администратора:</label>
                 <input
@@ -2425,7 +2447,7 @@ function ProblemVL() {
                 onClick={handleDismiss}
                 disabled={!deletePassword}
               >
-                Отклонить проблему
+                Закрыть без объяснительной
               </button>
             </div>
           </div>
@@ -2487,6 +2509,40 @@ function ProblemVL() {
             <div className="modal-footer">
               <button className="action-btn" onClick={() => setShowDetailsModal(false)}>
                 Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+    {/* НОВОЕ: Модальное окно отправки письма */}
+      {showEmailModal && emailProblem && (
+        <div className="modal-backdrop" onClick={() => setShowEmailModal(false)}>
+          <div className="modal-content email-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Направить письмо исполнителю</h3>
+              <button className="close-btn" onClick={() => setShowEmailModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Будет отправлено уведомление ответственному РЭС с требованием предоставить объяснительную записку.</p>
+              <div className="problem-summary">
+                <p><strong>РЭС:</strong> {emailProblem.ResUnit?.name}</p>
+                <p><strong>ТП:</strong> {emailProblem.tpName}</p>
+                <p><strong>ВЛ:</strong> {emailProblem.vlName}</p>
+                <p><strong>ПУ №:</strong> {emailProblem.puNumber}</p>
+                <p><strong>Количество неудачных проверок:</strong> {emailProblem.failureCount}</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowEmailModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="primary-btn" 
+                onClick={handleSendEmail}
+              >
+                📧 Отправить уведомление
               </button>
             </div>
           </div>
