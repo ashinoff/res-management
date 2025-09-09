@@ -685,7 +685,7 @@ function ErrorDetailsModal({ isOpen, onClose, details, tpName, vlName, position 
     errorSummary = details?.errorDetails || 'Нет данных';
   }
   
- // Парсим фазы из деталей - все зеленые по умолчанию!
+ 
 // Парсим фазы из деталей - красим ТОЛЬКО явно указанные!
 const getPhaseErrors = () => {
   const phases = { A: false, B: false, C: false };
