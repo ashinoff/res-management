@@ -1255,7 +1255,6 @@ app.delete('/api/network/clear-all',
     const transaction = await sequelize.transaction();
     
     try {
-      // НОВОЕ: проверяем пароль
       const { password } = req.body;
       
       if (password !== DELETE_PASSWORD) {
@@ -1266,35 +1265,56 @@ app.delete('/api/network/clear-all',
       
       // ВАЖНО: правильный порядок удаления!
       
-      // 1. Сначала CheckHistory (новое!)
+      // 1. Сначала NotificationRead (ссылается на Notifications)
+      const notificationReadsDeleted = await NotificationRead.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${notificationReadsDeleted} notification read records`);
+      
+      // 2. PuUploadHistory (независимая таблица)
+      const puUploadHistoryDeleted = await PuUploadHistory.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${puUploadHistoryDeleted} PU upload history records`);
+      
+      // 3. ProblemVL (ссылается на NetworkStructure)
+      const problemVLDeleted = await ProblemVL.destroy({ 
+        where: {}, 
+        transaction 
+      });
+      console.log(`Deleted ${problemVLDeleted} problem VL records`);
+      
+      // 4. CheckHistory
       const checkHistoryDeleted = await CheckHistory.destroy({ 
         where: {}, 
         transaction 
       });
       console.log(`Deleted ${checkHistoryDeleted} check history records`);
       
-      // 2. История загрузок
+      // 5. История загрузок
       const uploadsDeleted = await UploadHistory.destroy({ 
         where: {}, 
         transaction 
       });
       console.log(`Deleted ${uploadsDeleted} upload records`);
       
-      // 3. Уведомления
+      // 6. Уведомления
       const notificationsDeleted = await Notification.destroy({ 
         where: {}, 
         transaction 
       });
       console.log(`Deleted ${notificationsDeleted} notifications`);
       
-      // 4. Статусы ПУ
+      // 7. Статусы ПУ
       const puStatusesDeleted = await PuStatus.destroy({ 
         where: {}, 
         transaction 
       });
       console.log(`Deleted ${puStatusesDeleted} PU statuses`);
       
-      // 5. Теперь можем удалить структуру сети
+      // 8. Теперь можем удалить структуру сети
       const structuresDeleted = await NetworkStructure.destroy({ 
         where: {}, 
         transaction 
@@ -1307,6 +1327,9 @@ app.delete('/api/network/clear-all',
         success: true,
         message: 'Все данные успешно удалены',
         deleted: {
+          notificationReads: notificationReadsDeleted,
+          puUploadHistory: puUploadHistoryDeleted,
+          problemVL: problemVLDeleted,
           checkHistory: checkHistoryDeleted,
           uploads: uploadsDeleted,
           notifications: notificationsDeleted,
