@@ -3215,3 +3215,389 @@ padding: 16px 12px;
   width: 40px;
   text-align: center;
 }
+/* УЛУЧШЕННЫЕ СТИЛИ ДЛЯ РАСШИРЕННОГО МОДАЛЬНОГО ОКНА */
+.extended-pu-modal {
+  max-width: 900px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.extended-pu-modal .modal-header {
+  background: #f8f9fa;
+  border-bottom: 2px solid #e9ecef;
+  padding: 20px 30px;
+  border-radius: 12px 12px 0 0;
+}
+
+.pu-location-info {
+  background: #f8f9fa;
+  padding: 20px 30px;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.pu-location-info p {
+  margin: 0;
+  color: #495057;
+}
+
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 30px;
+  background: #fff;
+  border-bottom: 2px solid #e9ecef;
+  margin: 0;
+}
+
+.tab-btn {
+  padding: 15px 30px;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  font-weight: 500;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: #212529;
+}
+
+.tab-btn.active {
+  color: #2563eb;
+  background: transparent;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #2563eb;
+}
+
+.extended-pu-modal .modal-body {
+  padding: 30px;
+  overflow-y: auto;
+  background: white;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Стили для текущего состояния */
+.phase-indicators-large {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 30px 0;
+}
+
+.phase-indicators-large .phase-indicator {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: bold;
+  background: #f1f3f5;
+  color: #868e96;
+  transition: all 0.3s;
+}
+
+.phase-indicators-large .phase-indicator.phase-error {
+  background: #ffe3e3;
+  color: #c92a2a;
+  box-shadow: 0 4px 12px rgba(201, 42, 42, 0.2);
+}
+
+.error-details-box {
+  background: #fff5f5;
+  border: 2px solid #ffe3e3;
+  border-radius: 12px;
+  padding: 25px;
+  margin: 20px 0;
+}
+
+.error-details-box h4 {
+  color: #c92a2a;
+  margin: 0 0 15px 0;
+}
+
+.error-text {
+  color: #495057;
+  line-height: 1.6;
+}
+
+.success-state, .pending-state, .not-checked-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.success-icon, .pending-icon, .not-checked-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+/* СТИЛИ ДЛЯ ИСТОРИИ СИСТЕМЫ */
+.system-history {
+  padding: 30px;
+  background: #f8f9fa;
+  min-height: 100vh;
+}
+
+.system-history h2 {
+  margin-bottom: 30px;
+  color: #212529;
+}
+
+.history-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.history-tabs .tab-btn {
+  background: white;
+  border: 2px solid #e9ecef;
+  padding: 12px 30px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.history-tabs .tab-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.history-filters {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 30px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #495057;
+  font-weight: 500;
+}
+
+.filter-group input,
+.filter-group select {
+  width: 100%;
+  padding: 10px 15px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+.export-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.export-btn:hover {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.history-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 25px;
+}
+
+.history-table {
+  margin-top: 0;
+}
+
+.history-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-table th {
+  background: #f8f9fa;
+  padding: 15px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.history-table td {
+  padding: 15px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.history-table tr:hover {
+  background: #f8f9fa;
+}
+
+.history-timeline {
+  padding: 20px;
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 40px;
+  margin-bottom: 40px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 30px;
+  bottom: -40px;
+  width: 2px;
+  background: #e9ecef;
+}
+
+.timeline-item:last-child::before {
+  display: none;
+}
+
+.timeline-date {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-content {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 12px;
+  margin-left: 10px;
+}
+
+.timeline-step {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+}
+
+.timeline-step h5 {
+  margin: 0 0 10px 0;
+  color: #212529;
+}
+
+.timeline-step.error {
+  border-left: 4px solid #dc3545;
+}
+
+.timeline-step.work {
+  border-left: 4px solid #ffc107;
+}
+
+.timeline-step.recheck.ok {
+  border-left: 4px solid #28a745;
+}
+
+.timeline-step.recheck.error {
+  border-left: 4px solid #dc3545;
+}
+
+/* Пагинация */
+.pagination {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #e9ecef;
+}
+
+.pagination button {
+  padding: 10px 20px;
+  border: 2px solid #e9ecef;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination button:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Убираем градиенты */
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  border: none;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
