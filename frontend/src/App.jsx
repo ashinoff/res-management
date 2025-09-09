@@ -4288,32 +4288,33 @@ function SystemHistory() {
           )}
           
           {activeTab === 'checks' && (
-          <>
-              {/* ДОБАВИТЬ поле ТП для истории проверок */}
-              <div className="filter-group">
-                <label>ТП:</label>
-                <input 
-                  type="text"
-                  value={filters.tpName}
-                  onChange={(e) => handleFilterChange('tpName', e.target.value)}
-                  placeholder="Поиск по ТП"
-                />
-              </div>
-      
-            <div className="filter-group">
-              <label>Статус:</label>
-              <select 
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
-                <option value="">Все статусы</option>
-                <option value="awaiting_work">Ожидает мероприятий</option>
-                <option value="awaiting_recheck">Ожидает перепроверки</option>
-                <option value="completed">Завершено</option>
-              </select>
-            </div>
-          )}
-        </div>
+  <>
+    {/* ДОБАВИТЬ поле ТП для истории проверок */}
+    <div className="filter-group">
+      <label>ТП:</label>
+      <input 
+        type="text"
+        value={filters.tpName}
+        onChange={(e) => handleFilterChange('tpName', e.target.value)}
+        placeholder="Поиск по ТП"
+      />
+    </div>
+
+    <div className="filter-group">
+      <label>Статус:</label>
+      <select 
+        value={filters.status}
+        onChange={(e) => handleFilterChange('status', e.target.value)}
+      >
+        <option value="">Все статусы</option>
+        <option value="awaiting_work">Ожидает мероприятий</option>
+        <option value="awaiting_recheck">Ожидает перепроверки</option>
+        <option value="completed">Завершено</option>
+      </select>
+    </div>
+  </>
+)}
+       
         
         <div className="filter-row">
           <div className="filter-group">
