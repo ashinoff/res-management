@@ -1943,6 +1943,53 @@ app.put('/api/problem-vl/:id/dismiss',
       res.status(500).json({ error: error.message });
     }
 });
+// отправка писем ENDPOINT :
+app.post('/api/problem-vl/:id/send-email', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const problemVL = await ProblemVL.findByPk(req.params.id, {
+        include: [ResUnit]
+      });
+      
+      if (!problemVL) {
+        return res.status(404).json({ error: 'Проблема не найдена' });
+      }
+      
+      // Находим ответственных за РЭС
+      const responsibleUsers = await User.findAll({
+        where: {
+          resId: problemVL.resId,
+          role: 'res_responsible'
+        }
+      });
+      
+      if (responsibleUsers.length === 0) {
+        return res.status(400).json({ error: 'Не найден ответственный для этого РЭС' });
+      }
+      
+      // Здесь можно добавить отправку реального email через nodemailer
+      // Пока просто создадим уведомление
+      
+      for (const user of responsibleUsers) {
+        await Notification.create({
+          fromUserId: req.user.id,
+          toUserId: user.id,
+          resId: problemVL.resId,
+          type: 'info',
+          message: `⚠️ Требуется объяснительная записка по проблемному ПУ №${problemVL.puNumber} (${problemVL.tpName} - ${problemVL.vlName}). Количество неудачных проверок: ${problemVL.failureCount}`,
+          isRead: false
+        });
+      }
+      
+      res.json({ success: true, message: 'Уведомление отправлено' });
+      
+    } catch (error) {
+      console.error('Send email error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
 // =====================================================
 // Отчет по проблемным ВЛ
 // =====================================================
