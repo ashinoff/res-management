@@ -3235,6 +3235,7 @@ app.get('/api/history/checks',
       let whereClause = {};
       
       if (status) whereClause.status = status;
+      if (tpName) whereClause.tpName = { [Op.like]: `%${tpName}%` };
       if (resId && req.user.role === 'admin') whereClause.resId = resId;
       else if (req.user.role !== 'admin') whereClause.resId = req.user.resId;
       
