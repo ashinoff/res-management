@@ -2675,7 +2675,6 @@ if (result.has_errors) {
             
             // Записываем успешную загрузку в историю
             if (userId) {
-              if (userId) {
                 console.log('=== CREATING PuUploadHistory ===');
                 console.log('userId:', userId);
                 console.log('Data to save:', {
@@ -2754,7 +2753,6 @@ if (result.has_errors) {
   });
 }
 
-// Создание уведомлений об ошибках
 // Создание уведомлений об ошибках
 async function createNotifications(fromUserId, resId, errors) {
   console.log('Creating notifications for errors:', errors);
