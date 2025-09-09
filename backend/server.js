@@ -890,6 +890,10 @@ app.post('/api/upload/analyze',
       // Берем resId из body (если есть) или из токена пользователя
       const resId = req.body.resId || req.user.resId;
 
+      console.log('=== UPLOAD DEBUG ===');
+      console.log('userId from token:', userId);
+      console.log('req.user:', req.user);
+
       console.log('=== UPLOAD ANALYZE START ===');
       console.log('User:', req.user);
       console.log('Request body:', req.body);
@@ -2142,6 +2146,10 @@ app.post('/api/documents/delete-bulk',
 
 async function analyzeFile(filePath, type, originalFileName = null, requiredPeriod = null, userId = null) {
   return new Promise((resolve, reject) => {
+
+    console.log('=== ANALYZE FILE DEBUG ===');
+    console.log('Received userId:', userId);
+    console.log('All params:', { filePath, type, originalFileName, requiredPeriod, userId });
     
     // Вспомогательная функция для получения названия месяца
     function getMonthName(monthNum) {
@@ -2668,20 +2676,36 @@ if (result.has_errors) {
             // Записываем успешную загрузку в историю
             if (userId) {
               if (userId) {
-            await PuUploadHistory.create({
-              puNumber: fileName,
-              uploadedBy: userId,  // ✅ Используем переданный userId
-              fileName: originalFileName || 'unknown',
-              fileType: type,
-              periodStart: currentPeriod?.start,
-              periodEnd: currentPeriod?.end,
-              hasErrors: result.has_errors,
-              errorSummary: result.has_errors ? result.summary : null,
-              errorDetails: result.has_errors ? result.details : null,
-              uploadStatus: 'success'
-            });
-  console.log(`Upload history recorded for PU ${fileName}`);
-}
+                console.log('=== CREATING PuUploadHistory ===');
+                console.log('userId:', userId);
+                console.log('Data to save:', {
+                  puNumber: fileName,
+                  uploadedBy: userId,
+                  fileName: originalFileName || 'unknown',
+                  fileType: type,
+                  uploadStatus: 'success'
+                });
+  
+                try {
+                  const record = await PuUploadHistory.create({
+                    puNumber: fileName,
+                    uploadedBy: userId,
+                    fileName: originalFileName || 'unknown',
+                    fileType: type,
+                    periodStart: currentPeriod?.start,
+                    periodEnd: currentPeriod?.end,
+                    hasErrors: result.has_errors,
+                    errorSummary: result.has_errors ? result.summary : null,
+                    errorDetails: result.has_errors ? result.details : null,
+                    uploadStatus: 'success'
+                  });
+                  console.log('✅ PuUploadHistory created:', record.id);
+                } catch (error) {
+                  console.error('❌ Error creating PuUploadHistory:', error);
+                }
+              } else {
+                console.log('⚠️ No userId provided, skipping history save');
+              }
             
             // Добавляем в processed
             processed.push({
