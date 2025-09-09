@@ -155,6 +155,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'askue_pending', label: 'Ожидающие проверки АСКУЭ', roles: ['admin', 'uploader'], badge: notificationCounts.askue_pending },
     { id: 'problem_vl', label: 'Проблемные ВЛ', roles: ['admin'], badge: notificationCounts.problem_vl },
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
+    { id: 'history', label: 'История системы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
@@ -4000,7 +4001,390 @@ function ExtendedPuModal({
   );
 }
 
+// =====================================================
+// КОМПОНЕНТ ИСТОРИИ СИСТЕМЫ
+// =====================================================
 
+function SystemHistory() {
+  const [activeTab, setActiveTab] = useState('uploads'); // uploads или checks
+  const [uploads, setUploads] = useState([]);
+  const [checks, setChecks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const { user } = useContext(AuthContext);
+  
+  // Фильтры
+  const [filters, setFilters] = useState({
+    puNumber: '',
+    tpName: '',
+    dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    dateTo: new Date().toISOString().split('T')[0],
+    fileType: '',
+    status: ''
+  });
+  
+  useEffect(() => {
+    loadData();
+  }, [activeTab, currentPage, filters]);
+  
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      if (activeTab === 'uploads') {
+        const params = new URLSearchParams({
+          page: currentPage,
+          limit: 50,
+          ...filters
+        });
+        
+        const response = await api.get(`/api/history/uploads?${params}`);
+        setUploads(response.data.uploads);
+        setTotalPages(response.data.totalPages);
+      } else {
+        const params = new URLSearchParams({
+          page: currentPage,
+          limit: 50,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          status: filters.status
+        });
+        
+        const response = await api.get(`/api/history/checks?${params}`);
+        setChecks(response.data.checks);
+        setTotalPages(response.data.totalPages);
+      }
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setCurrentPage(1);
+  };
+  
+  const exportToExcel = () => {
+    const data = activeTab === 'uploads' ? uploads : checks;
+    if (data.length === 0) {
+      alert('Нет данных для экспорта');
+      return;
+    }
+    
+    let exportData;
+    if (activeTab === 'uploads') {
+      exportData = uploads.map(upload => ({
+        'Дата загрузки': new Date(upload.uploadedAt).toLocaleString('ru-RU'),
+        'РЭС': upload.resName || '',
+        'ТП': upload.tpName || '',
+        'ВЛ': upload.vlName || '',
+        'Номер ПУ': upload.puNumber,
+        'Загрузил': upload.User?.fio || '',
+        'Имя файла': upload.fileName,
+        'Тип файла': upload.fileType,
+        'Статус': upload.uploadStatus === 'success' ? 'Успешно' : 
+                  upload.uploadStatus === 'duplicate' ? 'Дубликат' : 
+                  upload.uploadStatus === 'wrong_period' ? 'Неверный период' : 'Ошибка',
+        'Есть ошибки': upload.hasErrors ? 'Да' : 'Нет',
+        'Текст ошибки': upload.errorSummary || ''
+      }));
+    } else {
+      exportData = checks.map(check => ({
+        'РЭС': check.ResUnit?.name || '',
+        'ТП': check.tpName,
+        'ВЛ': check.vlName,
+        'Номер ПУ': check.puNumber,
+        'Позиция': check.position === 'start' ? 'Начало' : 
+                   check.position === 'middle' ? 'Середина' : 'Конец',
+        'Дата обнаружения': new Date(check.initialCheckDate).toLocaleString('ru-RU'),
+        'Первоначальная ошибка': check.initialError,
+        'Дата выполнения работ': check.workCompletedDate ? 
+          new Date(check.workCompletedDate).toLocaleString('ru-RU') : '',
+        'Комментарий РЭС': check.resComment || '',
+        'Дата перепроверки': check.recheckDate ? 
+          new Date(check.recheckDate).toLocaleString('ru-RU') : '',
+        'Результат': check.recheckResult === 'ok' ? 'Исправлено' : 
+                     check.recheckResult === 'error' ? 'Не исправлено' : 'Ожидает',
+        'Статус': check.status === 'awaiting_work' ? 'Ожидает мероприятий' :
+                  check.status === 'awaiting_recheck' ? 'Ожидает перепроверки' : 'Завершено'
+      }));
+    }
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Устанавливаем ширину колонок
+    const maxWidth = 50;
+    const cols = Object.keys(exportData[0] || {}).map(() => ({ wch: maxWidth }));
+    ws['!cols'] = cols;
+    
+    XLSX.utils.book_append_sheet(wb, ws, activeTab === 'uploads' ? 'История загрузок' : 'История проверок');
+    
+    const fileName = `История_${activeTab === 'uploads' ? 'загрузок' : 'проверок'}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+  
+  return (
+    <div className="system-history">
+      <h2>📜 История системы</h2>
+      
+      <div className="history-tabs">
+        <button 
+          className={`tab-btn ${activeTab === 'uploads' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('uploads');
+            setCurrentPage(1);
+          }}
+        >
+          История загрузок
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'checks' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('checks');
+            setCurrentPage(1);
+          }}
+        >
+          История проверок
+        </button>
+      </div>
+      
+      <div className="history-filters">
+        <div className="filter-row">
+          <div className="filter-group">
+            <label>Номер ПУ:</label>
+            <input 
+              type="text"
+              value={filters.puNumber}
+              onChange={(e) => handleFilterChange('puNumber', e.target.value)}
+              placeholder="Поиск по ПУ"
+            />
+          </div>
+          
+          {activeTab === 'uploads' && (
+            <>
+              <div className="filter-group">
+                <label>ТП:</label>
+                <input 
+                  type="text"
+                  value={filters.tpName}
+                  onChange={(e) => handleFilterChange('tpName', e.target.value)}
+                  placeholder="Поиск по ТП"
+                />
+              </div>
+              
+              <div className="filter-group">
+                <label>Тип файла:</label>
+                <select 
+                  value={filters.fileType}
+                  onChange={(e) => handleFilterChange('fileType', e.target.value)}
+                >
+                  <option value="">Все типы</option>
+                  <option value="rim_single">РИМ (отдельный)</option>
+                  <option value="rim_mass">РИМ (массовая)</option>
+                  <option value="nartis">Нартис</option>
+                  <option value="energomera">Энергомера</option>
+                </select>
+              </div>
+              
+              <div className="filter-group">
+                <label>Статус:</label>
+                <select 
+                  value={filters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                >
+                  <option value="">Все статусы</option>
+                  <option value="success">Успешно</option>
+                  <option value="duplicate">Дубликат</option>
+                  <option value="wrong_period">Неверный период</option>
+                  <option value="error">Ошибка</option>
+                </select>
+              </div>
+            </>
+          )}
+          
+          {activeTab === 'checks' && (
+            <div className="filter-group">
+              <label>Статус:</label>
+              <select 
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+              >
+                <option value="">Все статусы</option>
+                <option value="awaiting_work">Ожидает мероприятий</option>
+                <option value="awaiting_recheck">Ожидает перепроверки</option>
+                <option value="completed">Завершено</option>
+              </select>
+            </div>
+          )}
+        </div>
+        
+        <div className="filter-row">
+          <div className="filter-group">
+            <label>Период с:</label>
+            <input 
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+            />
+          </div>
+          
+          <div className="filter-group">
+            <label>по:</label>
+            <input 
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+            />
+          </div>
+          
+          <button className="export-btn" onClick={exportToExcel}>
+            📊 Экспорт в Excel
+          </button>
+        </div>
+      </div>
+      
+      <div className="history-content">
+        {loading ? (
+          <div className="loading">Загрузка истории...</div>
+        ) : (
+          <>
+            {activeTab === 'uploads' && (
+              <div className="history-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Дата загрузки</th>
+                      <th>РЭС</th>
+                      <th>ТП</th>
+                      <th>ВЛ</th>
+                      <th>ПУ №</th>
+                      <th>Загрузил</th>
+                      <th>Файл</th>
+                      <th>Тип</th>
+                      <th>Статус</th>
+                      <th>Ошибка</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uploads.map((upload, idx) => (
+                      <tr key={idx} className={upload.uploadStatus}>
+                        <td>{new Date(upload.uploadedAt).toLocaleString('ru-RU')}</td>
+                        <td>{upload.resName || '—'}</td>
+                        <td>{upload.tpName || '—'}</td>
+                        <td>{upload.vlName || '—'}</td>
+                        <td><strong>{upload.puNumber}</strong></td>
+                        <td>{upload.User?.fio || 'Неизвестно'}</td>
+                        <td title={upload.fileName}>{upload.fileName.substring(0, 20)}...</td>
+                        <td>{upload.fileType}</td>
+                        <td>
+                          <span className={`status-badge status-${upload.uploadStatus}`}>
+                            {upload.uploadStatus === 'success' ? '✅' :
+                             upload.uploadStatus === 'duplicate' ? '🔄' :
+                             upload.uploadStatus === 'wrong_period' ? '📅' : '❌'}
+                          </span>
+                        </td>
+                        <td className="error-cell">
+                          {upload.hasErrors && (
+                            <details>
+                              <summary>Показать</summary>
+                              <pre>{upload.errorSummary}</pre>
+                            </details>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            {activeTab === 'checks' && (
+              <div className="history-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>РЭС</th>
+                      <th>ТП</th>
+                      <th>ВЛ</th>
+                      <th>ПУ №</th>
+                      <th>Дата ошибки</th>
+                      <th>Ошибка</th>
+                      <th>Мероприятия</th>
+                      <th>Перепроверка</th>
+                      <th>Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {checks.map((check, idx) => (
+                      <tr key={idx}>
+                        <td>{check.ResUnit?.name}</td>
+                        <td>{check.tpName}</td>
+                        <td>{check.vlName}</td>
+                        <td><strong>{check.puNumber}</strong></td>
+                        <td>{new Date(check.initialCheckDate).toLocaleDateString('ru-RU')}</td>
+                        <td className="error-cell">
+                          <details>
+                            <summary>Показать</summary>
+                            <pre>{check.initialError}</pre>
+                          </details>
+                        </td>
+                        <td>
+                          {check.workCompletedDate ? (
+                            <>
+                              <div>{new Date(check.workCompletedDate).toLocaleDateString('ru-RU')}</div>
+                              <small>{check.resComment}</small>
+                            </>
+                          ) : '—'}
+                        </td>
+                        <td>
+                          {check.recheckDate ? (
+                            <span className={check.recheckResult === 'ok' ? 'status-ok' : 'status-error'}>
+                              {check.recheckResult === 'ok' ? '✅' : '❌'}
+                              {' ' + new Date(check.recheckDate).toLocaleDateString('ru-RU')}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td>
+                          <span className={`status-badge status-${check.status}`}>
+                            {check.status === 'awaiting_work' ? 'Ожидает работ' :
+                             check.status === 'awaiting_recheck' ? 'Ожидает проверки' :
+                             'Завершено'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            {/* Пагинация */}
+            {totalPages > 1 && (
+              <div className="pagination">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  ← Назад
+                </button>
+                <span>Страница {currentPage} из {totalPages}</span>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Вперед →
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // экспорт файлов
 
@@ -4093,6 +4477,8 @@ export default function App() {
       return <Settings />;
     default:
       return <NetworkStructure selectedRes={selectedRes} />;
+    case 'history':
+      return <SystemHistory />;
   }
 };
 
