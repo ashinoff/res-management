@@ -917,7 +917,7 @@ app.post('/api/upload/analyze',
         req.file.path, 
         type, 
         req.file.originalname, // передаем оригинальное имя
-        requiredPeriod
+        requiredPeriod,
         userId
       );
       
@@ -2667,20 +2667,21 @@ if (result.has_errors) {
             
             // Записываем успешную загрузку в историю
             if (userId) {
-              await PuUploadHistory.create({
-                puNumber: fileName,
-                uploadedBy: req.user.id,
-                fileName: originalFileName || 'unknown',
-                fileType: type,
-                periodStart: currentPeriod?.start,
-                periodEnd: currentPeriod?.end,
-                hasErrors: result.has_errors,
-                errorSummary: result.has_errors ? result.summary : null,
-                errorDetails: result.has_errors ? result.details : null,
-                uploadStatus: 'success'
-              });
-              console.log(`Upload history recorded for PU ${fileName}`);
-            }
+              if (userId) {
+            await PuUploadHistory.create({
+              puNumber: fileName,
+              uploadedBy: userId,  // ✅ Используем переданный userId
+              fileName: originalFileName || 'unknown',
+              fileType: type,
+              periodStart: currentPeriod?.start,
+              periodEnd: currentPeriod?.end,
+              hasErrors: result.has_errors,
+              errorSummary: result.has_errors ? result.summary : null,
+              errorDetails: result.has_errors ? result.details : null,
+              uploadStatus: 'success'
+            });
+  console.log(`Upload history recorded for PU ${fileName}`);
+}
             
             // Добавляем в processed
             processed.push({
