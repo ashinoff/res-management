@@ -2014,6 +2014,14 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
       };
     }
     
+    // Для проблемных ВЛ считаем только активные
+    let problemVLCount = 0;
+    if (req.user.role === 'admin') {
+      problemVLCount = await ProblemVL.count({
+        where: { status: 'active' }  // Только активные!
+      });
+    }
+    
     // Получаем все доступные уведомления
     const allNotifications = await Notification.findAll({
       where: whereClause,
@@ -2036,20 +2044,18 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
     // Считаем непрочитанные по типам
     let techPending = 0;
     let askuePending = 0;
-    let problemVL = 0;
     
     allNotifications.forEach(notif => {
-      if (!readIds.has(notif.id)) { // Если не прочитано текущим пользователем
+      if (!readIds.has(notif.id)) {
         if (notif.type === 'error') techPending++;
         else if (notif.type === 'pending_askue') askuePending++;
-        else if (notif.type === 'problem_vl') problemVL++;
       }
     });
     
     res.json({
       tech_pending: techPending,
       askue_pending: askuePending,
-      problem_vl: req.user.role === 'admin' ? problemVL : 0
+      problem_vl: problemVLCount  // Используем подсчет из ProblemVL
     });
   } catch (error) {
     console.error('Error counting notifications:', error);
@@ -2920,13 +2926,15 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
       include: [ResUnit],
       order: [['workCompletedDate', 'DESC']]
     });
-    // Фильтруем после получения
-const documentsWithFiles = documents.filter(doc => 
-  doc.attachments && 
-  Array.isArray(doc.attachments) && 
-  doc.attachments.length > 0
-);
-    const formattedDocs = documents.map(doc => ({
+    
+    // Фильтруем только записи с файлами
+    const documentsWithFiles = documents.filter(doc => 
+      doc.attachments && 
+      Array.isArray(doc.attachments) && 
+      doc.attachments.length > 0
+    );
+    
+    const formattedDocs = documentsWithFiles.map(doc => ({
       id: doc.id,
       tpName: doc.tpName,
       vlName: doc.vlName,
