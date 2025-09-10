@@ -4314,7 +4314,7 @@ function SystemHistory() {
     </div>
   </>
 )}
-       
+</div>    
         
         <div className="filter-row">
           <div className="filter-group">
