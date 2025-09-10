@@ -4481,8 +4481,6 @@ function SystemHistory() {
   );
 }
 
-// экспорт файлов
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeSection, setActiveSection] = useState('structure');
@@ -4553,30 +4551,31 @@ export default function App() {
   }
 
   const renderContent = () => {
-  switch (activeSection) {
-    case 'structure':
-      return <NetworkStructure selectedRes={selectedRes} />;
-    case 'upload':
-      return <FileUpload selectedRes={selectedRes} />;
-    case 'tech_pending':
-      return <Notifications filterType="error" onSectionChange={setActiveSection} />;
-    case 'askue_pending':
-      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
-    case 'problem_vl':
-      return <ProblemVL />;
-    case 'documents':
-      return <UploadedDocuments />;
-    case 'reports':
-      return <Reports />;
-    case 'settings':
-      return <Settings />;
-    default:
-      return <NetworkStructure selectedRes={selectedRes} />;
-    case 'history':
-      return <SystemHistory />;
-  }
-};
-return (
+    switch (activeSection) {
+      case 'structure':
+        return <NetworkStructure selectedRes={selectedRes} />;
+      case 'upload':
+        return <FileUpload selectedRes={selectedRes} />;
+      case 'tech_pending':
+        return <Notifications filterType="error" onSectionChange={setActiveSection} />;
+      case 'askue_pending':
+        return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
+      case 'problem_vl':
+        return <ProblemVL />;
+      case 'documents':
+        return <UploadedDocuments />;
+      case 'reports':
+        return <Reports />;
+      case 'settings':
+        return <Settings />;
+      case 'history':
+        return <SystemHistory />;
+      default:
+        return <NetworkStructure selectedRes={selectedRes} />;
+    }
+  };
+
+  return (
     <AuthContext.Provider value={{ user, selectedRes }}>
       <div className="app">
         <MainMenu 
