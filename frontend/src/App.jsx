@@ -4576,8 +4576,7 @@ export default function App() {
       return <SystemHistory />;
   }
 };
-
-  return (
+return (
     <AuthContext.Provider value={{ user, selectedRes }}>
       <div className="app">
         <MainMenu 
@@ -4589,7 +4588,7 @@ export default function App() {
         <div className="main-content">
           <header className="app-header">
             <div className="header-left">
-              <h1>Система контроля уровня напрежения в сетях 0,4 кВ</h1>
+              <h1>Система контроля уровня напряжения в сетях 0,4 кВ</h1>
               {user.role === 'admin' && (
                 <select 
                   value={selectedRes || ''}
