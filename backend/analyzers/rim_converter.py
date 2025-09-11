@@ -5,7 +5,7 @@ import json
 import sys
 import re
 import pandas as pd
-import openpyxl
+import xlrd
 from collections import defaultdict
 
 class RIMAnalyzer:
@@ -22,55 +22,78 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Читаем файл через openpyxl для обработки объединенных ячеек
-            try:
-                from openpyxl import load_workbook
-                
-                # Загружаем workbook
-                wb = load_workbook(filepath, read_only=True, data_only=True)
-                ws = wb.active
-                
-                # Собираем все данные, пропуская объединенные ячейки
-                rows = []
-                skip_first = False
-                
-                for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
-                    # Проверяем первую строку
-                    if row_idx == 0 and row[0] and 'Журнал событий' in str(row[0]):
-                        skip_first = True
-                        continue
-                    
-                    # Преобразуем в список, заменяя None на пустые строки
-                    row_data = [str(cell) if cell is not None else "" for cell in row]
-                    rows.append(row_data)
-                
-                wb.close()
-                
-            except Exception as e:
-                # Если openpyxl не справился, пробуем pandas
+            # Определяем формат файла
+            is_xls = filepath.lower().endswith('.xls')
+            
+            # Пробуем разные способы чтения
+            rows = []
+            
+            # Способ 1: xlrd для старых XLS
+            if is_xls:
                 try:
-                    # Читаем через pandas с разными движками
-                    try:
-                        df = pd.read_excel(filepath, engine='openpyxl', header=None)
-                    except:
-                        df = pd.read_excel(filepath, header=None)
+                    workbook = xlrd.open_workbook(filepath, formatting_info=True, encoding_override='cp1251')
+                    sheet = workbook.sheet_by_index(0)
                     
-                    # Проверяем первую строку
-                    if not df.empty and df.iloc[0, 0] is not None and 'Журнал событий' in str(df.iloc[0, 0]):
-                        df = df.iloc[1:]
+                    # Проверяем объединенные ячейки
+                    merged_cells = sheet.merged_cells if hasattr(sheet, 'merged_cells') else []
+                    skip_first = False
                     
-                    # Преобразуем в список строк
-                    rows = []
-                    for _, row in df.iterrows():
-                        row_data = [str(val) if pd.notna(val) else "" for val in row]
+                    # Читаем данные
+                    for row_idx in range(sheet.nrows):
+                        row_data = []
+                        for col_idx in range(sheet.ncols):
+                            # Проверяем, является ли ячейка частью объединенной области
+                            is_merged = False
+                            for crange in merged_cells:
+                                rmin, rmax, cmin, cmax = crange
+                                if rmin <= row_idx < rmax and cmin <= col_idx < cmax:
+                                    # Берем значение из верхней левой ячейки объединенной области
+                                    if row_idx == rmin and col_idx == cmin:
+                                        cell_value = sheet.cell_value(row_idx, col_idx)
+                                    else:
+                                        cell_value = ""
+                                    is_merged = True
+                                    break
+                            
+                            if not is_merged:
+                                cell_value = sheet.cell_value(row_idx, col_idx)
+                            
+                            # Преобразуем в строку
+                            if isinstance(cell_value, (int, float)):
+                                cell_value = str(cell_value)
+                            elif cell_value is None:
+                                cell_value = ""
+                            else:
+                                cell_value = str(cell_value)
+                            
+                            row_data.append(cell_value)
+                        
+                        # Проверяем первую строку
+                        if row_idx == 0 and row_data[0] and 'Журнал событий' in row_data[0]:
+                            skip_first = True
+                            continue
+                            
                         rows.append(row_data)
                         
-                except Exception as e2:
-                    return {
-                        'success': False,
-                        'error': f"Не удалось прочитать файл: {str(e2)}",
-                        'has_errors': False
-                    }
+                except Exception as e:
+                    # Если xlrd не справился, пробуем pandas
+                    try:
+                        df = pd.read_excel(filepath, header=None, engine='xlrd')
+                        if not df.empty and df.iloc[0, 0] is not None and 'Журнал событий' in str(df.iloc[0, 0]):
+                            df = df.iloc[1:]
+                        rows = df.fillna("").astype(str).values.tolist()
+                    except:
+                        raise Exception(f"Не удалось прочитать XLS файл: {str(e)}")
+            
+            # Способ 2: для XLSX используем pandas/openpyxl
+            else:
+                try:
+                    df = pd.read_excel(filepath, header=None)
+                    if not df.empty and df.iloc[0, 0] is not None and 'Журнал событий' in str(df.iloc[0, 0]):
+                        df = df.iloc[1:]
+                    rows = df.fillna("").astype(str).values.tolist()
+                except Exception as e:
+                    raise Exception(f"Не удалось прочитать файл: {str(e)}")
             
             # Находим начало данных
             start_row = 0
@@ -78,7 +101,7 @@ class RIMAnalyzer:
                 if len(row) < 2:
                     continue
                     
-                cell0 = row[0]
+                cell0 = row[0].strip()
                 
                 # Нашли заголовки
                 if 'Время' in cell0 or 'время' in cell0.lower():
@@ -91,6 +114,7 @@ class RIMAnalyzer:
                     break
             
             # Обрабатываем данные
+            events_count = 0
             for idx in range(start_row, len(rows)):
                 try:
                     row = rows[idx]
@@ -98,19 +122,20 @@ class RIMAnalyzer:
                         continue
                     
                     # Читаем значения
-                    datetime_str = row[0].strip()
-                    event = row[1].strip()
+                    datetime_str = str(row[0]).strip()
+                    event = str(row[1]).strip()
                     
-                    if not datetime_str or not event:
+                    if not datetime_str or not event or datetime_str == 'nan':
                         continue
                     
                     # Числовые значения
                     try:
-                        voltage_str = row[2].replace(',', '.').strip()
-                        percent_str = row[3].replace(',', '.').strip()
-                        duration_str = row[4].replace(',', '.').strip()
+                        # Обрабатываем числа в разных форматах
+                        voltage_str = str(row[2]).replace(',', '.').strip()
+                        percent_str = str(row[3]).replace(',', '.').strip()
+                        duration_str = str(row[4]).replace(',', '.').strip()
                         
-                        # Убираем возможные единицы измерения
+                        # Убираем возможные единицы измерения и лишние символы
                         voltage_str = re.sub(r'[^\d\.,\-]', '', voltage_str)
                         percent_str = re.sub(r'[^\d\.,\-]', '', percent_str)
                         duration_str = re.sub(r'[^\d\.,\-]', '', duration_str)
@@ -121,6 +146,8 @@ class RIMAnalyzer:
                     except:
                         continue
                     
+                    events_count += 1
+                    
                     # Фильтры
                     if duration <= 60:
                         continue
@@ -130,7 +157,11 @@ class RIMAnalyzer:
                     # Извлекаем месяц
                     date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
                     if not date_match:
-                        continue
+                        # Пробуем другие форматы даты
+                        date_match = re.match(r'(\d{2})/(\d{2})/(\d{4})', datetime_str)
+                        if not date_match:
+                            continue
+                    
                     month = int(date_match.group(2))
                     
                     # Определяем фазу и тип
@@ -140,18 +171,18 @@ class RIMAnalyzer:
                     event_lower = event.lower()
                     
                     # Ищем фазу
-                    if 'фаза a' in event_lower or 'phase a' in event_lower:
+                    if 'фаза a' in event_lower or 'phase a' in event_lower or 'фаза а' in event_lower:
                         phase = 'A'
-                    elif 'фаза b' in event_lower or 'phase b' in event_lower:
+                    elif 'фаза b' in event_lower or 'phase b' in event_lower or 'фаза в' in event_lower:
                         phase = 'B'
-                    elif 'фаза c' in event_lower or 'phase c' in event_lower:
+                    elif 'фаза c' in event_lower or 'phase c' in event_lower or 'фаза с' in event_lower:
                         phase = 'C'
                     
                     # События окончания
-                    if phase and ('окончание' in event_lower or 'конец' in event_lower):
-                        if 'провал' in event_lower or 'понижен' in event_lower:
+                    if phase and ('окончание' in event_lower or 'конец' in event_lower or 'end' in event_lower):
+                        if 'провал' in event_lower or 'понижен' in event_lower or 'under' in event_lower:
                             event_type = 'undervoltage'
-                        elif 'перенапряжение' in event_lower or 'повышен' in event_lower:
+                        elif 'перенапряжение' in event_lower or 'повышен' in event_lower or 'over' in event_lower:
                             event_type = 'overvoltage'
                     
                     # Добавляем событие
@@ -165,12 +196,20 @@ class RIMAnalyzer:
                 except Exception as e:
                     continue
             
+            # Если вообще не нашли событий в файле
+            if events_count == 0:
+                return {
+                    'success': False,
+                    'error': "Не найдено событий в файле. Проверьте формат данных.",
+                    'has_errors': False
+                }
+            
             return self._generate_result(events_data)
             
         except Exception as e:
             return {
                 'success': False,
-                'error': f"Ошибка анализа: {str(e)}",
+                'error': f"Ошибка чтения файла: {str(e)}",
                 'has_errors': False
             }
     
