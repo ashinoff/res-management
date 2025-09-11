@@ -22,147 +22,127 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Пробуем разные способы открытия .xls
-            workbook = None
-            sheet = None
-            
-            # Попытка 1: стандартный способ с formatting_info
+            # Открываем файл БЕЗ formatting_info - это ключевой момент!
             try:
-                workbook = xlrd.open_workbook(filepath, formatting_info=True)
+                # НЕ используем formatting_info=True для проблемных файлов
+                workbook = xlrd.open_workbook(filepath, formatting_info=False, on_demand=True)
                 sheet = workbook.sheet_by_index(0)
-            except:
-                # Попытка 2: без formatting_info
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f"Не удалось открыть файл: {str(e)}",
+                    'has_errors': False
+                }
+            
+            # Умный поиск начала данных
+            start_row = 0
+            for i in range(0, min(10, sheet.nrows)):
                 try:
-                    workbook = xlrd.open_workbook(filepath)
-                    sheet = workbook.sheet_by_index(0)
-                except:
-                    # Попытка 3: с ignore_workbook_corruption
-                    try:
-                        workbook = xlrd.open_workbook(filepath, 
-                                                     formatting_info=False,
-                                                     on_demand=True,
-                                                     ragged_rows=True)
-                        sheet = workbook.sheet_by_index(0)
-                    except Exception as e:
-                        # Если ничего не сработало - возвращаем ошибку
-                        return {
-                            'success': False,
-                            'error': f"Не удалось прочитать файл Excel. Попробуйте пересохранить файл в Excel.",
-                            'has_errors': False
-                        }
-            
-            # Функция поиска начальной строки с данными
-            def find_data_start_row(sheet):
-                """Умный поиск начальной строки с данными"""
-                start_row = 0
-                
-                # Проверяем объединенные ячейки только если они доступны
-                if hasattr(sheet, 'merged_cells') and sheet.merged_cells:
-                    # Находим максимальную строку из всех объединений в первых колонках
-                    max_merged_row = 0
-                    for (rlo, rhi, clo, chi) in sheet.merged_cells:
-                        # Если объединение затрагивает первые 3 колонки
-                        if clo < 3:
-                            max_merged_row = max(max_merged_row, rhi)
+                    cell0 = str(sheet.cell_value(i, 0)).strip()
                     
-                    if max_merged_row > 0:
-                        start_row = max_merged_row
-                
-                # Дополнительная проверка - ищем заголовки или данные
-                for i in range(start_row, min(start_row + 10, sheet.nrows)):
-                    try:
-                        cell0 = str(sheet.cell_value(i, 0)).strip()
-                        cell1 = str(sheet.cell_value(i, 1)).strip() if sheet.ncols > 1 else ""
-                        
-                        # Если нашли заголовок
-                        if 'Время' in cell0 or 'Событие' in cell1:
-                            return i + 1
-                            
-                        # Если нашли данные (дата в формате DD.MM.YYYY)
-                        if re.match(r'\d{2}\.\d{2}\.\d{4}', cell0):
-                            return i
-                            
-                    except Exception:
+                    # Пропускаем строки с заголовком журнала
+                    if 'Журнал событий' in cell0:
                         continue
-                
-                return start_row
+                        
+                    # Нашли заголовки колонок
+                    if 'Время' in cell0:
+                        start_row = i + 1  # Данные начинаются со следующей строки
+                        break
+                        
+                    # Нашли первую дату - это уже данные
+                    if re.match(r'\d{2}\.\d{2}\.\d{4}', cell0):
+                        start_row = i
+                        break
+                except:
+                    continue
             
-            # Определяем начальную строку
-            start_row = find_data_start_row(sheet)
+            # Если не нашли начало, пробуем с первой строки
+            if start_row == 0:
+                start_row = 1
             
-            # Парсим каждую строку
+            # Парсим данные
             for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # Читаем значения из ячеек с проверкой границ
+                    # Безопасное чтение ячеек
                     datetime_str = ""
                     event = ""
-                    voltage_str = "0"
-                    percent_str = "0"
-                    duration_str = "0"
+                    voltage = 0.0
+                    percent = 0.0
+                    duration = 0.0
                     
-                    if sheet.ncols > 0:
-                        datetime_str = str(sheet.cell_value(row_idx, 0)) if sheet.cell_value(row_idx, 0) else ""
-                    if sheet.ncols > 1:
-                        event = str(sheet.cell_value(row_idx, 1)) if sheet.cell_value(row_idx, 1) else ""
-                    if sheet.ncols > 2:
-                        voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.') if sheet.cell_value(row_idx, 2) else "0"
-                    if sheet.ncols > 3:
-                        percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.') if sheet.cell_value(row_idx, 3) else "0"
-                    if sheet.ncols > 4:
-                        duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.') if sheet.cell_value(row_idx, 4) else "0"
-                    
-                    # Пропускаем пустые строки
-                    if not datetime_str or not event or datetime_str == '0':
-                        continue
-                    # Пропускаем заголовки
-                    if datetime_str == 'Время' or event == 'Событие журнала напряжений':
-                        continue
-                    
-                    try:
-                        voltage = float(voltage_str)
-                    except ValueError:
-                        continue
-                    
-                    # Проверяем на пустые значения
-                    if not voltage_str or not percent_str or not duration_str:
-                        continue
-                    
-                    voltage = float(voltage_str)
-                    percent = float(percent_str)
-                    duration = float(duration_str)
-                    
-                    # Критерий 1: продолжительность > 60
-                    if duration <= 60:
-                        continue
-                    
-                    # Критерий 2: напряжение != 11.50 и != 0
-                    if abs(voltage - 11.50) < 0.001 or voltage == 0:
-                        continue
-                    
-                    # Определяем месяц из даты
-                    date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
-                    if date_match:
-                        month = int(date_match.group(2))
+                    # Проверяем количество колонок
+                    if sheet.ncols >= 5:
+                        # Читаем значения
+                        cell_date = sheet.cell_value(row_idx, 0)
+                        cell_event = sheet.cell_value(row_idx, 1)
+                        cell_voltage = sheet.cell_value(row_idx, 2)
+                        cell_percent = sheet.cell_value(row_idx, 3)
+                        cell_duration = sheet.cell_value(row_idx, 4)
+                        
+                        # Преобразуем в строки
+                        datetime_str = str(cell_date).strip()
+                        event = str(cell_event).strip()
+                        
+                        # Числовые значения
+                        try:
+                            # xlrd может вернуть float напрямую
+                            if isinstance(cell_voltage, (int, float)):
+                                voltage = float(cell_voltage)
+                            else:
+                                voltage = float(str(cell_voltage).replace(',', '.'))
+                                
+                            if isinstance(cell_percent, (int, float)):
+                                percent = float(cell_percent)
+                            else:
+                                percent = float(str(cell_percent).replace(',', '.'))
+                                
+                            if isinstance(cell_duration, (int, float)):
+                                duration = float(cell_duration)
+                            else:
+                                duration = float(str(cell_duration).replace(',', '.'))
+                        except:
+                            continue
                     else:
                         continue
                     
-                    # Определяем тип события и фазу
+                    # Пропускаем пустые строки и заголовки
+                    if not datetime_str or not event:
+                        continue
+                    if datetime_str == 'Время':
+                        continue
+                    
+                    # Проверяем формат даты
+                    date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
+                    if not date_match:
+                        continue
+                    
+                    # Критерии фильтрации
+                    if duration <= 60:
+                        continue
+                    if abs(voltage - 11.50) < 0.001 or voltage == 0:
+                        continue
+                    
+                    # Извлекаем месяц
+                    month = int(date_match.group(2))
+                    
+                    # Определяем фазу и тип события
                     phase = None
                     event_type = None
                     
-                    # Проверяем фазу
-                    if 'Фаза A' in event or 'фаза A' in event:
+                    # Определяем фазу
+                    event_lower = event.lower()
+                    if 'фаза a' in event_lower:
                         phase = 'A'
-                    elif 'Фаза B' in event or 'фаза B' in event:
+                    elif 'фаза b' in event_lower:
                         phase = 'B'
-                    elif 'Фаза C' in event or 'фаза C' in event:
+                    elif 'фаза c' in event_lower:
                         phase = 'C'
                     
-                    if phase:
-                        # Проверяем тип события
-                        if 'провал' in event.lower():
+                    # Определяем тип только для событий окончания
+                    if phase and 'окончание' in event_lower:
+                        if 'провал' in event_lower:
                             event_type = 'undervoltage'
-                        elif 'перенапряжение' in event.lower():
+                        elif 'перенапряжение' in event_lower:
                             event_type = 'overvoltage'
                     
                     # Добавляем событие
@@ -173,7 +153,8 @@ class RIMAnalyzer:
                             'duration': duration
                         })
                         
-                except Exception:
+                except Exception as e:
+                    # Пропускаем проблемные строки
                     continue
             
             # Формируем результат
@@ -182,7 +163,7 @@ class RIMAnalyzer:
         except Exception as e:
             return {
                 'success': False,
-                'error': f"Ошибка анализа файла: {str(e)}",
+                'error': f"Ошибка анализа: {str(e)}",
                 'has_errors': False
             }
     
