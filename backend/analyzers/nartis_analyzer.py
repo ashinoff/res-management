@@ -41,20 +41,16 @@ class NartisAnalyzer:
             else:
                 start_row = 1
             
-            # Дополнительная проверка: пропускаем строки пока не найдем данные
-            actual_start = start_row
-            for row_idx in range(start_row, min(start_row + 5, sheet.nrows)):
-                try:
-                    # Проверяем что в первой колонке есть дата
-                    cell_value = str(sheet.cell_value(row_idx, 0))
-                    if cell_value and cell_value != '0' and '.' in cell_value:
-                        actual_start = row_idx
-                        break
-                except:
-                    continue
-            
-            start_row = actual_start
-            print(f"First data row: {start_row}", file=sys.stderr)
+           # ПРОСТОЕ РЕШЕНИЕ: всегда пропускаем первую строку
+start_row = 1
+if sheet.nrows < 2:
+    return {
+        'success': False,
+        'error': 'Файл не содержит данных',
+        'has_errors': False
+    }
+
+print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
 
             # Выведем первые 5 строк для проверки структуры
             print("First 5 rows:", file=sys.stderr)
