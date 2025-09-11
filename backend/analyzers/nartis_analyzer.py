@@ -23,13 +23,48 @@ class NartisAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            workbook = xlrd.open_workbook(filepath)
+            # Читаем Excel файл
+            workbook = xlrd.open_workbook(filepath, formatting_info=False)
             sheet = workbook.sheet_by_index(0)
             
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
-
-            start_row = 1
             
+            # НОВОЕ: Проверка на объединенные ячейки
+            if hasattr(sheet, 'merged_cells') and sheet.merged_cells:
+                print(f"WARNING: Merged cells detected: {len(sheet.merged_cells)} ranges", file=sys.stderr)
+                # Получаем первую строку с данными после объединенных ячеек
+                start_row = 1
+                for (r1, r2, c1, c2) in sheet.merged_cells:
+                    if r1 == 0:  # если объединение в первой строке
+                        start_row = max(start_row, r2)  # начинаем после объединенной области
+                print(f"Starting from row: {start_row}", file=sys.stderr)
+            else:
+                start_row = 1
+            
+            # Дополнительная проверка: пропускаем строки пока не найдем данные
+            actual_start = start_row
+            for row_idx in range(start_row, min(start_row + 5, sheet.nrows)):
+                try:
+                    # Проверяем что в первой колонке есть дата
+                    cell_value = str(sheet.cell_value(row_idx, 0))
+                    if cell_value and cell_value != '0' and '.' in cell_value:
+                        actual_start = row_idx
+                        break
+                except:
+                    continue
+            
+            start_row = actual_start
+            print(f"First data row: {start_row}", file=sys.stderr)
+
+            # Выведем первые 5 строк для проверки структуры
+            print("First 5 rows:", file=sys.stderr)
+            for i in range(min(5, sheet.nrows)):
+                row = []
+                for j in range(sheet.ncols):
+                    row.append(str(sheet.cell_value(i, j))[:30])
+                print(f"Row {i}: {row}", file=sys.stderr)
+            
+            # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
                     datetime_str = str(sheet.cell_value(row_idx, 0))
