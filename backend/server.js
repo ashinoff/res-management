@@ -2263,7 +2263,7 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
     
     switch(type) {
       case 'rim_single':
-        scriptPath = path.join(analyzersDir, 'im_single_pandas.py');
+        scriptPath = path.join(analyzersDir, 'rim_single_pandas.py');
         break;
       case 'rim_mass':
         scriptPath = path.join(analyzersDir, 'rim_mass_analyzer.py');
