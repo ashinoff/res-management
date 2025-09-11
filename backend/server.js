@@ -2263,7 +2263,7 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
     
     switch(type) {
       case 'rim_single':
-        scriptPath = path.join(analyzersDir, 'rim_single_pyexcel.py');
+        scriptPath = path.join(analyzersDir, 'rim_single.py');
         break;
       case 'rim_mass':
         scriptPath = path.join(analyzersDir, 'rim_mass_analyzer.py');
@@ -2366,6 +2366,22 @@ async function analyzeFile(filePath, type, originalFileName = null, requiredPeri
             : path.basename(filePath, path.extname(filePath));
           
           console.log('Extracted PU number from filename:', fileName);
+
+          if (!fileName || fileName === 'undefined' || fileName === '') {
+  console.error('ERROR: Invalid PU number');
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error('Error deleting file:', err);
+  }
+  
+  return resolve({
+    processed: [],
+    errors: [],
+    success: false,
+    message: 'Ошибка: не удалось определить номер ПУ из имени файла'
+  });
+}
           
           // НОВАЯ ПРОВЕРКА: История загрузок
           const recentUploads = await PuUploadHistory.findAll({
