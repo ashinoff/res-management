@@ -5,7 +5,7 @@ import json
 import sys
 from collections import defaultdict
 import re
-import xlrd  # для чтения .xls файлов
+import xlrd
 from datetime import datetime
 
 class RIMAnalyzer:
@@ -22,77 +22,64 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # ВАЖНО: для .xls файлов используем formatting_info=True
+            # Открываем Excel файл
             try:
-                # Пробуем с formatting_info для .xls
                 workbook = xlrd.open_workbook(filepath, formatting_info=True)
             except:
-                # Если не получилось (например .xlsx), открываем обычно
                 workbook = xlrd.open_workbook(filepath)
                 
             sheet = workbook.sheet_by_index(0)
             
-            print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
-            
-            # Проверяем объединенные ячейки
+            # Функция поиска начальной строки с данными
             def find_data_start_row(sheet):
-    """Умный поиск начальной строки с данными"""
-    start_row = 0
-    
-    # Проверяем объединенные ячейки
-    if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
-        print(f"MERGED CELLS FOUND: {sheet.merged_cells}", file=sys.stderr)
-        
-        # Находим максимальную строку из всех объединений в первых колонках
-        max_merged_row = 0
-        for (rlo, rhi, clo, chi) in sheet.merged_cells:
-            # Если объединение затрагивает первые 3 колонки
-            if clo < 3:
-                max_merged_row = max(max_merged_row, rhi)
-        
-        if max_merged_row > 0:
-            start_row = max_merged_row
-            print(f"Skipping merged rows, starting from row {start_row}", file=sys.stderr)
-    
-    # Дополнительная проверка - ищем заголовки или данные
-    for i in range(start_row, min(start_row + 10, sheet.nrows)):
-        try:
-            cell0 = str(sheet.cell_value(i, 0)).strip()
-            cell1 = str(sheet.cell_value(i, 1)).strip()
-            
-            # Если нашли заголовок
-            if 'Время' in cell0 or 'Событие' in cell1:
-                print(f"Found header at row {i}, starting data from row {i+1}", file=sys.stderr)
-                return i + 1
+                """Умный поиск начальной строки с данными"""
+                start_row = 0
                 
-            # Если нашли данные (дата в формате DD.MM.YYYY)
-            if re.match(r'\d{2}\.\d{2}\.\d{4}', cell0):
-                print(f"Found first data at row {i}", file=sys.stderr)
-                return i
+                # Проверяем объединенные ячейки
+                if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
+                    # Находим максимальную строку из всех объединений в первых колонках
+                    max_merged_row = 0
+                    for (rlo, rhi, clo, chi) in sheet.merged_cells:
+                        # Если объединение затрагивает первые 3 колонки
+                        if clo < 3:
+                            max_merged_row = max(max_merged_row, rhi)
+                    
+                    if max_merged_row > 0:
+                        start_row = max_merged_row
                 
-        except Exception as e:
-            print(f"Error checking row {i}: {e}", file=sys.stderr)
-            continue
-    
-    return start_row
-
-# Вызываем функцию для определения начальной строки
-start_row = find_data_start_row(sheet)
-print(f"Starting from row: {start_row}", file=sys.stderr)
+                # Дополнительная проверка - ищем заголовки или данные
+                for i in range(start_row, min(start_row + 10, sheet.nrows)):
+                    try:
+                        cell0 = str(sheet.cell_value(i, 0)).strip()
+                        cell1 = str(sheet.cell_value(i, 1)).strip()
+                        
+                        # Если нашли заголовок
+                        if 'Время' in cell0 or 'Событие' in cell1:
+                            return i + 1
+                            
+                        # Если нашли данные (дата в формате DD.MM.YYYY)
+                        if re.match(r'\d{2}\.\d{2}\.\d{4}', cell0):
+                            return i
+                            
+                    except Exception:
+                        continue
+                
+                return start_row
             
-                 
+            # Определяем начальную строку
+            start_row = find_data_start_row(sheet)
+            
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # ВАЖНО: для объединенных ячеек xlrd может вернуть пустое значение
-                    # Поэтому проверяем каждое значение
+                    # Читаем значения из ячеек
                     datetime_str = str(sheet.cell_value(row_idx, 0)) if sheet.cell_value(row_idx, 0) else ""
                     event = str(sheet.cell_value(row_idx, 1)) if sheet.cell_value(row_idx, 1) else ""
                     
                     # Пропускаем пустые строки
                     if not datetime_str or not event or datetime_str == '0':
                         continue
-                    # Пропускаем только если это точно заголовок
+                    # Пропускаем заголовки
                     if datetime_str == 'Время' or event == 'Событие журнала напряжений':
                         continue
                     
@@ -102,7 +89,6 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                     try:
                         voltage = float(voltage_str)
                     except ValueError:
-                        print(f"Row {row_idx}: cannot parse voltage '{voltage_str}', skipping", file=sys.stderr)
                         continue
             
                     percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.') if sheet.cell_value(row_idx, 3) else "0"
@@ -110,24 +96,18 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                     
                     # Проверяем на пустые значения
                     if not voltage_str or not percent_str or not duration_str:
-                        print(f"Row {row_idx}: empty values, skipping", file=sys.stderr)
                         continue
                     
                     voltage = float(voltage_str)
                     percent = float(percent_str)
                     duration = float(duration_str)
                     
-                    # ОТЛАДКА
-                    print(f"Row {row_idx}: event='{event}', voltage={voltage}, duration={duration}", file=sys.stderr)
-                    
                     # Критерий 1: продолжительность > 60
                     if duration <= 60:
-                        print(f"Skipped: duration {duration} <= 60", file=sys.stderr)
                         continue
                     
                     # Критерий 2: напряжение != 11.50 и != 0
                     if abs(voltage - 11.50) < 0.001 or voltage == 0:
-                        print(f"Skipped: voltage {voltage} is 11.50 or 0", file=sys.stderr)
                         continue
                     
                     # Определяем месяц из даты
@@ -135,7 +115,6 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                     if date_match:
                         month = int(date_match.group(2))
                     else:
-                        print(f"Could not parse date from: {datetime_str}", file=sys.stderr)
                         continue
                     
                     # Определяем тип события и фазу
@@ -150,16 +129,12 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                     elif 'Фаза C' in event or 'фаза C' in event:
                         phase = 'C'
                     
-                    print(f"Detected phase: {phase}", file=sys.stderr)
-                    
                     if phase:
                         # Проверяем тип события
                         if 'провал' in event.lower():
                             event_type = 'undervoltage'
                         elif 'перенапряжение' in event.lower():
                             event_type = 'overvoltage'
-                    
-                    print(f"Event type: {event_type}", file=sys.stderr)
                     
                     # Добавляем событие
                     if phase and event_type:
@@ -168,12 +143,8 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                             'month': month,
                             'duration': duration
                         })
-                        print(f"Added event: {event_type} phase {phase}", file=sys.stderr)
-                    else:
-                        print(f"Event not added: phase={phase}, type={event_type}", file=sys.stderr)
                         
-                except Exception as e:
-                    print(f"Error in row {row_idx}: {str(e)}", file=sys.stderr)
+                except Exception:
                     continue
             
             # Формируем результат
@@ -201,16 +172,9 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
             'undervoltage': {}
         }
         
-        # ОТЛАДКА - выводим количество событий
-        total_overvoltage = sum(len(events) for events in events_data['overvoltage'].values())
-        total_undervoltage = sum(len(events) for events in events_data['undervoltage'].values())
-        print(f"Total overvoltage events: {total_overvoltage}", file=sys.stderr)
-        print(f"Total undervoltage events: {total_undervoltage}", file=sys.stderr)
-        
         # Обработка перенапряжений
         for phase in ['A', 'B', 'C']:
             events = events_data['overvoltage'][phase]
-            print(f"Overvoltage phase {phase}: {len(events)} events", file=sys.stderr)
             # Критерий 3: количество > 10
             if len(events) > 10:
                 has_errors = True
@@ -245,7 +209,6 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
         # Обработка провалов
         for phase in ['A', 'B', 'C']:
             events = events_data['undervoltage'][phase]
-            print(f"Undervoltage phase {phase}: {len(events)} events", file=sys.stderr)
             # Критерий 3: количество > 10
             if len(events) > 10:
                 has_errors = True
@@ -277,7 +240,7 @@ print(f"Starting from row: {start_row}", file=sys.stderr)
                     'period': period
                 }
         
-        # Если событий меньше 10, но есть события - для отладки
+        # Если событий меньше 10, но есть события
         if not has_errors:
             total_events = sum(len(events) for events in events_data['overvoltage'].values())
             total_events += sum(len(events) for events in events_data['undervoltage'].values())
