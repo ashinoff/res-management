@@ -35,17 +35,50 @@ class RIMAnalyzer:
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
             
             # Проверяем объединенные ячейки
-            start_row = 1  # по умолчанию начинаем со второй строки
+            def find_data_start_row(sheet):
+    """Умный поиск начальной строки с данными"""
+    start_row = 0
+    
+    # Проверяем объединенные ячейки
+    if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
+        print(f"MERGED CELLS FOUND: {sheet.merged_cells}", file=sys.stderr)
+        
+        # Находим максимальную строку из всех объединений в первых колонках
+        max_merged_row = 0
+        for (rlo, rhi, clo, chi) in sheet.merged_cells:
+            # Если объединение затрагивает первые 3 колонки
+            if clo < 3:
+                max_merged_row = max(max_merged_row, rhi)
+        
+        if max_merged_row > 0:
+            start_row = max_merged_row
+            print(f"Skipping merged rows, starting from row {start_row}", file=sys.stderr)
+    
+    # Дополнительная проверка - ищем заголовки или данные
+    for i in range(start_row, min(start_row + 10, sheet.nrows)):
+        try:
+            cell0 = str(sheet.cell_value(i, 0)).strip()
+            cell1 = str(sheet.cell_value(i, 1)).strip()
             
-            if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
-                print(f"MERGED CELLS FOUND: {sheet.merged_cells}", file=sys.stderr)
-                # Если есть объединение в первой строке - начинаем после него
-                for (rlo, rhi, clo, chi) in sheet.merged_cells:
-                    if rlo == 0:  # объединение начинается с первой строки
-                        print(f"Merged cell in first row detected, skipping to row {rhi}", file=sys.stderr)
-                        start_row = max(start_row, rhi)  # начинаем после объединенных строк
-                        
-            print(f"Starting from row: {start_row}", file=sys.stderr)
+            # Если нашли заголовок
+            if 'Время' in cell0 or 'Событие' in cell1:
+                print(f"Found header at row {i}, starting data from row {i+1}", file=sys.stderr)
+                return i + 1
+                
+            # Если нашли данные (дата в формате DD.MM.YYYY)
+            if re.match(r'\d{2}\.\d{2}\.\d{4}', cell0):
+                print(f"Found first data at row {i}", file=sys.stderr)
+                return i
+                
+        except Exception as e:
+            print(f"Error checking row {i}: {e}", file=sys.stderr)
+            continue
+    
+    return start_row
+
+# Вызываем функцию для определения начальной строки
+start_row = find_data_start_row(sheet)
+print(f"Starting from row: {start_row}", file=sys.stderr)
             
             # Выведем первые 5 строк для проверки
             print("First 5 data rows:", file=sys.stderr)
