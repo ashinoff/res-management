@@ -103,10 +103,6 @@ function LoginForm({ onLogin }) {
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
-        <div className="test-accounts">
-          <p>Тестовые учетные записи:</p>
-          <p>admin / admin123</p>
-        </div>
       </div>
     </div>
   );
