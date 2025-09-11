@@ -22,38 +22,34 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Читаем Excel файл
-            workbook = xlrd.open_workbook(filepath, formatting_info=False)
+            # ВАЖНО: для .xls файлов используем formatting_info=True
+            try:
+                # Пробуем с formatting_info для .xls
+                workbook = xlrd.open_workbook(filepath, formatting_info=True)
+            except:
+                # Если не получилось (например .xlsx), открываем обычно
+                workbook = xlrd.open_workbook(filepath)
+                
             sheet = workbook.sheet_by_index(0)
             
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
             
-            # НОВОЕ: Проверка на объединенные ячейки
-            # ПРОСТОЕ РЕШЕНИЕ: всегда пропускаем первую строку
-start_row = 1
-if sheet.nrows < 2:
-    return {
-        'success': False,
-        'error': 'Файл не содержит данных',
-        'has_errors': False
-    }
-
-print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
-                try:
-                    # Проверяем что в первой колонке есть дата
-                    cell_value = str(sheet.cell_value(row_idx, 0))
-                    if cell_value and cell_value != '0' and '.' in cell_value:
-                        actual_start = row_idx
-                        break
-                except:
-                    continue
+            # Проверяем объединенные ячейки
+            start_row = 1  # по умолчанию начинаем со второй строки
             
-            start_row = actual_start
-            print(f"First data row: {start_row}", file=sys.stderr)
-
-            # Выведем первые 5 строк для проверки структуры
-            print("First 5 rows:", file=sys.stderr)
-            for i in range(min(5, sheet.nrows)):
+            if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
+                print(f"MERGED CELLS FOUND: {sheet.merged_cells}", file=sys.stderr)
+                # Если есть объединение в первой строке - начинаем после него
+                for (rlo, rhi, clo, chi) in sheet.merged_cells:
+                    if rlo == 0:  # объединение начинается с первой строки
+                        print(f"Merged cell in first row detected, skipping to row {rhi}", file=sys.stderr)
+                        start_row = max(start_row, rhi)  # начинаем после объединенных строк
+                        
+            print(f"Starting from row: {start_row}", file=sys.stderr)
+            
+            # Выведем первые 5 строк для проверки
+            print("First 5 data rows:", file=sys.stderr)
+            for i in range(start_row, min(start_row + 5, sheet.nrows)):
                 row = []
                 for j in range(sheet.ncols):
                     row.append(str(sheet.cell_value(i, j))[:30])
@@ -62,9 +58,10 @@ print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # Читаем ячейки строки по правильным колонкам
-                    datetime_str = str(sheet.cell_value(row_idx, 0))  # Колонка A - дата и время
-                    event = str(sheet.cell_value(row_idx, 1))  # Колонка B - событие
+                    # ВАЖНО: для объединенных ячеек xlrd может вернуть пустое значение
+                    # Поэтому проверяем каждое значение
+                    datetime_str = str(sheet.cell_value(row_idx, 0)) if sheet.cell_value(row_idx, 0) else ""
+                    event = str(sheet.cell_value(row_idx, 1)) if sheet.cell_value(row_idx, 1) else ""
                     
                     # Пропускаем пустые строки
                     if not datetime_str or not event or datetime_str == '0':
@@ -74,7 +71,7 @@ print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
                         continue
                     
                     # Колонка C - напряжение, D - процент, E - продолжительность
-                    voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.')  # Колонка C
+                    voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.') if sheet.cell_value(row_idx, 2) else "0"
                     
                     try:
                         voltage = float(voltage_str)
@@ -82,8 +79,8 @@ print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
                         print(f"Row {row_idx}: cannot parse voltage '{voltage_str}', skipping", file=sys.stderr)
                         continue
             
-                    percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.')  # Колонка D
-                    duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.')  # Колонка E
+                    percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.') if sheet.cell_value(row_idx, 3) else "0"
+                    duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.') if sheet.cell_value(row_idx, 4) else "0"
                     
                     # Проверяем на пустые значения
                     if not voltage_str or not percent_str or not duration_str:
