@@ -80,14 +80,7 @@ class RIMAnalyzer:
 start_row = find_data_start_row(sheet)
 print(f"Starting from row: {start_row}", file=sys.stderr)
             
-            # Выведем первые 5 строк для проверки
-            print("First 5 data rows:", file=sys.stderr)
-            for i in range(start_row, min(start_row + 5, sheet.nrows)):
-                row = []
-                for j in range(sheet.ncols):
-                    row.append(str(sheet.cell_value(i, j))[:30])
-                print(f"Row {i}: {row}", file=sys.stderr)
-            
+                 
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
