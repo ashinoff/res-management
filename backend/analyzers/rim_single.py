@@ -22,21 +22,42 @@ class RIMAnalyzer:
                 'undervoltage': {'A': [], 'B': [], 'C': []}
             }
             
-            # Открываем Excel файл
+            # Пробуем разные способы открытия .xls
+            workbook = None
+            sheet = None
+            
+            # Попытка 1: стандартный способ с formatting_info
             try:
                 workbook = xlrd.open_workbook(filepath, formatting_info=True)
+                sheet = workbook.sheet_by_index(0)
             except:
-                workbook = xlrd.open_workbook(filepath)
-                
-            sheet = workbook.sheet_by_index(0)
+                # Попытка 2: без formatting_info
+                try:
+                    workbook = xlrd.open_workbook(filepath)
+                    sheet = workbook.sheet_by_index(0)
+                except:
+                    # Попытка 3: с ignore_workbook_corruption
+                    try:
+                        workbook = xlrd.open_workbook(filepath, 
+                                                     formatting_info=False,
+                                                     on_demand=True,
+                                                     ragged_rows=True)
+                        sheet = workbook.sheet_by_index(0)
+                    except Exception as e:
+                        # Если ничего не сработало - возвращаем ошибку
+                        return {
+                            'success': False,
+                            'error': f"Не удалось прочитать файл Excel. Попробуйте пересохранить файл в Excel.",
+                            'has_errors': False
+                        }
             
             # Функция поиска начальной строки с данными
             def find_data_start_row(sheet):
                 """Умный поиск начальной строки с данными"""
                 start_row = 0
                 
-                # Проверяем объединенные ячейки
-                if hasattr(sheet, 'merged_cells') and len(sheet.merged_cells) > 0:
+                # Проверяем объединенные ячейки только если они доступны
+                if hasattr(sheet, 'merged_cells') and sheet.merged_cells:
                     # Находим максимальную строку из всех объединений в первых колонках
                     max_merged_row = 0
                     for (rlo, rhi, clo, chi) in sheet.merged_cells:
@@ -51,7 +72,7 @@ class RIMAnalyzer:
                 for i in range(start_row, min(start_row + 10, sheet.nrows)):
                     try:
                         cell0 = str(sheet.cell_value(i, 0)).strip()
-                        cell1 = str(sheet.cell_value(i, 1)).strip()
+                        cell1 = str(sheet.cell_value(i, 1)).strip() if sheet.ncols > 1 else ""
                         
                         # Если нашли заголовок
                         if 'Время' in cell0 or 'Событие' in cell1:
@@ -72,9 +93,23 @@ class RIMAnalyzer:
             # Парсим каждую строку
             for row_idx in range(start_row, sheet.nrows):
                 try:
-                    # Читаем значения из ячеек
-                    datetime_str = str(sheet.cell_value(row_idx, 0)) if sheet.cell_value(row_idx, 0) else ""
-                    event = str(sheet.cell_value(row_idx, 1)) if sheet.cell_value(row_idx, 1) else ""
+                    # Читаем значения из ячеек с проверкой границ
+                    datetime_str = ""
+                    event = ""
+                    voltage_str = "0"
+                    percent_str = "0"
+                    duration_str = "0"
+                    
+                    if sheet.ncols > 0:
+                        datetime_str = str(sheet.cell_value(row_idx, 0)) if sheet.cell_value(row_idx, 0) else ""
+                    if sheet.ncols > 1:
+                        event = str(sheet.cell_value(row_idx, 1)) if sheet.cell_value(row_idx, 1) else ""
+                    if sheet.ncols > 2:
+                        voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.') if sheet.cell_value(row_idx, 2) else "0"
+                    if sheet.ncols > 3:
+                        percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.') if sheet.cell_value(row_idx, 3) else "0"
+                    if sheet.ncols > 4:
+                        duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.') if sheet.cell_value(row_idx, 4) else "0"
                     
                     # Пропускаем пустые строки
                     if not datetime_str or not event or datetime_str == '0':
@@ -83,16 +118,10 @@ class RIMAnalyzer:
                     if datetime_str == 'Время' or event == 'Событие журнала напряжений':
                         continue
                     
-                    # Колонка C - напряжение, D - процент, E - продолжительность
-                    voltage_str = str(sheet.cell_value(row_idx, 2)).replace(',', '.') if sheet.cell_value(row_idx, 2) else "0"
-                    
                     try:
                         voltage = float(voltage_str)
                     except ValueError:
                         continue
-            
-                    percent_str = str(sheet.cell_value(row_idx, 3)).replace(',', '.') if sheet.cell_value(row_idx, 3) else "0"
-                    duration_str = str(sheet.cell_value(row_idx, 4)).replace(',', '.') if sheet.cell_value(row_idx, 4) else "0"
                     
                     # Проверяем на пустые значения
                     if not voltage_str or not percent_str or not duration_str:
@@ -150,12 +179,6 @@ class RIMAnalyzer:
             # Формируем результат
             return self._generate_result(events_data)
             
-        except xlrd.biffh.XLRDError as e:
-            return {
-                'success': False,
-                'error': f"Ошибка чтения Excel файла: {str(e)}",
-                'has_errors': False
-            }
         except Exception as e:
             return {
                 'success': False,
