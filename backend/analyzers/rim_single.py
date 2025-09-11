@@ -29,20 +29,16 @@ class RIMAnalyzer:
             print(f"Sheet rows: {sheet.nrows}, cols: {sheet.ncols}", file=sys.stderr)
             
             # НОВОЕ: Проверка на объединенные ячейки
-            if hasattr(sheet, 'merged_cells') and sheet.merged_cells:
-                print(f"WARNING: Merged cells detected: {len(sheet.merged_cells)} ranges", file=sys.stderr)
-                # Получаем первую строку с данными после объединенных ячеек
-                start_row = 1
-                for (r1, r2, c1, c2) in sheet.merged_cells:
-                    if r1 == 0:  # если объединение в первой строке
-                        start_row = max(start_row, r2)  # начинаем после объединенной области
-                print(f"Starting from row: {start_row}", file=sys.stderr)
-            else:
-                start_row = 1
-            
-            # Дополнительная проверка: пропускаем строки пока не найдем данные
-            actual_start = start_row
-            for row_idx in range(start_row, min(start_row + 5, sheet.nrows)):
+            # ПРОСТОЕ РЕШЕНИЕ: всегда пропускаем первую строку
+start_row = 1
+if sheet.nrows < 2:
+    return {
+        'success': False,
+        'error': 'Файл не содержит данных',
+        'has_errors': False
+    }
+
+print(f"Starting from row: {start_row} (skipping first row)", file=sys.stderr)
                 try:
                     # Проверяем что в первой колонке есть дата
                     cell_value = str(sheet.cell_value(row_idx, 0))
