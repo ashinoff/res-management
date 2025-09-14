@@ -597,15 +597,7 @@ const executeClearHistory = async () => {
         </>
       )}
       
-      <button 
-        className="clear-all-history-btn"
-        onClick={() => {
-          setClearHistoryType('all');
-          setShowClearHistoryModal(true);
-        }}
-      >
-        🧹 Очистить всю историю
-      </button>
+     
     </>
   )}
 </div>
