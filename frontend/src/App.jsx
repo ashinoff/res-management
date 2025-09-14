@@ -587,7 +587,7 @@ const executeClearHistory = async () => {
       </button>
       
       <button 
-        className="clear-history-btn"
+        className="clear-history-selected-btn"
         onClick={handleClearTpHistory}
       >
         🧹 Очистить историю ({selectedIds.length})
