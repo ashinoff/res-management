@@ -586,12 +586,7 @@ const executeClearHistory = async () => {
         🗑️ Удалить выбранные ({selectedIds.length})
       </button>
       
-      <button 
-        className="clear-history-selected-btn"
-        onClick={handleClearTpHistory}
-      >
-        🧹 Очистить историю ({selectedIds.length})
-      </button>
+      
     </>
   )}
 </div>
