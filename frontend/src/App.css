@@ -3614,3 +3614,41 @@ padding: 16px 12px;
 .btn-email:hover {
   background: #1d4ed8;
 }
+.tp-selection {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.tp-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.tp-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tp-checkbox input {
+  margin-right: 8px;
+}
+
+.clear-history-btn,
+.clear-all-history-btn {
+  background: #ff6b35;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.clear-history-btn:hover,
+.clear-all-history-btn:hover {
+  background: #e55a2b;
+}
