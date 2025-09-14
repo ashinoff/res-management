@@ -495,9 +495,10 @@ const handleSelectTp = (tpName) => {
   if (loading) return <div className="loading">Загрузка...</div>;
   
   const filteredData = networkData.filter(item => 
-    const uniqueTps = [...new Set(filteredData.map(item => item.tpName))];
+    
     !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
   );
+  const uniqueTps = [...new Set(filteredData.map(item => item.tpName))];
   
   // Функция экспорта в Excel
   const exportStructureToExcel = () => {
