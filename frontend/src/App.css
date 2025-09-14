@@ -3652,3 +3652,32 @@ padding: 16px 12px;
 .clear-all-history-btn:hover {
   background: #e55a2b;
 }
+.structure-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selected-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto; /* Прижимаем к правому краю */
+}
+
+.clear-history-selected-btn {
+  background-color: #dc3545; /* Красный цвет как у удаления */
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.clear-history-selected-btn:hover {
+  background-color: #c82333;
+}
