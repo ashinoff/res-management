@@ -3342,3 +3342,193 @@ app.get('/api/history/checks',
       res.status(500).json({ error: error.message });
     }
 });
+// Очистка истории по конкретному ПУ
+app.delete('/api/history/clear-pu/:puNumber', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { password } = req.body;
+      const { puNumber } = req.params;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      // Удаляем из PuUploadHistory
+      const uploadsDeleted = await PuUploadHistory.destroy({
+        where: { puNumber },
+        transaction
+      });
+      
+      // Удаляем из CheckHistory
+      const checksDeleted = await CheckHistory.destroy({
+        where: { puNumber },
+        transaction
+      });
+      
+      // Удаляем из PuStatus
+      await PuStatus.update(
+        { 
+          status: 'not_checked',
+          errorDetails: null,
+          lastCheck: null
+        },
+        { 
+          where: { puNumber },
+          transaction
+        }
+      );
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `История ПУ ${puNumber} очищена`,
+        deleted: {
+          uploads: uploadsDeleted,
+          checks: checksDeleted
+        }
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Очистка истории по ТП
+app.post('/api/history/clear-tp', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { password, tpNames, resId } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      // Находим все ПУ для выбранных ТП
+      const structures = await NetworkStructure.findAll({
+        where: {
+          tpName: tpNames,
+          resId: resId
+        }
+      });
+      
+      const puNumbers = [];
+      structures.forEach(s => {
+        if (s.startPu) puNumbers.push(s.startPu);
+        if (s.middlePu) puNumbers.push(s.middlePu);
+        if (s.endPu) puNumbers.push(s.endPu);
+      });
+      
+      if (puNumbers.length === 0) {
+        return res.json({
+          success: true,
+          message: 'Нет ПУ для очистки',
+          deleted: { uploads: 0, checks: 0 }
+        });
+      }
+      
+      // Удаляем историю
+      const uploadsDeleted = await PuUploadHistory.destroy({
+        where: { puNumber: puNumbers },
+        transaction
+      });
+      
+      const checksDeleted = await CheckHistory.destroy({
+        where: { puNumber: puNumbers },
+        transaction
+      });
+      
+      // Сбрасываем статусы
+      await PuStatus.update(
+        { 
+          status: 'not_checked',
+          errorDetails: null,
+          lastCheck: null
+        },
+        { 
+          where: { puNumber: puNumbers },
+          transaction
+        }
+      );
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `История для ${tpNames.length} ТП очищена`,
+        deleted: {
+          uploads: uploadsDeleted,
+          checks: checksDeleted,
+          puCount: puNumbers.length
+        }
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Очистка всей истории
+app.delete('/api/history/clear-all', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      // Удаляем всю историю
+      const uploadsDeleted = await PuUploadHistory.destroy({
+        where: {},
+        transaction
+      });
+      
+      const checksDeleted = await CheckHistory.destroy({
+        where: {},
+        transaction
+      });
+      
+      // Сбрасываем все статусы
+      await PuStatus.update(
+        { 
+          status: 'not_checked',
+          errorDetails: null,
+          lastCheck: null
+        },
+        { 
+          where: {},
+          transaction
+        }
+      );
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: 'Вся история очищена',
+        deleted: {
+          uploads: uploadsDeleted,
+          checks: checksDeleted
+        }
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      res.status(500).json({ error: error.message });
+    }
+});
