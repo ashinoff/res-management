@@ -196,6 +196,11 @@ function NetworkStructure({ selectedRes }) {
   const [uploadHistory, setUploadHistory] = useState([]);
   const [checkHistory, setCheckHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedTps, setSelectedTps] = useState([]);
+  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
+  const [clearHistoryPassword, setClearHistoryPassword] = useState('');
+  const [clearHistoryType, setClearHistoryType] = useState(''); // 'pu', 'tp', 'all'
+  const [clearHistoryPu, setClearHistoryPu] = useState('');
   
   // Для редактирования
   const [editingCell, setEditingCell] = useState(null);
@@ -373,6 +378,71 @@ function NetworkStructure({ selectedRes }) {
       alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
     }
   };
+
+// Функция очистки истории ПУ
+const handleClearPuHistory = async (puNumber) => {
+  setClearHistoryPu(puNumber);
+  setClearHistoryType('pu');
+  setShowClearHistoryModal(true);
+};
+
+// Функция очистки истории по ТП
+const handleClearTpHistory = async () => {
+  if (selectedTps.length === 0) {
+    alert('Выберите ТП для очистки истории');
+    return;
+  }
+  setClearHistoryType('tp');
+  setShowClearHistoryModal(true);
+};
+
+// Функция выполнения очистки
+const executeClearHistory = async () => {
+  try {
+    let response;
+    
+    if (clearHistoryType === 'pu') {
+      response = await api.delete(`/api/history/clear-pu/${clearHistoryPu}`, {
+        data: { password: clearHistoryPassword }
+      });
+    } else if (clearHistoryType === 'tp') {
+      response = await api.post('/api/history/clear-tp', {
+        password: clearHistoryPassword,
+        tpNames: selectedTps,
+        resId: selectedRes
+      });
+    } else if (clearHistoryType === 'all') {
+      response = await api.delete('/api/history/clear-all', {
+        data: { password: clearHistoryPassword }
+      });
+    }
+    
+    alert(response.data.message);
+    setShowClearHistoryModal(false);
+    setClearHistoryPassword('');
+    setSelectedTps([]);
+    
+    // Обновляем структуру
+    await loadNetworkStructure();
+    
+  } catch (error) {
+    alert('Ошибка: ' + (error.response?.data?.error || error.message));
+  }
+};
+
+// Функция выбора ТП
+const handleSelectTp = (tpName) => {
+  setSelectedTps(prev => {
+    if (prev.includes(tpName)) {
+      return prev.filter(tp => tp !== tpName);
+    } else {
+      return [...prev, tpName];
+    }
+  });
+};
+
+
+
   
   const renderPuCell = (item, position) => {
     const puNumber = position === 'start' ? item.startPu : 
@@ -425,6 +495,7 @@ function NetworkStructure({ selectedRes }) {
   if (loading) return <div className="loading">Загрузка...</div>;
   
   const filteredData = networkData.filter(item => 
+    const uniqueTps = [...new Set(filteredData.map(item => item.tpName))];
     !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
   );
   
@@ -499,37 +570,73 @@ function NetworkStructure({ selectedRes }) {
       )}
       
       <div className="structure-controls">
-        <div className="search-box">
-          <input 
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            name="network-search-tp"
-          />
-        </div>
-        
+  <div className="search-box">
+    <input 
+      type="text"
+      placeholder="Поиск по ТП..."
+      value={searchTp}
+      onChange={(e) => setSearchTp(e.target.value)}
+      className="search-input"
+    />
+  </div>
+  
+  <button 
+    className="export-btn" 
+    onClick={exportStructureToExcel}
+  >
+    📊 Экспорт в Excel
+  </button>
+  
+  {user.role === 'admin' && (
+    <>
+      {selectedIds.length > 0 && (
         <button 
-          className="export-btn" 
-          onClick={exportStructureToExcel}
+          className="delete-selected-btn"
+          onClick={() => setShowDeleteModal(true)}
         >
-          📊 Экспорт в Excel
+          🗑️ Удалить выбранные ({selectedIds.length})
         </button>
-        
-        {user.role === 'admin' && selectedIds.length > 0 && (
-          <button 
-            className="delete-selected-btn"
-            onClick={() => setShowDeleteModal(true)}
-          >
-            🗑️ Удалить выбранные ({selectedIds.length})
-          </button>
-        )}
-      </div>
+      )}
+      
+      {selectedTps.length > 0 && (
+        <button 
+          className="clear-history-btn"
+          onClick={handleClearTpHistory}
+        >
+          🧹 Очистить историю ТП ({selectedTps.length})
+        </button>
+      )}
+      
+      <button 
+        className="clear-all-history-btn"
+        onClick={() => {
+          setClearHistoryType('all');
+          setShowClearHistoryModal(true);
+        }}
+      >
+        🧹 Очистить всю историю
+      </button>
+    </>
+  )}
+</div>
+
+      {user.role === 'admin' && uniqueTps.length > 0 && (
+        <div className="tp-selection">
+          <h4>Выберите ТП для очистки истории:</h4>
+          <div className="tp-checkboxes">
+            {uniqueTps.map(tp => (
+              <label key={tp} className="tp-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedTps.includes(tp)}
+                  onChange={() => handleSelectTp(tp)}
+                />
+                <span>{tp}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="status-legend">
         <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
@@ -610,6 +717,7 @@ function NetworkStructure({ selectedRes }) {
           uploadHistory={uploadHistory}
           checkHistory={checkHistory}
           loading={historyLoading}
+          handleClearPuHistory={handleClearPuHistory}
         />
       )}
       
@@ -652,6 +760,49 @@ function NetworkStructure({ selectedRes }) {
           </div>
         </div>
       )}
+
+{/* Модальное окно очистки истории */}
+{showClearHistoryModal && (
+  <div className="modal-backdrop" onClick={() => setShowClearHistoryModal(false)}>
+    <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Подтверждение очистки истории</h3>
+        <button className="close-btn" onClick={() => setShowClearHistoryModal(false)}>✕</button>
+      </div>
+      <div className="modal-body">
+        <p>
+          {clearHistoryType === 'pu' && `Вы собираетесь очистить всю историю для ПУ ${clearHistoryPu}`}
+          {clearHistoryType === 'tp' && `Вы собираетесь очистить историю для ${selectedTps.length} ТП`}
+          {clearHistoryType === 'all' && 'Вы собираетесь очистить ВСЮ историю системы'}
+        </p>
+        <p className="warning">⚠️ Будут удалены все записи о загрузках и проверках!</p>
+        <div className="form-group">
+          <label>Введите пароль администратора:</label>
+          <input
+            type="password"
+            value={clearHistoryPassword}
+            onChange={(e) => setClearHistoryPassword(e.target.value)}
+            placeholder="Пароль"
+            autoFocus
+          />
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="cancel-btn" onClick={() => setShowClearHistoryModal(false)}>
+          Отмена
+        </button>
+        <button 
+          className="danger-btn" 
+          onClick={executeClearHistory}
+          disabled={!clearHistoryPassword}
+        >
+          Очистить историю
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+      
     </div>
   );
 }
@@ -3798,8 +3949,10 @@ function ExtendedPuModal({
   setActiveTab, 
   uploadHistory, 
   checkHistory, 
-  loading 
+  loading,
+  handleClearPuHistory
 }) {
+  const { user } = useContext(AuthContext);
   if (!isOpen || !puData) return null;
   
   // Парсим детали ошибки для отображения фаз
@@ -4040,6 +4193,17 @@ function ExtendedPuModal({
         
         <div className="modal-footer">
           <button className="action-btn" onClick={onClose}>Закрыть</button>
+          {user.role === 'admin' && (
+            <button 
+              className="danger-btn" 
+              onClick={() => {
+                onClose();
+                handleClearPuHistory(puData.puNumber);
+              }}
+            >
+              🗑️ Очистить историю
+            </button>
+          )}
         </div>
       </div>
     </div>
