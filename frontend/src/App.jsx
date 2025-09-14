@@ -196,7 +196,6 @@ function NetworkStructure({ selectedRes }) {
   const [uploadHistory, setUploadHistory] = useState([]);
   const [checkHistory, setCheckHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [selectedTps, setSelectedTps] = useState([]);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [clearHistoryPassword, setClearHistoryPassword] = useState('');
   const [clearHistoryType, setClearHistoryType] = useState(''); // 'pu', 'tp', 'all'
@@ -388,14 +387,14 @@ const handleClearPuHistory = async (puNumber) => {
 
 // Функция очистки истории по ТП
 const handleClearTpHistory = async () => {
-  if (selectedTps.length === 0) {
-    alert('Выберите ТП для очистки истории');
+  if (selectedIds.length === 0) {
+    alert('Выберите строки для очистки истории');
     return;
   }
   setClearHistoryType('tp');
   setShowClearHistoryModal(true);
 };
-
+  
 // Функция выполнения очистки
 const executeClearHistory = async () => {
   try {
@@ -406,21 +405,24 @@ const executeClearHistory = async () => {
         data: { password: clearHistoryPassword }
       });
     } else if (clearHistoryType === 'tp') {
-      response = await api.post('/api/history/clear-tp', {
-        password: clearHistoryPassword,
-        tpNames: selectedTps,
-        resId: selectedRes
-      });
-    } else if (clearHistoryType === 'all') {
-      response = await api.delete('/api/history/clear-all', {
-        data: { password: clearHistoryPassword }
-      });
-    }
+  // Собираем уникальные ТП из выбранных строк
+  const selectedTps = [...new Set(
+    filteredData
+      .filter(item => selectedIds.includes(item.id))
+      .map(item => item.tpName)
+  )];
+  
+  response = await api.post('/api/history/clear-tp', {
+    password: clearHistoryPassword,
+    tpNames: selectedTps,
+    resId: selectedRes
+  });
+}
     
     alert(response.data.message);
     setShowClearHistoryModal(false);
     setClearHistoryPassword('');
-    setSelectedTps([]);
+    setSelectedIds([]);
     
     // Обновляем структуру
     await loadNetworkStructure();
@@ -429,19 +431,6 @@ const executeClearHistory = async () => {
     alert('Ошибка: ' + (error.response?.data?.error || error.message));
   }
 };
-
-// Функция выбора ТП
-const handleSelectTp = (tpName) => {
-  setSelectedTps(prev => {
-    if (prev.includes(tpName)) {
-      return prev.filter(tp => tp !== tpName);
-    } else {
-      return [...prev, tpName];
-    }
-  });
-};
-
-
 
   
   const renderPuCell = (item, position) => {
@@ -591,21 +580,21 @@ const handleSelectTp = (tpName) => {
   {user.role === 'admin' && (
     <>
       {selectedIds.length > 0 && (
-        <button 
-          className="delete-selected-btn"
-          onClick={() => setShowDeleteModal(true)}
-        >
-          🗑️ Удалить выбранные ({selectedIds.length})
-        </button>
-      )}
-      
-      {selectedTps.length > 0 && (
-        <button 
-          className="clear-history-btn"
-          onClick={handleClearTpHistory}
-        >
-          🧹 Очистить историю ТП ({selectedTps.length})
-        </button>
+        <>
+          <button 
+            className="delete-selected-btn"
+            onClick={() => setShowDeleteModal(true)}
+          >
+            🗑️ Удалить выбранные ({selectedIds.length})
+          </button>
+          
+          <button 
+            className="clear-history-btn"
+            onClick={handleClearTpHistory}
+          >
+            🧹 Очистить историю выбранных ({selectedIds.length})
+          </button>
+        </>
       )}
       
       <button 
@@ -621,23 +610,7 @@ const handleSelectTp = (tpName) => {
   )}
 </div>
 
-      {user.role === 'admin' && uniqueTps.length > 0 && (
-        <div className="tp-selection">
-          <h4>Выберите ТП для очистки истории:</h4>
-          <div className="tp-checkboxes">
-            {uniqueTps.map(tp => (
-              <label key={tp} className="tp-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selectedTps.includes(tp)}
-                  onChange={() => handleSelectTp(tp)}
-                />
-                <span>{tp}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+     
       
       <div className="status-legend">
         <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
@@ -773,7 +746,7 @@ const handleSelectTp = (tpName) => {
       <div className="modal-body">
         <p>
           {clearHistoryType === 'pu' && `Вы собираетесь очистить всю историю для ПУ ${clearHistoryPu}`}
-          {clearHistoryType === 'tp' && `Вы собираетесь очистить историю для ${selectedTps.length} ТП`}
+          {clearHistoryType === 'tp' && `Вы собираетесь очистить историю для выбранных строк (${selectedIds.length} записей)`}
           {clearHistoryType === 'all' && 'Вы собираетесь очистить ВСЮ историю системы'}
         </p>
         <p className="warning">⚠️ Будут удалены все записи о загрузках и проверках!</p>
