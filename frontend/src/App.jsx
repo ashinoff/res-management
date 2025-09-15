@@ -241,14 +241,18 @@ function NetworkStructure({ selectedRes }) {
   }, [loadNetworkStructure]);
 
   useEffect(() => {
+  const contentElement = document.querySelector('.content');
+  
   const handleScroll = () => {
-    // Показывать кнопку если прокрутили больше 300px
-    const scrolled = document.documentElement.scrollTop || document.body.scrollTop;
-    setShowScrollTop(scrolled > 300);
+    if (contentElement) {
+      setShowScrollTop(contentElement.scrollTop > 300);
+    }
   };
   
-  window.addEventListener('scroll', handleScroll);
-  return () => window.removeEventListener('scroll', handleScroll);
+  if (contentElement) {
+    contentElement.addEventListener('scroll', handleScroll);
+    return () => contentElement.removeEventListener('scroll', handleScroll);
+  }
 }, []);
 
   const getStatusColor = (status) => {
@@ -595,9 +599,13 @@ const executeClearHistory = async () => {
     
     <button 
       className="refresh-btn" 
-      onClick={loadNetworkStructure}
+       onClick={() => {
+        setLoading(true);  // Показать загрузку
+        loadNetworkStructure();
+      }}
+      disabled={loading}
     >
-       Обновить структуру
+      {loading ? '⏳ Обновление...' : 'Обновить структуру'}
     </button>
     
     <button 
@@ -779,13 +787,18 @@ const executeClearHistory = async () => {
 {/* ДОБАВЬ КНОПКУ СЮДА: */}
       {showScrollTop && (
         <button 
-          className="scroll-to-top"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          title="Наверх"
-        >
-          ↑
-        </button>
-      )}
+    className="scroll-to-top"
+    onClick={() => {
+      const contentElement = document.querySelector('.content');
+      if (contentElement) {
+        contentElement.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }}
+    title="Наверх"
+  >
+    ↑
+  </button>
+)}
       
     </div>
   );
