@@ -201,6 +201,7 @@ function NetworkStructure({ selectedRes }) {
   const [clearHistoryType, setClearHistoryType] = useState(''); // 'pu', 'tp', 'all'
   const [clearHistoryPu, setClearHistoryPu] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(null);
   
   // Для редактирования
   const [editingCell, setEditingCell] = useState(null);
@@ -499,10 +500,36 @@ const executeClearHistory = async () => {
   
   if (loading) return <div className="loading">Загрузка...</div>;
   
-  const filteredData = networkData.filter(item => 
+  const filteredData = networkData.filter(item => {
+  // Фильтр по ТП
+  if (searchTp && !item.tpName.toLowerCase().includes(searchTp.toLowerCase())) {
+    return false;
+  }
+  
+  // Фильтр по статусу
+  if (statusFilter) {
+    // Проверяем есть ли хотя бы один ПУ с нужным статусом
+    const hasStatus = item.PuStatuses?.some(status => {
+      if (statusFilter === 'empty') {
+        // Проверяем пустые ячейки
+        const hasStart = item.startPu;
+        const hasMiddle = item.middlePu;
+        const hasEnd = item.endPu;
+        return !hasStart || !hasMiddle || !hasEnd;
+      }
+      return status.status === statusFilter;
+    });
     
-    !searchTp || item.tpName.toLowerCase().includes(searchTp.toLowerCase())
-  );
+    // Также проверяем пустые ячейки если нет статусов
+    if (!hasStatus && statusFilter === 'empty') {
+      return !item.startPu || !item.middlePu || !item.endPu;
+    }
+    
+    return hasStatus;
+  }
+  
+  return true;
+});
   const uniqueTps = [...new Set(filteredData.map(item => item.tpName))];
   
   // Функция экспорта в Excel
@@ -620,12 +647,37 @@ const executeClearHistory = async () => {
      
       
       <div className="status-legend">
-        <div><span className="status-box status-ok"></span> Проверен без ошибок</div>
-        <div><span className="status-box status-error"></span> Проверен с ошибками</div>
-        <div><span className="status-box status-unchecked"></span> Не проверен</div>
-        <div><span className="status-box status-pending"></span> Ожидает перепроверки</div>
-        <div><span className="status-box status-empty">X</span> Пустая ячейка</div>
-      </div>
+  <div 
+    className={`legend-item ${statusFilter === 'checked_ok' ? 'active' : ''}`}
+    onClick={() => setStatusFilter(statusFilter === 'checked_ok' ? null : 'checked_ok')}
+  >
+    <span className="status-box status-ok"></span> Проверен без ошибок
+  </div>
+  <div 
+    className={`legend-item ${statusFilter === 'checked_error' ? 'active' : ''}`}
+    onClick={() => setStatusFilter(statusFilter === 'checked_error' ? null : 'checked_error')}
+  >
+    <span className="status-box status-error"></span> Проверен с ошибками
+  </div>
+  <div 
+    className={`legend-item ${statusFilter === 'not_checked' ? 'active' : ''}`}
+    onClick={() => setStatusFilter(statusFilter === 'not_checked' ? null : 'not_checked')}
+  >
+    <span className="status-box status-unchecked"></span> Не проверен
+  </div>
+  <div 
+    className={`legend-item ${statusFilter === 'pending_recheck' ? 'active' : ''}`}
+    onClick={() => setStatusFilter(statusFilter === 'pending_recheck' ? null : 'pending_recheck')}
+  >
+    <span className="status-box status-pending"></span> Ожидает перепроверки
+  </div>
+  <div 
+    className={`legend-item ${statusFilter === 'empty' ? 'active' : ''}`}
+    onClick={() => setStatusFilter(statusFilter === 'empty' ? null : 'empty')}
+  >
+    <span className="status-box status-empty">X</span> Пустая ячейка
+  </div>
+</div>
       
       <div className="structure-table">
         <table>
