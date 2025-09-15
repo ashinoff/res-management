@@ -651,31 +651,25 @@ const executeClearHistory = async () => {
     className={`legend-item ${statusFilter === 'checked_ok' ? 'active' : ''}`}
     onClick={() => setStatusFilter(statusFilter === 'checked_ok' ? null : 'checked_ok')}
   >
-    <span className="status-box status-ok"></span> Проверен без ошибок
+    <span className="status-box status-ok"></span> Проверен без отклонений
   </div>
   <div 
     className={`legend-item ${statusFilter === 'checked_error' ? 'active' : ''}`}
     onClick={() => setStatusFilter(statusFilter === 'checked_error' ? null : 'checked_error')}
   >
-    <span className="status-box status-error"></span> Проверен с ошибками
-  </div>
-  <div 
-    className={`legend-item ${statusFilter === 'not_checked' ? 'active' : ''}`}
-    onClick={() => setStatusFilter(statusFilter === 'not_checked' ? null : 'not_checked')}
-  >
-    <span className="status-box status-unchecked"></span> Не проверен
+    <span className="status-box status-error"></span> Проверен с отклонениями
   </div>
   <div 
     className={`legend-item ${statusFilter === 'pending_recheck' ? 'active' : ''}`}
     onClick={() => setStatusFilter(statusFilter === 'pending_recheck' ? null : 'pending_recheck')}
   >
-    <span className="status-box status-pending"></span> Ожидает перепроверки
+    <span className="status-box status-pending"></span> Ожидает проверки
   </div>
-  <div 
-    className={`legend-item ${statusFilter === 'empty' ? 'active' : ''}`}
-    onClick={() => setStatusFilter(statusFilter === 'empty' ? null : 'empty')}
-  >
-    <span className="status-box status-empty">X</span> Пустая ячейка
+  <div className="legend-item disabled">
+    <span className="status-box status-unchecked"></span> Не проверен
+  </div>
+  <div className="legend-item disabled">
+    <span className="status-box status-empty">X</span> ПУ не задан
   </div>
 </div>
       
