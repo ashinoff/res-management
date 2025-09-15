@@ -200,6 +200,7 @@ function NetworkStructure({ selectedRes }) {
   const [clearHistoryPassword, setClearHistoryPassword] = useState('');
   const [clearHistoryType, setClearHistoryType] = useState(''); // 'pu', 'tp', 'all'
   const [clearHistoryPu, setClearHistoryPu] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   
   // Для редактирования
   const [editingCell, setEditingCell] = useState(null);
@@ -238,6 +239,17 @@ function NetworkStructure({ selectedRes }) {
       window.removeEventListener('structureDeleted', handleUpdate);
     };
   }, [loadNetworkStructure]);
+
+  useEffect(() => {
+  const handleScroll = () => {
+    // Показывать кнопку если прокрутили больше 300px
+    const scrolled = document.documentElement.scrollTop || document.body.scrollTop;
+    setShowScrollTop(scrolled > 300);
+  };
+  
+  window.addEventListener('scroll', handleScroll);
+  return () => window.removeEventListener('scroll', handleScroll);
+}, []);
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -763,6 +775,17 @@ const executeClearHistory = async () => {
     </div>
   </div>
 )}
+
+{/* ДОБАВЬ КНОПКУ СЮДА: */}
+      {showScrollTop && (
+        <button 
+          className="scroll-to-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          title="Наверх"
+        >
+          ↑
+        </button>
+      )}
       
     </div>
   );
