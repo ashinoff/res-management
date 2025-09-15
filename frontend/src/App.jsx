@@ -580,6 +580,13 @@ const executeClearHistory = async () => {
   )}
   
   <button 
+    className="refresh-btn" 
+    onClick={loadNetworkStructure}
+  >
+    🔄 Обновить структуру
+  </button>
+  
+  <button 
     className="export-btn" 
     onClick={exportStructureToExcel}
   >
