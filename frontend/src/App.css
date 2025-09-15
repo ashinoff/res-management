@@ -453,7 +453,7 @@ button:disabled {
 /* Заголовки таблицы */
 .structure-table thead {
   position: sticky;
-  top: 70px;
+  top: 58px;
   z-index: 90;
   background: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
