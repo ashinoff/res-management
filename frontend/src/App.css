@@ -1455,6 +1455,7 @@ text-align: left;
 /* Поиск */
 .search-box {
   position: relative;
+  margin-right: -100px;
 }
 
 .search-input {
@@ -1744,6 +1745,7 @@ vertical-align: middle !important;  /* Центр по вертикали */
   transition: all 0.3s ease;
   width: auto;
   text-transform: none;
+  margin-left: -10px;
 }
 
 .delete-selected-btn:hover {
@@ -2398,22 +2400,7 @@ padding: 16px 12px;
 .btn-delete-small:hover {
   background: #e53e3e;
 }
-.login-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* Фоновое изображение - замените URL на свое */
-  background-image: url('/images/login-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  /* Градиент от прозрачного к темно-синему */
-  filter: brightness(0.7);
-  z-index: 1;
-}
+
 .login-container::after {
   content: '';
   position: absolute;
@@ -3680,4 +3667,65 @@ padding: 16px 12px;
 
 .clear-history-selected-btn:hover {
   background-color: #dc3545;
+}
+.structure-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  margin-right: auto;
+  flex-wrap: wrap;
+}
+.refresh-btn {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: auto;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.refresh-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.refresh-btn:active {
+  transform: translateY(0);
+}
+.action-buttons-group {
+  display: flex;
+  gap: 10px; /* Фиксированное расстояние между кнопками */
+  margin-left: auto; /* Прижать группу вправо */
+}
+
+/* Убедись что у .structure-controls есть: */
+.structure-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.action-buttons-group {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* Сделать все три кнопки одинакового размера */
+.action-buttons-group button {
+  padding: 10px 20px !important;
+  font-size: 14px !important;
+  min-width: 160px; /* минимальная ширина для единообразия */
+  height: 40px; /* фиксированная высота */
+  white-space: nowrap;
 }
