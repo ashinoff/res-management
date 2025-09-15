@@ -3820,3 +3820,26 @@ padding: 16px 12px;
   height: auto; /* изменить с 70px */
   gap: 15px;
 }
+.legend-item-static {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: default; /* обычный курсор */
+  opacity: 0.8; /* чуть прозрачнее */
+}
+
+/* Убираем эффекты при наведении */
+.legend-item-static:hover {
+  transform: none;
+  background: none;
+}
+.legend-item.disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.legend-item.disabled:hover {
+  background: none;
+  transform: none;
+}
