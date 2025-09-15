@@ -559,7 +559,7 @@ const executeClearHistory = async () => {
         <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
       )}
       
-      <div className="structure-controls">
+<div className="structure-controls">
   <div className="search-box">
     <input 
       type="text"
@@ -570,25 +570,21 @@ const executeClearHistory = async () => {
     />
   </div>
   
+  {user.role === 'admin' && selectedIds.length > 0 && (
+    <button 
+      className="delete-selected-btn"
+      onClick={() => setShowDeleteModal(true)}
+    >
+      🗑️ Удалить выбранные ({selectedIds.length})
+    </button>
+  )}
+  
   <button 
     className="export-btn" 
     onClick={exportStructureToExcel}
   >
     📊 Экспорт в Excel
   </button>
-  
-  {user.role === 'admin' && selectedIds.length > 0 && (
-    <>
-      <button 
-        className="delete-selected-btn"
-        onClick={() => setShowDeleteModal(true)}
-      >
-        🗑️ Удалить выбранные ({selectedIds.length})
-      </button>
-      
-      
-    </>
-  )}
 </div>
 
      
