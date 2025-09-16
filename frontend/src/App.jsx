@@ -599,8 +599,11 @@ const executeClearHistory = async () => {
     <div className="network-structure">
       <h2>Структура сети</h2>
       {user.role === 'admin' && (
-        <p className="edit-hint">💡 Двойной клик по номеру счетчика для редактирования</p>
-      )}
+  <p className="edit-hint">
+    <img src="/icons/important.png" alt="Важно" style={{width: 36, height: 36, verticalAlign: 'middle', marginRight: 5}} />
+      Двойной клик по номеру счетчика для редактирования
+  </p>
+)}
       
 
 <div className="structure-controls">
@@ -950,31 +953,31 @@ function FileUpload({ selectedRes }) {
   const [dragActive, setDragActive] = useState(false);
 
   const fileTypes = [
-    { 
-      id: 'rim_single', 
-      label: 'Счетчики РИМ (отдельный файл)',
-      icon: '📄',
-      description: 'Один файл = один ПУ'
-    },
-    { 
-      id: 'rim_mass', 
-      label: 'Счетчики РИМ (массовая выгрузка)',
-      icon: '📦',
-      description: 'Несколько ПУ в одном файле'
-    },
-    { 
-      id: 'nartis', 
-      label: 'Счетчики Нартис',
-      icon: '⚡',
-      description: 'Формат Нартис'
-    },
-    { 
-      id: 'energomera', 
-      label: 'Счетчики Энергомера',
-      icon: '🔌',
-      description: 'Формат Энергомера'
-    }
-  ];
+  { 
+    id: 'rim_single', 
+    label: 'Счетчики РИМ (отдельный файл)',
+    icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
+    description: 'Один файл = один ПУ'
+  },
+  { 
+    id: 'rim_mass', 
+    label: 'Счетчики РИМ (массовая выгрузка)',
+    icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
+    description: 'Несколько ПУ в одном файле'
+  },
+  { 
+    id: 'nartis', 
+    label: 'Счетчики Нартис',
+    icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
+    description: 'Формат Нартис'
+  },
+  { 
+    id: 'energomera', 
+    label: 'Счетчики Энергомера',
+    icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
+    description: 'Формат Энергомера'
+  }
+];
 
   const handleFileSelect = (e) => {
     setFiles(Array.from(e.target.files));
@@ -1142,22 +1145,26 @@ for (let i = 0; i < files.length; i++) {
       {/* Информационная панель */}
       <div className="upload-info-panel">
         <div className="info-card">
-          <div className="info-icon">📍</div>
-          <div className="info-content">
-            <h4>Текущий РЭС</h4>
-            <p>{user.role === 'admin' && selectedRes 
-              ? `РЭС ID: ${selectedRes}`
-              : user.resName || 'Ваш РЭС'
-            }</p>
-          </div>
-        </div>
+  <div className="info-icon">
+    <img src="/icons/place.png" alt="Местоположение" style={{width: 72, height: 72}} />
+  </div>
+  <div className="info-content">
+    <h4>Текущий РЭС</h4>
+    <p>{user.role === 'admin' && selectedRes 
+      ? `РЭС ID: ${selectedRes}`
+      : user.resName || 'Ваш РЭС'
+    }</p>
+  </div>
+</div>
         <div className="info-card">
-          <div className="info-icon">💡</div>
-          <div className="info-content">
-            <h4>ВАЖНО!!!</h4>
-            <p>Имя файла должно совпадать с номером ПУ</p>
-          </div>
-        </div>
+  <div className="info-icon">
+    <img src="/icons/important.png" alt="Важно" style={{width: 60, height: 60}} />
+  </div>
+  <div className="info-content">
+    <h4>ВАЖНО!!!</h4>
+    <p>Имя файла должно совпадать с номером ПУ</p>
+  </div>
+</div>
       </div>
 
       {/* Выбор типа файла */}
@@ -2607,9 +2614,12 @@ const handleSendEmail = async () => {
       </div>
       
       {problemVLs.length === 0 ? (
-        <div className="no-data">
-          <p>🎉 Отлично! Нет проблемных ВЛ</p>
-        </div>
+  <div className="no-data">
+    <p>
+      <img src="/icons/ok.png" alt="OK" style={{width: 110, height: 140, verticalAlign: 'middle', marginRight: 8}} />
+      Проблемных ВЛ нет
+    </p>
+  </div>
       ) : (
         <div className="problem-list">
           {problemVLs.map(problem => (
