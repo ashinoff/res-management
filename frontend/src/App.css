@@ -3875,6 +3875,7 @@ padding: 16px 12px;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
   margin-bottom: 40px;
+  justify-content: center;
 }
 
 .info-card {
@@ -4089,7 +4090,7 @@ padding: 16px 12px;
 
 .pu-number {
   font-size: 14px;
-  color: #667eea;
+  color: #4a5568;
   font-weight: 500;
   margin: 0;
 }
@@ -4164,4 +4165,30 @@ padding: 16px 12px;
 
 .btn-large span {
   font-size: 24px;
+}
+/* Стиль для кнопки выбора файла */
+.drop-zone label.btn-primary {
+  display: inline-block;
+  padding: 16px 32px;
+  background: #667eea;  /* Простой синий цвет */
+  color: white;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  font-size: 18px;  /* Увеличенный шрифт */
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: none;
+}
+
+/* Эффект при наведении */
+.drop-zone label.btn-primary:hover {
+  background: #4c51bf;  /* Более темный синий */
+  border-color: #4c51bf;
+  transform: translateY(-1px);
+}
+
+/* Эффект при нажатии */
+.drop-zone label.btn-primary:active {
+  transform: translateY(0);
 }
