@@ -4192,3 +4192,31 @@ padding: 16px 12px;
 .drop-zone label.btn-primary:active {
   transform: translateY(0);
 }
+/* Стили для чекбоксов в уведомлениях */
+.notification-checkbox {
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.select-all-wrapper {
+  padding: 10px 20px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-compact.selected {
+  background: #e3f2fd;
+  border-left-color: #2196f3;
+}
+
+/* Обновите notification-narrow-content для правильного выравнивания с чекбоксом */
+.notification-narrow-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0;
+}
