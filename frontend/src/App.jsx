@@ -4542,14 +4542,14 @@ function SystemHistory() {
   
   // Фильтры
   const [filters, setFilters] = useState({
-    puNumber: '',
-    tpName: '',
-    resId: '',
-    dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    dateTo: new Date().toISOString().split('T')[0],
-    fileType: '',
-    status: ''
-  });
+  puNumber: '',
+  tpName: '',
+  resId: user.role === 'admin' ? '' : user.resId, // ИЗМЕНЕНО - не-админы видят только свой РЭС
+  dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  dateTo: new Date().toISOString().split('T')[0],
+  fileType: '',
+  status: ''
+});
 
   useEffect(() => {
     loadResList();
@@ -4569,40 +4569,41 @@ function SystemHistory() {
   }, [activeTab, currentPage, filters]);
   
   const loadData = async () => {
-    setLoading(true);
-    try {
-      if (activeTab === 'uploads') {
-        const params = new URLSearchParams({
-          page: currentPage,
-          limit: 50,
-          ...filters
-        });
-        
-        const response = await api.get(`/api/history/uploads?${params}`);
-        setUploads(response.data.uploads);
-        setTotalPages(response.data.totalPages);
-      } else {
-        const params = new URLSearchParams({
-          page: currentPage,
-          limit: 50,
-          puNumber: filters.puNumber, // ДОБАВИТЬ
-          resId: filters.resId,       // ДОБАВИТЬ
-          tpName: filters.tpName,
-          dateFrom: filters.dateFrom,
-          dateTo: filters.dateTo,
-          status: filters.status
-        });
-        
-        const response = await api.get(`/api/history/checks?${params}`);
-        setChecks(response.data.checks);
-        setTotalPages(response.data.totalPages);
-      }
-    } catch (error) {
-      console.error('Error loading history:', error);
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    if (activeTab === 'uploads') {
+      const params = new URLSearchParams({
+        page: currentPage,
+        limit: 50,
+        ...filters,
+        resId: user.role === 'admin' ? filters.resId : user.resId // Принудительно для не-админов
+      });
+      
+      const response = await api.get(`/api/history/uploads?${params}`);
+      setUploads(response.data.uploads);
+      setTotalPages(response.data.totalPages);
+    } else {
+      const params = new URLSearchParams({
+        page: currentPage,
+        limit: 50,
+        puNumber: filters.puNumber,
+        resId: user.role === 'admin' ? filters.resId : user.resId, // Принудительно для не-админов
+        tpName: filters.tpName,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        status: filters.status
+      });
+      
+      const response = await api.get(`/api/history/checks?${params}`);
+      setChecks(response.data.checks);
+      setTotalPages(response.data.totalPages);
     }
-  };
+  } catch (error) {
+    console.error('Error loading history:', error);
+  } finally {
+    setLoading(false);
+  }
+};
   
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -4672,6 +4673,13 @@ function SystemHistory() {
   return (
     <div className="system-history">
       <h2>История системы</h2>
+
+      {user.role !== 'admin' && (
+    <div className="res-indicator">
+      <span>Показаны данные для: <strong>{user.resName}</strong></span>
+    </div>
+  )}
+
       
       <div className="history-tabs">
         <button 
