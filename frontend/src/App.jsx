@@ -1302,6 +1302,10 @@ function Notifications({ filterType, onSectionChange }) {
   const [uploadingPu, setUploadingPu] = useState(null);
   const [attachedFiles, setAttachedFiles] = useState([]); // ДОБАВЛЕНО!
   const [submitting, setSubmitting] = useState(false);
+  const [selectedNotificationIds, setSelectedNotificationIds] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeletePassword, setBulkDeletePassword] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
@@ -1341,6 +1345,21 @@ function Notifications({ filterType, onSectionChange }) {
       clearInterval(interval);
     };
   }, [loadNotifications]);
+
+  useEffect(() => {
+    const contentElement = document.querySelector('.content');
+    
+    const handleScroll = () => {
+      if (contentElement) {
+        setShowScrollTop(contentElement.scrollTop > 300);
+      }
+    };
+    
+    if (contentElement) {
+      contentElement.addEventListener('scroll', handleScroll);
+      return () => contentElement.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
 
   const markAsRead = async () => {
   try {
@@ -1415,6 +1434,42 @@ function Notifications({ filterType, onSectionChange }) {
       setDeleteNotificationId(null);
       
       // ВАЖНО: Автообновление после удаления!
+      await loadNotifications();
+      
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleSelectNotification = (id) => {
+    setSelectedNotificationIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedNotificationIds.length === filteredNotifications.length) {
+      setSelectedNotificationIds([]);
+    } else {
+      setSelectedNotificationIds(filteredNotifications.map(n => n.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      await api.post('/api/notifications/delete-bulk', {
+        ids: selectedNotificationIds,
+        password: bulkDeletePassword
+      });
+      
+      alert(`Удалено уведомлений: ${selectedNotificationIds.length}`);
+      setShowBulkDeleteModal(false);
+      setBulkDeletePassword('');
+      setSelectedNotificationIds([]);
       await loadNotifications();
       
     } catch (error) {
@@ -1556,24 +1611,44 @@ function Notifications({ filterType, onSectionChange }) {
 
   return (
     <div className="notifications">
-      <h2>{title}</h2>
-      
-      <div className="notifications-controls">
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="Поиск по ТП..."
-            value={searchTp}
-            onChange={(e) => setSearchTp(e.target.value)}
-            className="search-input"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            name="notifications-search-tp"
-          />
-        </div>
-      </div>
+  <h2>{title}</h2>
+  
+  <div className="notifications-controls">
+    <div className="search-box">
+      <input
+        type="text"
+        placeholder="Поиск по ТП..."
+        value={searchTp}
+        onChange={(e) => setSearchTp(e.target.value)}
+        className="search-input"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck="false"
+        name="notifications-search-tp"
+      />
+    </div>
+    
+    {user.role === 'admin' && selectedNotificationIds.length > 0 && (
+      <button 
+        className="delete-selected-btn"
+        onClick={() => setShowBulkDeleteModal(true)}
+      >
+        Удалить выбранные ({selectedNotificationIds.length})
+      </button>
+    )}
+  </div>
+  
+  {user.role === 'admin' && (
+    <div className="select-all-wrapper">
+      <input 
+        type="checkbox"
+        checked={selectedNotificationIds.length === filteredNotifications.length && filteredNotifications.length > 0}
+        onChange={handleSelectAll}
+      />
+      <span>Выбрать все</span>
+    </div>
+  )}
       
       <div className="notifications-list">
         {filteredNotifications.map(notif => (
@@ -1589,6 +1664,18 @@ function Notifications({ filterType, onSectionChange }) {
                 
                 return (
                   <div className="notification-narrow-content">
+
+                    {user.role === 'admin' && (
+          <input 
+            type="checkbox"
+            className="notification-checkbox"
+            checked={selectedNotificationIds.includes(notif.id)}
+            onChange={() => handleSelectNotification(notif.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+
+                    
                     <div className="notification-phases">
                       <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
                       <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
@@ -1662,6 +1749,18 @@ function Notifications({ filterType, onSectionChange }) {
                 const data = JSON.parse(notif.message);
                 return (
                   <div className="notification-compact-content askue">
+                    {user.role === 'admin' && (
+          <input 
+            type="checkbox"
+            className="notification-checkbox"
+            checked={selectedNotificationIds.includes(notif.id)}
+            onChange={() => handleSelectNotification(notif.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+
+
+                    
                     <div className="notification-main-info">
                       <div className="notification-location">
                         <span className="label">ТП:</span> {data.tpName} | 
@@ -2040,9 +2139,64 @@ function Notifications({ filterType, onSectionChange }) {
           </div>
         </div>
       )}
+
+      {/* ДОБАВЬТЕ ЭТО МОДАЛЬНОЕ ОКНО: */}
+      {showBulkDeleteModal && (
+        <div className="modal-backdrop" onClick={() => {setShowBulkDeleteModal(false); setBulkDeletePassword('');}}>
+          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение удаления</h3>
+              <button className="close-btn" onClick={() => {setShowBulkDeleteModal(false); setBulkDeletePassword('');}}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Вы собираетесь удалить {selectedNotificationIds.length} уведомлений.</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={bulkDeletePassword}
+                  onChange={(e) => setBulkDeletePassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => {setShowBulkDeleteModal(false); setBulkDeletePassword('');}}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleBulkDelete}
+                disabled={!bulkDeletePassword}
+              >
+                Удалить выбранные
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ДОБАВЬТЕ КНОПКУ ПРОКРУТКИ: */}
+      {showScrollTop && (
+        <button 
+          className="scroll-to-top"
+          onClick={() => {
+            const contentElement = document.querySelector('.content');
+            if (contentElement) {
+              contentElement.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          title="Наверх"
+        >
+          ↑
+        </button>
+      )}
     </div>
   );
 }
+    
 
 // =====================================================
 // КОМПОНЕНТ ОТЧЕТОВ
