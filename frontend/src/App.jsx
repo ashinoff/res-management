@@ -955,15 +955,9 @@ function FileUpload({ selectedRes }) {
   const fileTypes = [
   { 
     id: 'rim_single', 
-    label: 'Счетчики РИМ (отдельный файл)',
+    label: 'Счетчики РИМ',
     icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
     description: 'Один файл = один ПУ'
-  },
-  { 
-    id: 'rim_mass', 
-    label: 'Счетчики РИМ (массовая выгрузка)',
-    icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
-    description: 'Несколько ПУ в одном файле'
   },
   { 
     id: 'nartis', 
