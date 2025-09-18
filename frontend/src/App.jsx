@@ -152,7 +152,6 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'problem_vl', label: 'Проблемные ВЛ', roles: ['admin'], badge: notificationCounts.problem_vl },
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'history', label: 'История системы', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'reports', label: 'Отчеты', roles: ['admin'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
