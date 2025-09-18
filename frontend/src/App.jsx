@@ -153,6 +153,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'history', label: 'История системы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin'] },
+    { id: 'reports', label: 'Отчеты', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'settings', label: 'Настройки', roles: ['admin'] }
   ];
 
@@ -2205,6 +2206,7 @@ function Notifications({ filterType, onSectionChange }) {
 function Reports() {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState(null);
+  const { user } = useContext(AuthContext);
 
   const [reportType, setReportType] = useState('pending_work');
   const [reportData, setReportData] = useState([]);
@@ -2225,25 +2227,28 @@ function Reports() {
   }, [reportType, dateFrom, dateTo]);
 
   const loadReports = async () => {
-    setLoading(true);
-    try {
-      let response;
+  setLoading(true);
+  try {
+    let response;
     
-      if (reportType === 'problem_vl') {
-        // Для проблемных ВЛ используем отдельный endpoint
-        response = await api.get('/api/reports/problem-vl', {
-          params: { dateFrom, dateTo }
-        });
-      } else {
-        // Для остальных используем существующий endpoint
-        response = await api.get('/api/reports/detailed', {
-          params: {
-            type: reportType,
-            dateFrom,
-            dateTo
-          }
-        });
-      }
+    if (reportType === 'problem_vl') {
+      response = await api.get('/api/reports/problem-vl', {
+        params: { 
+          dateFrom, 
+          dateTo,
+          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+        }
+      });
+    } else {
+      response = await api.get('/api/reports/detailed', {
+        params: {
+          type: reportType,
+          dateFrom,
+          dateTo,
+          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+        }
+      });
+    }
     
     setReportData(response.data);
   } catch (error) {
@@ -2422,6 +2427,12 @@ function Reports() {
   return (
     <div className="reports">
       <h2>Отчеты по проверкам</h2>
+
+      {user.role !== 'admin' && (
+      <div className="res-indicator">
+        <span>Показаны данные для: <strong>{user.resName}</strong></span>
+      </div>
+    )}
       
       <div className="report-controls">
         <div className="control-group">
