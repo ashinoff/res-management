@@ -3231,7 +3231,7 @@ function StructureSettings() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [uploadStats, setUploadStats] = useState(null);
-  const [clearOld, setClearOld] = useState(false);
+  
   
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
@@ -3245,15 +3245,9 @@ function StructureSettings() {
       return;
     }
 
-    if (clearOld && !confirm('Вы уверены что хотите удалить существующие данные перед загрузкой?')) {
-      return;
-    }
-
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('clearOld', clearOld);
-
     try {
       const response = await api.post('/api/network/upload-full-structure', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -3291,17 +3285,6 @@ function StructureSettings() {
         />
         <label htmlFor="structure-file" className="file-label">
           {file ? file.name : 'Выберите файл Excel'}
-        </label>
-      </div>
-      
-      <div className="settings-option">
-        <label className="checkbox-label">
-          <input 
-            type="checkbox" 
-            checked={clearOld}
-            onChange={(e) => setClearOld(e.target.checked)}
-          />
-          <span>Удалить существующие данные перед загрузкой</span>
         </label>
       </div>
       
@@ -3455,24 +3438,12 @@ function UserSettings() {
     setShowEditModal(true);
   };
   
-  const createTestUsers = async () => {
-    try {
-      const response = await api.post('/api/users/create-test');
-      alert(response.data.message);
-      loadUsers();
-    } catch (error) {
-      alert('Ошибка создания тестовых пользователей');
-    }
-  };
   
   return (
     <div className="settings-section">
       <div className="section-header">
         <h3>👥 Управление пользователями</h3>
         <div className="header-actions">
-          <button onClick={createTestUsers} className="secondary-btn">
-            🧪 Создать тестовых
-          </button>
           <button onClick={() => setShowCreateModal(true)} className="primary-btn">
             ➕ Новый пользователь
           </button>
