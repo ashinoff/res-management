@@ -991,11 +991,7 @@ app.post('/api/network/upload-full-structure',
       let processed = 0;
       let errors = [];
       
-      // Опционально: очищаем старые данные
-      if (req.body.clearOld === 'true') {
-        await NetworkStructure.destroy({ where: {}, transaction });
-      }
-      
+           
       // Обрабатываем каждую строку
       for (const row of data) {
         try {
