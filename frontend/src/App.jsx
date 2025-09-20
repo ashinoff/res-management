@@ -153,7 +153,8 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
     { id: 'documents', label: 'Загруженные документы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'history', label: 'История системы', roles: ['admin', 'uploader', 'res_responsible'] },
     { id: 'reports', label: 'Отчеты', roles: ['admin', 'uploader', 'res_responsible'] },
-    { id: 'settings', label: 'Настройки', roles: ['admin'] }
+    { id: 'settings', label: 'Настройки', roles: ['admin'] },
+    { id: 'analytics', label: 'Аналитика', roles: ['admin', 'uploader', 'res_responsible'], }
   ];
 
   const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
@@ -4956,6 +4957,154 @@ function SystemHistory() {
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Analytics() {
+  const [analytics, setAnalytics] = useState([]);
+  const [totals, setTotals] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const { user } = useContext(AuthContext);
+  
+  useEffect(() => {
+    loadAnalytics();
+  }, [dateFrom, dateTo]);
+  
+  const loadAnalytics = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/api/analytics/summary', {
+        params: { dateFrom, dateTo }
+      });
+      setAnalytics(response.data.analytics);
+      setTotals(response.data.totals);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const exportToExcel = () => {
+    const data = analytics.map(row => ({
+      'РЭС': row.resName,
+      'Всего ТП': row.tpCount,
+      'Всего ПУ': row.totalPuCount,
+      'Загружено файлов': row.uploadedCount,
+      'Процент охвата': row.percentage + '%',
+      'Соответствует ГОСТ': row.okCount,
+      'Не соответствует ГОСТ': row.errorCount
+    }));
+    
+    // Добавляем итоги
+    if (user.role === 'admin') {
+      data.push({
+        'РЭС': 'ИТОГО',
+        'Всего ТП': totals.tpCount,
+        'Всего ПУ': totals.totalPuCount,
+        'Загружено файлов': totals.uploadedCount,
+        'Процент охвата': totals.totalPuCount > 0 
+          ? Math.round((totals.uploadedCount / totals.totalPuCount) * 100) + '%'
+          : '0%',
+        'Соответствует ГОСТ': totals.okCount,
+        'Не соответствует ГОСТ': totals.errorCount
+      });
+    }
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Аналитика');
+    XLSX.writeFile(wb, `Аналитика_${new Date().toLocaleDateString('ru-RU')}.xlsx`);
+  };
+  
+  if (loading) return <div className="loading">Загрузка аналитики...</div>;
+  
+  return (
+    <div className="analytics-container">
+      <h2>📈 Аналитика по загрузкам</h2>
+      
+      <div className="analytics-controls">
+        <div className="control-group">
+          <label>Период с:</label>
+          <input 
+            type="date" 
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+        </div>
+        <div className="control-group">
+          <label>по:</label>
+          <input 
+            type="date" 
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </div>
+        <button onClick={exportToExcel} className="export-btn">
+          📊 Экспорт в Excel
+        </button>
+      </div>
+      
+      <div className="analytics-table">
+        <table>
+          <thead>
+            <tr>
+              <th>РЭС</th>
+              <th>Всего ТП</th>
+              <th>Всего ПУ</th>
+              <th>Загружено файлов</th>
+              <th>% охвата</th>
+              <th>Соответствует ГОСТ</th>
+              <th>Не соответствует ГОСТ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analytics.map(row => (
+              <tr key={row.resId}>
+                <td>{row.resName}</td>
+                <td>{row.tpCount}</td>
+                <td>{row.totalPuCount}</td>
+                <td>{row.uploadedCount}</td>
+                <td>
+                  <div className="progress-cell">
+                    <div className="progress-bar-small">
+                      <div 
+                        className="progress-fill-small"
+                        style={{ width: `${row.percentage}%` }}
+                      />
+                    </div>
+                    <span>{row.percentage}%</span>
+                  </div>
+                </td>
+                <td className="ok-count">{row.okCount}</td>
+                <td className="error-count">{row.errorCount}</td>
+              </tr>
+            ))}
+            {user.role === 'admin' && (
+              <tr className="totals-row">
+                <td><strong>ИТОГО</strong></td>
+                <td><strong>{totals.tpCount}</strong></td>
+                <td><strong>{totals.totalPuCount}</strong></td>
+                <td><strong>{totals.uploadedCount}</strong></td>
+                <td>
+                  <strong>
+                    {totals.totalPuCount > 0 
+                      ? Math.round((totals.uploadedCount / totals.totalPuCount) * 100) 
+                      : 0}%
+                  </strong>
+                </td>
+                <td className="ok-count"><strong>{totals.okCount}</strong></td>
+                <td className="error-count"><strong>{totals.errorCount}</strong></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
