@@ -3175,32 +3175,88 @@ app.get('/api/history/uploads',
     try {
       const { resId, tpName, puNumber, dateFrom, dateTo, fileType, status, page = 1, limit = 50 } = req.query;
       
-      let whereClause = {};
+      // Сначала получаем все PU для нужного РЭС
+      let structureWhere = {};
       
-      // Фильтры
-      if (puNumber) whereClause.puNumber = { [Op.like]: `%${puNumber}%` };
-      if (fileType) whereClause.fileType = fileType;
-      if (status) whereClause.uploadStatus = status;
+      // Фильтр по РЭС
+      if (req.user.role === 'admin' && resId) {
+        structureWhere.resId = resId;
+      } else if (req.user.role !== 'admin') {
+        structureWhere.resId = req.user.resId;
+      }
+      
+      // Фильтр по ТП если указан
+      if (tpName) {
+        structureWhere.tpName = { [Op.like]: `%${tpName}%` };
+      }
+      
+      // Получаем все номера ПУ из структуры с нужными фильтрами
+      const structures = await NetworkStructure.findAll({
+        where: structureWhere,
+        attributes: ['startPu', 'middlePu', 'endPu', 'tpName', 'vlName', 'resId'],
+        include: [ResUnit]
+      });
+      
+      // Собираем все номера ПУ
+      const puNumbers = new Set();
+      const puToStructureMap = {};
+      
+      structures.forEach(s => {
+        if (s.startPu) {
+          puNumbers.add(s.startPu);
+          puToStructureMap[s.startPu] = s;
+        }
+        if (s.middlePu) {
+          puNumbers.add(s.middlePu);
+          puToStructureMap[s.middlePu] = s;
+        }
+        if (s.endPu) {
+          puNumbers.add(s.endPu);
+          puToStructureMap[s.endPu] = s;
+        }
+      });
+      
+      // Если нет ПУ для этого РЭС - возвращаем пустой результат
+      if (puNumbers.size === 0) {
+        return res.json({
+          uploads: [],
+          total: 0,
+          page: parseInt(page),
+          totalPages: 0
+        });
+      }
+      
+      // Теперь ищем загрузки только для этих ПУ
+      let uploadWhere = {
+        puNumber: Array.from(puNumbers)
+      };
+      
+      // Дополнительные фильтры
+      if (puNumber) {
+        uploadWhere.puNumber = { 
+          [Op.and]: [
+            { [Op.in]: Array.from(puNumbers) },
+            { [Op.like]: `%${puNumber}%` }
+          ]
+        };
+      }
+      if (fileType) uploadWhere.fileType = fileType;
+      if (status) uploadWhere.uploadStatus = status;
       
       if (dateFrom || dateTo) {
-        whereClause.uploadedAt = {};
-        if (dateFrom) whereClause.uploadedAt[Op.gte] = new Date(dateFrom);
+        uploadWhere.uploadedAt = {};
+        if (dateFrom) uploadWhere.uploadedAt[Op.gte] = new Date(dateFrom);
         if (dateTo) {
           const endDate = new Date(dateTo);
           endDate.setHours(23, 59, 59, 999);
-          whereClause.uploadedAt[Op.lte] = endDate;
+          uploadWhere.uploadedAt[Op.lte] = endDate;
         }
-      }
-      
-      // Для не-админов фильтруем по их РЭС
-      if (req.user.role !== 'admin') {
-        // Нужно добавить resId в PuUploadHistory через join с NetworkStructure
       }
       
       const offset = (page - 1) * limit;
       
       const { count, rows } = await PuUploadHistory.findAndCountAll({
-        where: whereClause,
+        where: uploadWhere,
         include: [{
           model: User,
           attributes: ['fio', 'login', 'resId'],
@@ -3211,52 +3267,21 @@ app.get('/api/history/uploads',
         offset
       });
       
-      // Добавляем информацию о ТП/ВЛ через NetworkStructure
-      const uploadsWithStructure = await Promise.all(
-        rows.map(async (upload) => {
-          const structure = await NetworkStructure.findOne({
-            where: {
-              [Op.or]: [
-                { startPu: upload.puNumber },
-                { middlePu: upload.puNumber },
-                { endPu: upload.puNumber }
-              ]
-            },
-            include: [ResUnit]
-          });
-          
-          return {
-            ...upload.toJSON(),
-            tpName: structure?.tpName,
-            vlName: structure?.vlName,
-            resName: structure?.ResUnit?.name,
-            resId: structure?.resId
-          };
-        })
-      );
-
-      // НОВОЕ: Фильтруем результаты по resId
-      let filteredUploads = uploadsWithStructure;
-      
-      // Для админов - фильтруем по выбранному РЭС
-      if (req.user.role === 'admin' && resId) {
-        filteredUploads = uploadsWithStructure.filter(u => u.resId == resId);
-      }
-      // Для не-админов - только их РЭС
-      else if (req.user.role !== 'admin') {
-        filteredUploads = uploadsWithStructure.filter(u => u.resId == req.user.resId);
-      }
-      
-      // Фильтр по ТП если указан
-      if (tpName) {
-        filteredUploads = filteredUploads.filter(u => 
-          u.tpName && u.tpName.toLowerCase().includes(tpName.toLowerCase())
-        );
-      }
+      // Добавляем информацию о структуре
+      const uploadsWithStructure = rows.map(upload => {
+        const structure = puToStructureMap[upload.puNumber];
+        return {
+          ...upload.toJSON(),
+          tpName: structure?.tpName,
+          vlName: structure?.vlName,
+          resName: structure?.ResUnit?.name,
+          resId: structure?.resId
+        };
+      });
       
       res.json({
         uploads: uploadsWithStructure,
-        total: filteredUploads.length,
+        total: count,
         page: parseInt(page),
         totalPages: Math.ceil(count / limit)
       });
@@ -3278,8 +3303,8 @@ app.get('/api/history/checks',
       
       // Фильтры
       if (status) whereClause.status = status;
-      if (puNumber) whereClause.puNumber = { [Op.like]: `%${puNumber}%` };  // ДОБАВЛЕНО
-      if (tpName) whereClause.tpName = { [Op.like]: `%${tpName}%` };       // ИСПРАВЛЕНО
+      if (puNumber) whereClause.puNumber = { [Op.like]: `%${puNumber}%` };
+      if (tpName) whereClause.tpName = { [Op.like]: `%${tpName}%` };
       
       // ИСПРАВЛЕНО: Фильтр по РЭС
       if (req.user.role === 'admin' && resId) {
