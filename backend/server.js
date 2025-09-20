@@ -2512,23 +2512,18 @@ if (result.has_errors) {
                   const foundMonths = errorText.match(monthPattern);
                   
                   if (foundMonths && foundMonths.length > 0) {
-                    const lastErrorMonth = foundMonths[foundMonths.length - 1];
+                    const lastErrorMonth = foundMonths[foundMonths.length - 1];  // последний месяц в журнале
                     const lastErrorMonthNum = monthMap[lastErrorMonth];
-                    
-                    if (lastErrorMonthNum < requiredMonth) {
-                      console.log(`PERIOD MISMATCH: Required from month ${requiredMonth}, but errors end at month ${lastErrorMonthNum}`);
-                      
-                      try {
-                        fs.unlinkSync(filePath);
-                      } catch (err) {
-                        console.error('Error deleting file:', err);
-                      }
-                      
+  
+                    // Журнал должен включать данные ПОСЛЕ месяца выполнения работ
+                    if (lastErrorMonthNum < requiredMonth) {  // если последний месяц раньше требуемого
+                      console.log(`PERIOD MISMATCH: Required from month ${requiredMonth}, but journal ends at month ${lastErrorMonthNum}`);
+    
                       return resolve({
                         processed: [{
                           puNumber: fileName,
                           status: 'wrong_period',
-                          error: `❌ Неверный период! Требуется журнал событий с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату. Необходимо выгрузить полный журнал начиная с ${getMonthName(requiredMonth)} ${requiredYear}!`
+                          error: `❌ Неверный период! Требуется журнал событий с ${requiredDate.toLocaleDateString('ru-RU')} по текущую дату. Журнал должен включать данные после ${getMonthName(requiredMonth)} ${requiredYear}!`
                         }],
                         errors: []
                       });
