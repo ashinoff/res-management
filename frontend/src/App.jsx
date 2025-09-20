@@ -3036,7 +3036,7 @@ function Settings() {
           className={activeTab === 'maintenance' ? 'active' : ''}
           onClick={() => setActiveTab('maintenance')}
         >
-          🔧 Обслуживание
+          ⚙️ Обслуживание
         </button>
         <button 
           className={activeTab === 'files' ? 'active' : ''}
@@ -3113,7 +3113,7 @@ function FileManagement() {
   
   return (
     <div className="settings-section">
-      <h3>📎 Управление загруженными файлами</h3>
+      <h3>Управление загруженными файлами</h3>
       
       <div className="file-stats">
         <div className="stat-card">
@@ -3271,7 +3271,7 @@ function StructureSettings() {
   
   return (
     <div className="settings-section">
-      <h3>📂 Загрузка структуры сети</h3>
+      <h3>Загрузка структуры сети</h3>
       <p className="section-description">
         Загрузите Excel файл со структурой сети. Формат: РЭС | ТП | Фидер | Начало | Середина | Конец
       </p>
@@ -3293,7 +3293,7 @@ function StructureSettings() {
         disabled={uploading || !file}
         className="primary-btn"
       >
-        {uploading ? 'Загрузка...' : '📤 Загрузить структуру'}
+        {uploading ? 'Загрузка...' : 'Загрузить структуру'}
       </button>
       
       {message && (
@@ -3445,7 +3445,7 @@ function UserSettings() {
         <h3>👥 Управление пользователями</h3>
         <div className="header-actions">
           <button onClick={() => setShowCreateModal(true)} className="primary-btn">
-            ➕ Новый пользователь
+            Новый пользователь
           </button>
         </div>
       </div>
@@ -3472,9 +3472,9 @@ function UserSettings() {
                   <td><strong>{user.login}</strong></td>
                   <td>
                     <span className={`role-badge role-${user.role}`}>
-                      {user.role === 'admin' ? '👑 Админ' : 
-                       user.role === 'uploader' ? '📤 Загрузчик' : 
-                       '⚡ Ответственный'}
+                      {user.role === 'admin' ? 'Админ' : 
+                       user.role === 'uploader' ? 'АСКУЭ' : 
+                       'ТЕХБЛОК'}
                     </span>
                   </td>
                   <td>{user.ResUnit?.name || '-'}</td>
@@ -3721,7 +3721,7 @@ function MaintenanceSettings() {
   
   return (
     <div className="settings-section">
-      <h3>🔧 Обслуживание системы</h3>
+      <h3>Обслуживание системы</h3>
       
       <div className="maintenance-card danger">
         <h4>⚠️ Полная очистка данных</h4>
