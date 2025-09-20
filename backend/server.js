@@ -1251,64 +1251,103 @@ app.delete('/api/network/clear-all',
     const transaction = await sequelize.transaction();
     
     try {
-      const { password } = req.body;
+      const { password, beforeDate } = req.body;  // ДОБАВИЛИ beforeDate
       
       if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
-      console.log('Starting complete data cleanup...');
+      console.log('Starting data cleanup...');
+      console.log('Before date:', beforeDate);
       
-      // ВАЖНО: правильный порядок удаления!
+      // Формируем условие для удаления
+      let whereClause = {};
+      if (beforeDate) {
+        whereClause.createdAt = { [Op.lt]: new Date(beforeDate) };
+      }
       
-      // 1. Сначала NotificationRead (ссылается на Notifications)
+      // 1. NotificationRead
       const notificationReadsDeleted = await NotificationRead.destroy({ 
-        where: {}, 
+        where: whereClause, 
         transaction 
       });
       console.log(`Deleted ${notificationReadsDeleted} notification read records`);
       
-      // 2. PuUploadHistory (независимая таблица)
+      // 2. PuUploadHistory (используем uploadedAt)
+      let uploadWhereClause = {};
+      if (beforeDate) {
+        uploadWhereClause.uploadedAt = { [Op.lt]: new Date(beforeDate) };
+      }
+      
       const puUploadHistoryDeleted = await PuUploadHistory.destroy({ 
-        where: {}, 
+        where: uploadWhereClause, 
         transaction 
       });
       console.log(`Deleted ${puUploadHistoryDeleted} PU upload history records`);
       
-      // 3. ProblemVL (ссылается на NetworkStructure)
+      // 3. ProblemVL - удаляем только неактивные или старые
+      let problemWhereClause = {};
+      if (beforeDate) {
+        problemWhereClause.createdAt = { [Op.lt]: new Date(beforeDate) };
+        problemWhereClause.status = { [Op.ne]: 'active' }; // не трогаем активные
+      }
+      
       const problemVLDeleted = await ProblemVL.destroy({ 
-        where: {}, 
+        where: problemWhereClause, 
         transaction 
       });
       console.log(`Deleted ${problemVLDeleted} problem VL records`);
       
-      // 4. CheckHistory
+      // 4. CheckHistory  
       const checkHistoryDeleted = await CheckHistory.destroy({ 
-        where: {}, 
+        where: whereClause, 
         transaction 
       });
       console.log(`Deleted ${checkHistoryDeleted} check history records`);
       
       // 5. История загрузок
       const uploadsDeleted = await UploadHistory.destroy({ 
-        where: {}, 
+        where: whereClause, 
         transaction 
       });
       console.log(`Deleted ${uploadsDeleted} upload records`);
       
       // 6. Уведомления
       const notificationsDeleted = await Notification.destroy({ 
-        where: {}, 
+        where: whereClause, 
         transaction 
       });
       console.log(`Deleted ${notificationsDeleted} notifications`);
       
-      // 7. Статусы ПУ
-      const puStatusesDeleted = await PuStatus.destroy({ 
-        where: {}, 
-        transaction 
-      });
-      console.log(`Deleted ${puStatusesDeleted} PU statuses`);
+      // 7. Статусы ПУ - НЕ УДАЛЯЕМ, только сбрасываем старые
+      if (beforeDate) {
+        await PuStatus.update(
+          { 
+            status: 'not_checked',
+            errorDetails: null,
+            lastCheck: null
+          },
+          { 
+            where: {
+              lastCheck: { [Op.lt]: new Date(beforeDate) }
+            },
+            transaction 
+          }
+        );
+      } else {
+        // Если нет даты - сбрасываем все
+        await PuStatus.update(
+          { 
+            status: 'not_checked',
+            errorDetails: null,
+            lastCheck: null
+          },
+          { 
+            where: {},
+            transaction 
+          }
+        );
+      }
       
       // 8. Теперь можем удалить структуру сети
       const structuresDeleted = await NetworkStructure.destroy({ 
@@ -1321,7 +1360,9 @@ app.delete('/api/network/clear-all',
       
       res.json({
         success: true,
-        message: 'Все данные успешно удалены',
+        message: beforeDate 
+          ? `Данные до ${new Date(beforeDate).toLocaleDateString('ru-RU')} успешно удалены`
+          : 'История и статусы успешно очищены (структура сохранена)',
         deleted: {
           notificationReads: notificationReadsDeleted,
           puUploadHistory: puUploadHistoryDeleted,
@@ -1329,14 +1370,13 @@ app.delete('/api/network/clear-all',
           checkHistory: checkHistoryDeleted,
           uploads: uploadsDeleted,
           notifications: notificationsDeleted,
-          puStatuses: puStatusesDeleted,
-          structures: structuresDeleted
+          // structures: 0  // Структура не удалялась
         }
       });
       
     } catch (error) {
       await transaction.rollback();
-      console.error('Clear all error:', error);
+      console.error('Clear data error:', error);
       res.status(500).json({ 
         error: 'Ошибка при удалении данных: ' + error.message 
       });
