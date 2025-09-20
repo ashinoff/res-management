@@ -3697,19 +3697,23 @@ function MaintenanceSettings() {
   const [clearing, setClearing] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearPassword, setClearPassword] = useState('');
+  const [clearBeforeDate, setClearBeforeDate] = useState(''); // НОВОЕ
   
   const handleClearAll = async () => {
     setClearing(true);
     try {
       const response = await api.delete('/api/network/clear-all', {
-        data: { password: clearPassword }
+        data: { 
+          password: clearPassword,
+          beforeDate: clearBeforeDate  // ДОБАВИЛИ
+        }
       });
       
-      alert('✅ Все данные успешно удалены!');
+      alert(response.data.message);
       setShowClearModal(false);
       setClearPassword('');
+      setClearBeforeDate(''); // ДОБАВИЛИ
       
-      // Создаем событие для обновления всех компонентов
       window.dispatchEvent(new CustomEvent('dataCleared'));
       
     } catch (error) {
@@ -3721,18 +3725,18 @@ function MaintenanceSettings() {
   
   return (
     <div className="settings-section">
-      <h3>Обслуживание системы</h3>
+      <h3>⚙️ Обслуживание системы</h3>
       
       <div className="maintenance-card danger">
-        <h4>⚠️ Полная очистка данных</h4>
-        <p>Удаляет всю структуру сети, статусы проверок, уведомления и историю.</p>
-        <p className="warning-text">Это действие необратимо!</p>
+        <h4>⚠️ Очистка данных системы</h4>
+        <p>Удаляет историю, статусы проверок и уведомления.</p>
+        <p className="info-text">✅ Структура сети НЕ удаляется!</p>
         <button 
           onClick={() => setShowClearModal(true)}
           disabled={clearing}
           className="danger-btn"
         >
-          {clearing ? 'Удаление...' : '🗑️ Очистить все данные'}
+          {clearing ? 'Удаление...' : '🗑️ Очистить данные'}
         </button>
       </div>
       
@@ -3750,22 +3754,43 @@ function MaintenanceSettings() {
         </div>
       </div>
       
-      {/* Модальное окно для удаления всех данных */}
+      {/* Модифицированное модальное окно */}
       {showClearModal && (
         <div className="modal-backdrop" onClick={() => setShowClearModal(false)}>
           <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Подтверждение полной очистки</h3>
+              <h3>Очистка данных системы</h3>
               <button className="close-btn" onClick={() => setShowClearModal(false)}>✕</button>
             </div>
             <div className="modal-body">
+              {/* НОВОЕ: выбор периода */}
+              <div className="form-group">
+                <label>Удалить данные до (необязательно):</label>
+                <input
+                  type="date"
+                  value={clearBeforeDate}
+                  onChange={(e) => setClearBeforeDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                {clearBeforeDate && (
+                  <p className="info">
+                    ℹ️ Будут удалены данные до {new Date(clearBeforeDate).toLocaleDateString('ru-RU')}
+                  </p>
+                )}
+                {!clearBeforeDate && (
+                  <p className="info">
+                    ℹ️ Если дата не указана - будет удалена ВСЯ история
+                  </p>
+                )}
+              </div>
+              
               <p className="warning">⚠️ ВНИМАНИЕ! Будут удалены:</p>
               <ul>
-                <li>Вся структура сети</li>
-                <li>Все статусы проверок</li>
-                <li>Все уведомления</li>
-                <li>Вся история загрузок</li>
-                <li>Вся история проверок</li>
+                <li>❌ <s>Структура сети</s> <span style={{color: 'green'}}>НЕ УДАЛЯЕТСЯ</span></li>
+                <li>Все статусы проверок {clearBeforeDate && 'за указанный период'}</li>
+                <li>Все уведомления {clearBeforeDate && 'за указанный период'}</li>
+                <li>Вся история загрузок {clearBeforeDate && 'за указанный период'}</li>
+                <li>Вся история проверок {clearBeforeDate && 'за указанный период'}</li>
               </ul>
               <p className="warning">Это действие НЕЛЬЗЯ отменить!</p>
               <div className="form-group">
@@ -3788,7 +3813,7 @@ function MaintenanceSettings() {
                 onClick={handleClearAll}
                 disabled={!clearPassword || clearing}
               >
-                {clearing ? 'Удаление...' : 'Удалить всё'}
+                {clearing ? 'Удаление...' : clearBeforeDate ? 'Удалить старые данные' : 'Удалить всё'}
               </button>
             </div>
           </div>
