@@ -3194,14 +3194,34 @@ app.get('/api/history/uploads',
             ...upload.toJSON(),
             tpName: structure?.tpName,
             vlName: structure?.vlName,
-            resName: structure?.ResUnit?.name
+            resName: structure?.ResUnit?.name,
+            resId: structure?.resId
           };
         })
       );
+
+      // НОВОЕ: Фильтруем результаты по resId
+      let filteredUploads = uploadsWithStructure;
+      
+      // Для админов - фильтруем по выбранному РЭС
+      if (req.user.role === 'admin' && resId) {
+        filteredUploads = uploadsWithStructure.filter(u => u.resId == resId);
+      }
+      // Для не-админов - только их РЭС
+      else if (req.user.role !== 'admin') {
+        filteredUploads = uploadsWithStructure.filter(u => u.resId == req.user.resId);
+      }
+      
+      // Фильтр по ТП если указан
+      if (tpName) {
+        filteredUploads = filteredUploads.filter(u => 
+          u.tpName && u.tpName.toLowerCase().includes(tpName.toLowerCase())
+        );
+      }
       
       res.json({
         uploads: uploadsWithStructure,
-        total: count,
+        total: filteredUploads.length,
         page: parseInt(page),
         totalPages: Math.ceil(count / limit)
       });
@@ -3217,14 +3237,21 @@ app.get('/api/history/checks',
   authenticateToken, 
   async (req, res) => {
     try {
-      const { resId, dateFrom, dateTo, status, page = 1, limit = 50 } = req.query;
+      const { resId, tpName, puNumber, dateFrom, dateTo, status, page = 1, limit = 50 } = req.query;
       
       let whereClause = {};
       
+      // Фильтры
       if (status) whereClause.status = status;
-      if (tpName) whereClause.tpName = { [Op.like]: `%${tpName}%` };
-      if (resId && req.user.role === 'admin') whereClause.resId = resId;
-      else if (req.user.role !== 'admin') whereClause.resId = req.user.resId;
+      if (puNumber) whereClause.puNumber = { [Op.like]: `%${puNumber}%` };  // ДОБАВЛЕНО
+      if (tpName) whereClause.tpName = { [Op.like]: `%${tpName}%` };       // ИСПРАВЛЕНО
+      
+      // ИСПРАВЛЕНО: Фильтр по РЭС
+      if (req.user.role === 'admin' && resId) {
+        whereClause.resId = resId;
+      } else if (req.user.role !== 'admin') {
+        whereClause.resId = req.user.resId;
+      }
       
       if (dateFrom || dateTo) {
         whereClause.createdAt = {};
