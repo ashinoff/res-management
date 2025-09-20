@@ -3535,3 +3535,107 @@ app.delete('/api/history/clear-all',
       res.status(500).json({ error: error.message });
     }
 });
+// Новый эндпоинт для аналитики
+app.get('/api/analytics/summary', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+      
+      // Условие по РЭС
+      let resCondition = {};
+      if (req.user.role !== 'admin') {
+        resCondition.id = req.user.resId;
+      }
+      
+      // Получаем все РЭС (для админа все, для остальных - только их)
+      const resList = await ResUnit.findAll({
+        where: resCondition,
+        order: [['name', 'ASC']]
+      });
+      
+      // Условие по дате
+      let dateCondition = {};
+      if (dateFrom || dateTo) {
+        dateCondition.uploadedAt = {};
+        if (dateFrom) dateCondition.uploadedAt[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateCondition.uploadedAt[Op.lte] = endDate;
+        }
+      }
+      
+      // Собираем статистику для каждого РЭС
+      const analytics = await Promise.all(
+        resList.map(async (res) => {
+          // 1. Считаем ТП и ПУ
+          const structures = await NetworkStructure.findAll({
+            where: { resId: res.id }
+          });
+          
+          const tpCount = new Set(structures.map(s => s.tpName)).size;
+          
+          let totalPuCount = 0;
+          const allPuNumbers = new Set();
+          
+          structures.forEach(s => {
+            if (s.startPu) { totalPuCount++; allPuNumbers.add(s.startPu); }
+            if (s.middlePu) { totalPuCount++; allPuNumbers.add(s.middlePu); }
+            if (s.endPu) { totalPuCount++; allPuNumbers.add(s.endPu); }
+          });
+          
+          // 2. Считаем загрузки в периоде
+          const uploads = await PuUploadHistory.findAll({
+            where: {
+              puNumber: Array.from(allPuNumbers),
+              ...dateCondition
+            }
+          });
+          
+          const uploadedCount = uploads.length;
+          const okCount = uploads.filter(u => !u.hasErrors).length;
+          const errorCount = uploads.filter(u => u.hasErrors).length;
+          
+          return {
+            resId: res.id,
+            resName: res.name,
+            tpCount,
+            totalPuCount,
+            uploadedCount,
+            okCount,
+            errorCount,
+            percentage: totalPuCount > 0 ? Math.round((uploadedCount / totalPuCount) * 100) : 0
+          };
+        })
+      );
+      
+      // Итоги
+      const totals = analytics.reduce((acc, curr) => ({
+        tpCount: acc.tpCount + curr.tpCount,
+        totalPuCount: acc.totalPuCount + curr.totalPuCount,
+        uploadedCount: acc.uploadedCount + curr.uploadedCount,
+        okCount: acc.okCount + curr.okCount,
+        errorCount: acc.errorCount + curr.errorCount
+      }), {
+        tpCount: 0,
+        totalPuCount: 0,
+        uploadedCount: 0,
+        okCount: 0,
+        errorCount: 0
+      });
+      
+      res.json({
+        analytics,
+        totals,
+        period: {
+          from: dateFrom,
+          to: dateTo
+        }
+      });
+      
+    } catch (error) {
+      console.error('Analytics error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
