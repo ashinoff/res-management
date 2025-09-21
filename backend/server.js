@@ -3549,26 +3549,29 @@ app.get('/api/analytics/summary',
       }
       
       // Получаем все РЭС (для админа все, для остальных - только их)
-      const resList = await ResUnit.findAll({
-        where: resCondition,
-        order: [['name', 'ASC']]
-      });
-      
-      // Условие по дате
-      let dateCondition = {};
-      if (dateFrom || dateTo) {
-        dateCondition.uploadedAt = {};
-        if (dateFrom) dateCondition.uploadedAt[Op.gte] = new Date(dateFrom);
-        if (dateTo) {
-          const endDate = new Date(dateTo);
-          endDate.setHours(23, 59, 59, 999);
-          dateCondition.uploadedAt[Op.lte] = endDate;
-        }
-      }
-      
-      // Собираем статистику для каждого РЭС
-      const analytics = await Promise.all(
-        resList.map(async (res) => {
+const resList = await ResUnit.findAll({
+  where: resCondition,
+  order: [['name', 'ASC']]
+});
+
+// Фильтруем СИРИУС
+const filteredResList = resList.filter(res => res.name !== 'СИРИУС');
+
+// Условие по дате
+let dateCondition = {};
+if (dateFrom || dateTo) {
+  dateCondition.uploadedAt = {};
+  if (dateFrom) dateCondition.uploadedAt[Op.gte] = new Date(dateFrom);
+  if (dateTo) {
+    const endDate = new Date(dateTo);
+    endDate.setHours(23, 59, 59, 999);
+    dateCondition.uploadedAt[Op.lte] = endDate;
+  }
+}
+
+// Собираем статистику для каждого РЭС
+const analytics = await Promise.all(
+  filteredResList.map(async (res) => {
           // 1. Считаем ТП и ПУ
           const structures = await NetworkStructure.findAll({
             where: { resId: res.id }
