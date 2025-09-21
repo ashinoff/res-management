@@ -4836,7 +4836,6 @@ function SystemHistory() {
                       <th>ВЛ</th>
                       <th>ПУ №</th>
                       <th>Загрузил</th>
-                      <th>Файл</th>
                       <th>Тип</th>
                       <th>Статус</th>
                       <th>Ошибка</th>
