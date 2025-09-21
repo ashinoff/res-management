@@ -4623,7 +4623,6 @@ function SystemHistory() {
         'ВЛ': upload.vlName || '',
         'Номер ПУ': upload.puNumber,
         'Загрузил': upload.User?.fio || '',
-        'Имя файла': upload.fileName,
         'Тип файла': upload.fileType,
         'Статус': upload.uploadStatus === 'success' ? 'Успешно' : 
                   upload.uploadStatus === 'duplicate' ? 'Дубликат' : 
@@ -4852,7 +4851,6 @@ function SystemHistory() {
                         <td>{upload.vlName || '—'}</td>
                         <td><strong>{upload.puNumber}</strong></td>
                         <td>{upload.User?.fio || 'Неизвестно'}</td>
-                        <td title={upload.fileName}>{upload.fileName.substring(0, 20)}...</td>
                         <td>{upload.fileType}</td>
                         <td>
                           <span className={`status-badge status-${upload.uploadStatus}`}>
