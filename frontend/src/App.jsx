@@ -588,17 +588,17 @@ const executeClearHistory = async () => {
       { wch: 20 }  // Последнее обновление
     ];
     
-    XLSX.utils.book_append_sheet(wb, ws, 'Структура сети');
+    XLSX.utils.book_append_sheet(wb, ws, '');
     
     const fileName = `Структура_сети_${selectedRes ? `РЭС_${selectedRes}_` : ''}${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
     XLSX.writeFile(wb, fileName);
     
-    alert(`Структура сети экспортирована в файл: ${fileName}`);
+    alert(` экспортирована в файл: ${fileName}`);
   };
   
   return (
     <div className="network-structure">
-      <h2>Структура сети</h2>
+      <h2></h2>
       {user.role === 'admin' && (
   <p className="edit-hint">
     <img src="/icons/important.png" alt="Важно" style={{width: 36, height: 36, verticalAlign: 'middle', marginRight: 5}} />
@@ -964,13 +964,13 @@ function FileUpload({ selectedRes }) {
     id: 'nartis', 
     label: 'Счетчики Нартис',
     icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
-    description: 'Формат Нартис'
+    description: 'Один файл = один ПУ'
   },
   { 
     id: 'energomera', 
     label: 'Счетчики Энергомера',
     icon: <img src="/icons/PU.png" alt="Счетчик" style={{width: 40, height: 40}} />,
-    description: 'Формат Энергомера'
+    description: 'Один файл = один ПУ'
   }
 ];
 
@@ -2754,7 +2754,7 @@ const handleSendEmail = async () => {
 
   return (
     <div className="problem-vl-container">
-      <h2>Проблемные ВЛ (2 и более неудачных проверки)</h2>
+      <h2>Проблемные ВЛ</h2>
       
       <div className="problem-info">
         <p>В этом разделе отображаются ВЛ, которые не прошли проверку 2 и более раз после выполнения мероприятий РЭС.</p>
@@ -3025,25 +3025,25 @@ function Settings() {
           className={activeTab === 'structure' ? 'active' : ''}
           onClick={() => setActiveTab('structure')}
         >
-          📁 Структура сети
+          Структура сети
         </button>
         <button 
           className={activeTab === 'users' ? 'active' : ''}
           onClick={() => setActiveTab('users')}
         >
-          👥 Пользователи
+          Пользователи
         </button>
         <button 
           className={activeTab === 'maintenance' ? 'active' : ''}
           onClick={() => setActiveTab('maintenance')}
         >
-          ⚙️ Обслуживание
+          Обслуживание
         </button>
         <button 
           className={activeTab === 'files' ? 'active' : ''}
           onClick={() => setActiveTab('files')}
         >
-          📎 Управление файлами
+          Управление файлами
         </button>
       </div>
       
@@ -3443,7 +3443,7 @@ function UserSettings() {
   return (
     <div className="settings-section">
       <div className="section-header">
-        <h3>👥 Управление пользователями</h3>
+        <h3>Управление пользователями</h3>
         <div className="header-actions">
           <button onClick={() => setShowCreateModal(true)} className="primary-btn">
             Новый пользователь
@@ -3726,7 +3726,7 @@ function MaintenanceSettings() {
   
   return (
     <div className="settings-section">
-      <h3>⚙️ Обслуживание системы</h3>
+      <h3>Обслуживание системы</h3>
       
       <div className="maintenance-card danger">
         <h4>⚠️ Очистка данных системы</h4>
@@ -4021,7 +4021,7 @@ function UploadedDocuments() {
   
   return (
     <div className="uploaded-documents">
-      <h2>📄 Загруженные документы</h2>
+      <h2>Загруженные документы</h2>
       
       <div className="documents-controls">
         <div className="documents-info">
@@ -4745,10 +4745,9 @@ function SystemHistory() {
                   onChange={(e) => handleFilterChange('fileType', e.target.value)}
                 >
                   <option value="">Все типы</option>
-                  <option value="rim_single">РИМ (отдельный)</option>
-                  <option value="rim_mass">РИМ (массовая)</option>
-                  <option value="nartis">Нартис</option>
-                  <option value="energomera">Энергомера</option>
+                  <option value="rim_single">Счетчик РИМ</option>
+                  <option value="nartis">Счетчик Нартис</option>
+                  <option value="energomera">Счетчик Энергомера</option>
                 </select>
               </div>
               
@@ -5199,6 +5198,8 @@ export default function App() {
         return <Settings />;
       case 'history':
         return <SystemHistory />;
+      case 'analytics':  
+        return <Analytics />;
       default:
         return <NetworkStructure selectedRes={selectedRes} />;
     }
