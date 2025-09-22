@@ -2119,6 +2119,8 @@ function Notifications({ filterType, onSectionChange }) {
                   onChange={(e) => setBulkDeletePassword(e.target.value)}
                   placeholder="Пароль"
                   autoFocus
+                  autoComplete="new-password"  // Добавить
+                  name={`delete-password-${Date.now()}`}
                 />
               </div>
             </div>
