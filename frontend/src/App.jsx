@@ -1013,7 +1013,7 @@ function FileUpload() {
   // Определяем resId
   let resIdToUse;
   if (user.role === 'admin') {
-    resIdToUse = selectedRes || user.resId || 1;
+    resIdToUse = user.resId || 1;
   } else {
     resIdToUse = user.resId;
   }
@@ -1145,10 +1145,7 @@ for (let i = 0; i < files.length; i++) {
   </div>
   <div className="info-content">
     <h4>Текущий РЭС</h4>
-    <p>{user.role === 'admin' && selectedRes 
-      ? `РЭС ID: ${selectedRes}`
-      : user.resName || 'Ваш РЭС'
-    }</p>
+    <p>{user.resName || 'Ваш РЭС'}</p>
   </div>
 </div>
         <div className="info-card">
