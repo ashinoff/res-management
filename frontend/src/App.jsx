@@ -1752,12 +1752,12 @@ function Notifications({ filterType, onSectionChange }) {
               <div className="notification-actions-row">
                 <div className="notification-buttons">
                   <button 
-                    className="btn-upload"
+                    className="btn-upload-orange"  // Изменили класс
                     onClick={() => handleFileUpload(data.puNumber, data)}
                     disabled={uploadingPu === data.puNumber}
                     title="Загрузить файл"
                   >
-                    {uploadingPu === data.puNumber ? '⏳ Загрузка...' : '📤 Загрузить'}
+                    {uploadingPu === data.puNumber ? 'Загрузка...' : 'Загрузить'}
                   </button>
                   
                   <button 
