@@ -1310,25 +1310,29 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
-  try {
-    let url = '/api/notifications';
-    if (selectedRes) {
-      url += `?resId=${selectedRes}`;
+    try {
+      const response = await api.get('/api/notifications');
+      // Фильтруем по переданному типу
+      const filtered = response.data.filter(n => {
+        if (filterType) return n.type === filterType;
+        return true;
+      });
+      setNotifications(filtered);
+
+    const loadNotifications = useCallback(async () => {
+    try {
+      let url = '/api/notifications';
+      if (selectedRes) {
+        url += `?resId=${selectedRes}`;
+      }
+      const response = await api.get(url);
+      
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoading(false);
     }
-    const response = await api.get(url);
-    
-    // Фильтруем по переданному типу
-    const filtered = response.data.filter(n => {
-      if (filterType) return n.type === filterType;
-      return true;
-    });
-    setNotifications(filtered);
-  } catch (error) {
-    console.error('Error loading notifications:', error);
-  } finally {
-    setLoading(false);
-  }
-}, [filterType, selectedRes]);
+  }, [filterType]);
 
   useEffect(() => {
     loadNotifications();
@@ -2197,17 +2201,22 @@ function Reports() {
   try {
     let response;
     
-    const params = {
-      dateFrom, 
-      dateTo,
-      resId: user.role === 'admin' && selectedRes ? selectedRes : user.resId
-    };
-    
     if (reportType === 'problem_vl') {
-      response = await api.get('/api/reports/problem-vl', { params });
+      response = await api.get('/api/reports/problem-vl', {
+        params: { 
+          dateFrom, 
+          dateTo,
+          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+        }
+      });
     } else {
       response = await api.get('/api/reports/detailed', {
-        params: { type: reportType, ...params }
+        params: {
+          type: reportType,
+          dateFrom,
+          dateTo,
+          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+        }
       });
     }
     
@@ -2651,7 +2660,7 @@ function Reports() {
 // КОМПОНЕНТ ПРОБЛЕМНЫХ ВЛ (2+ НЕУДАЧНЫХ ПРОВЕРКИ)
 // =====================================================
 
-function ProblemVL({ selectedRes }) {
+function ProblemVL() {
   const [problemVLs, setProblemVLs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -2685,19 +2694,15 @@ const handleSendEmail = async () => {
   };
   
   const loadProblemVLs = async () => {
-  try {
-    let url = '/api/problem-vl/list';
-    if (selectedRes) {
-      url += `?resId=${selectedRes}`;
+    try {
+      const response = await api.get('/api/problem-vl/list');
+      setProblemVLs(response.data);
+    } catch (error) {
+      console.error('Error loading problem VLs:', error);
+    } finally {
+      setLoading(false);
     }
-    const response = await api.get(url);
-    setProblemVLs(response.data);
-  } catch (error) {
-    console.error('Error loading problem VLs:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleDismiss = async () => {
     try {
@@ -4492,7 +4497,7 @@ function ExtendedPuModal({
 // КОМПОНЕНТ ИСТОРИИ СИСТЕМЫ
 // =====================================================
 
-function SystemHistory({ selectedRes }) {
+function SystemHistory() {
   const [activeTab, setActiveTab] = useState('uploads'); // uploads или checks
   const [uploads, setUploads] = useState([]);
   const [checks, setChecks] = useState([]);
@@ -4506,7 +4511,7 @@ function SystemHistory({ selectedRes }) {
   const [filters, setFilters] = useState({
   puNumber: '',
   tpName: '',
-  
+  resId: user.role === 'admin' ? '' : user.resId, // ИЗМЕНЕНО - не-админы видят только свой РЭС
   dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   dateTo: new Date().toISOString().split('T')[0],
   fileType: '',
