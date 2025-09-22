@@ -1286,7 +1286,7 @@ for (let i = 0; i < files.length; i++) {
 // КОМПОНЕНТ УВЕДОМЛЕНИЙ (ИСПРАВЛЕННЫЙ!)
 // =====================================================
 
-function Notifications({ filterType, onSectionChange }) {
+function Notifications({ filterType, onSectionChange, selectedRes }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -1310,20 +1310,25 @@ function Notifications({ filterType, onSectionChange }) {
   
   // Оптимизированная функция загрузки
   const loadNotifications = useCallback(async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      // Фильтруем по переданному типу
-      const filtered = response.data.filter(n => {
-        if (filterType) return n.type === filterType;
-        return true;
-      });
-      setNotifications(filtered);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
+  try {
+    let url = '/api/notifications';
+    if (selectedRes) {
+      url += `?resId=${selectedRes}`;
     }
-  }, [filterType]);
+    const response = await api.get(url);
+    
+    // Фильтруем по переданному типу
+    const filtered = response.data.filter(n => {
+      if (filterType) return n.type === filterType;
+      return true;
+    });
+    setNotifications(filtered);
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [filterType, selectedRes]);
 
   useEffect(() => {
     loadNotifications();
@@ -2192,22 +2197,17 @@ function Reports() {
   try {
     let response;
     
+    const params = {
+      dateFrom, 
+      dateTo,
+      resId: user.role === 'admin' && selectedRes ? selectedRes : user.resId
+    };
+    
     if (reportType === 'problem_vl') {
-      response = await api.get('/api/reports/problem-vl', {
-        params: { 
-          dateFrom, 
-          dateTo,
-          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
-        }
-      });
+      response = await api.get('/api/reports/problem-vl', { params });
     } else {
       response = await api.get('/api/reports/detailed', {
-        params: {
-          type: reportType,
-          dateFrom,
-          dateTo,
-          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
-        }
+        params: { type: reportType, ...params }
       });
     }
     
@@ -2651,7 +2651,7 @@ function Reports() {
 // КОМПОНЕНТ ПРОБЛЕМНЫХ ВЛ (2+ НЕУДАЧНЫХ ПРОВЕРКИ)
 // =====================================================
 
-function ProblemVL() {
+function ProblemVL({ selectedRes }) {
   const [problemVLs, setProblemVLs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -2685,15 +2685,19 @@ const handleSendEmail = async () => {
   };
   
   const loadProblemVLs = async () => {
-    try {
-      const response = await api.get('/api/problem-vl/list');
-      setProblemVLs(response.data);
-    } catch (error) {
-      console.error('Error loading problem VLs:', error);
-    } finally {
-      setLoading(false);
+  try {
+    let url = '/api/problem-vl/list';
+    if (selectedRes) {
+      url += `?resId=${selectedRes}`;
     }
-  };
+    const response = await api.get(url);
+    setProblemVLs(response.data);
+  } catch (error) {
+    console.error('Error loading problem VLs:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDismiss = async () => {
     try {
@@ -4488,7 +4492,7 @@ function ExtendedPuModal({
 // КОМПОНЕНТ ИСТОРИИ СИСТЕМЫ
 // =====================================================
 
-function SystemHistory() {
+function SystemHistory({ selectedRes }) {
   const [activeTab, setActiveTab] = useState('uploads'); // uploads или checks
   const [uploads, setUploads] = useState([]);
   const [checks, setChecks] = useState([]);
@@ -4502,7 +4506,7 @@ function SystemHistory() {
   const [filters, setFilters] = useState({
   puNumber: '',
   tpName: '',
-  resId: user.role === 'admin' ? '' : user.resId, // ИЗМЕНЕНО - не-админы видят только свой РЭС
+  
   dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   dateTo: new Date().toISOString().split('T')[0],
   fileType: '',
@@ -5136,32 +5140,32 @@ export default function App() {
     return <LoginForm onLogin={handleLogin} />;
   }
 
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'structure':
-        return <NetworkStructure selectedRes={selectedRes} />;
-      case 'upload':
-        return <FileUpload selectedRes={selectedRes} />;
-      case 'tech_pending':
-        return <Notifications filterType="error" onSectionChange={setActiveSection} />;
-      case 'askue_pending':
-        return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
-      case 'problem_vl':
-        return <ProblemVL />;
-      case 'documents':
-        return <UploadedDocuments />;
-      case 'reports':
-        return <Reports />;
-      case 'settings':
-        return <Settings />;
-      case 'history':
-        return <SystemHistory />;
-      case 'analytics':  
-        return <Analytics />;
-      default:
-        return <NetworkStructure selectedRes={selectedRes} />;
-    }
-  };
+const renderContent = () => {
+  switch (activeSection) {
+    case 'structure':
+      return <NetworkStructure selectedRes={selectedRes} />;
+    case 'upload':
+      return <FileUpload selectedRes={selectedRes} />;
+    case 'tech_pending':
+      return <Notifications filterType="error" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
+    case 'askue_pending':
+      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
+    case 'problem_vl':
+      return <ProblemVL selectedRes={selectedRes} />;
+    case 'documents':
+      return <UploadedDocuments selectedRes={selectedRes} />;
+    case 'reports':
+      return <Reports selectedRes={selectedRes} />;
+    case 'settings':
+      return <Settings />;
+    case 'history':
+      return <SystemHistory selectedRes={selectedRes} />;
+    case 'analytics':  
+      return <Analytics selectedRes={selectedRes} />;
+    default:
+      return <NetworkStructure selectedRes={selectedRes} />;
+  }
+};
 
   return (
     <AuthContext.Provider value={{ user, selectedRes }}>
