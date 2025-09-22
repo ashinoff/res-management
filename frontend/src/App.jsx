@@ -2157,7 +2157,7 @@ const loadNotifications = useCallback(async () => {
       )}
     </div>
   );
-
+}
 
     
 
