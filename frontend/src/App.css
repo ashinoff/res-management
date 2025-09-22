@@ -802,11 +802,6 @@ text-align: left;
 }
 
 /* Кнопки в уведомлениях */
-.notification-buttons {
-  display: flex;
-  gap: 8px;
-}
-
 .btn-details,
 .btn-complete,
 .btn-delete,
@@ -2941,11 +2936,7 @@ padding: 16px 12px;
 }
 
 /* Стили для уведомлений о проблемных ВЛ */
-.notification-compact-content.problem-vl {
-  background: linear-gradient(to right, #fff5f5 0%, white 100%);
-  border-radius: 8px;
-  padding: 12px;
-}
+
 
 .problem-vl-alert {
   display: flex;
@@ -4448,4 +4439,23 @@ padding: 16px 12px;
   opacity: 0.7;
   cursor: not-allowed;
   box-shadow: none;
+}
+.btn-upload-orange:hover:not(:disabled) {
+  background: #dd6b20; /* Темнее при наведении */
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(237, 137, 54, 0.25);
+}
+
+.btn-upload-orange:active {
+  transform: translateY(0);
+}
+
+.btn-upload-orange:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.notification-buttons button {
+  height: 32px; /* Одинаковая высота для всех кнопок */
 }
