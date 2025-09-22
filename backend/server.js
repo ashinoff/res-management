@@ -1069,6 +1069,7 @@ app.post('/api/network/upload-full-structure',
 
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
+    const { resId } = req.query;
     let whereClause = {};
     
     if (req.user.role === 'admin') {
@@ -1892,8 +1893,15 @@ app.get('/api/problem-vl/list',
   checkRole(['admin']), 
   async (req, res) => {
     try {
+      const { resId } = req.query;
+      let whereClause = { status: 'active' };
+      
+      if (resId) {
+        whereClause.resId = resId;
+      }
+      
       const problemVLs = await ProblemVL.findAll({
-        where: { status: 'active' },
+        where: whereClause,
         include: [ResUnit, NetworkStructure],
         order: [['failureCount', 'DESC'], ['lastErrorDate', 'DESC']]
       });
