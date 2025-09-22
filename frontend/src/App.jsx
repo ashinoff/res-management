@@ -1320,7 +1320,7 @@ const loadNotifications = useCallback(async () => {
   } finally {
     setLoading(false);
   }
-}, [filterType]);
+}, [filterType, selectedRes]);
 
   useEffect(() => {
     loadNotifications();
