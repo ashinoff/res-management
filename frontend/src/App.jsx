@@ -1308,31 +1308,22 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
   const [bulkDeletePassword, setBulkDeletePassword] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   
-  // Оптимизированная функция загрузки
-  const loadNotifications = useCallback(async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      // Фильтруем по переданному типу
-      const filtered = response.data.filter(n => {
-        if (filterType) return n.type === filterType;
-        return true;
-      });
-      setNotifications(filtered);
-
-    const loadNotifications = useCallback(async () => {
-    try {
-      let url = '/api/notifications';
-      if (selectedRes) {
-        url += `?resId=${selectedRes}`;
-      }
-      const response = await api.get(url);
-      
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
+ // Оптимизированная функция загрузки
+const loadNotifications = useCallback(async () => {
+  try {
+    const response = await api.get('/api/notifications');
+    // Фильтруем по переданному типу
+    const filtered = response.data.filter(n => {
+      if (filterType) return n.type === filterType;
+      return true;
+    });
+    setNotifications(filtered);
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [filterType]);
 
   useEffect(() => {
     loadNotifications();
@@ -2166,7 +2157,8 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
       )}
     </div>
   );
-}
+
+
     
 
 // =====================================================
