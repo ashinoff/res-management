@@ -1471,6 +1471,7 @@ function Notifications({ filterType, onSectionChange }) {
       setShowBulkDeleteModal(false);
       setBulkDeletePassword('');
       setSelectedNotificationIds([]);
+      setSearchTp('');
       await loadNotifications();
       
     } catch (error) {
@@ -1622,11 +1623,12 @@ function Notifications({ filterType, onSectionChange }) {
         value={searchTp}
         onChange={(e) => setSearchTp(e.target.value)}
         className="search-input"
-        autoComplete="off"
+        autoComplete="new-password"
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck="false"
-        name="notifications-search-tp"
+        name={`search-tp-${Date.now()}`}  // Динамическое имя
+        id={`search-tp-${Date.now()}`}
       />
     </div>
     
