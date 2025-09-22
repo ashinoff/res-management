@@ -5148,27 +5148,27 @@ export default function App() {
 const renderContent = () => {
   switch (activeSection) {
     case 'structure':
-      return <NetworkStructure selectedRes={selectedRes} />;
+      return <NetworkStructure />;
     case 'upload':
-      return <FileUpload selectedRes={selectedRes} />;
+      return <FileUpload />;
     case 'tech_pending':
-      return <Notifications filterType="error" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
+      return <Notifications filterType="error" onSectionChange={setActiveSection} />;
     case 'askue_pending':
-      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
+      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
     case 'problem_vl':
-      return <ProblemVL selectedRes={selectedRes} />;
+      return <ProblemVL />;
     case 'documents':
-      return <UploadedDocuments selectedRes={selectedRes} />;
+      return <UploadedDocuments />;
     case 'reports':
-      return <Reports selectedRes={selectedRes} />;
+      return <Reports />;
     case 'settings':
       return <Settings />;
     case 'history':
-      return <SystemHistory selectedRes={selectedRes} />;
+      return <SystemHistory />;
     case 'analytics':  
-      return <Analytics selectedRes={selectedRes} />;
+      return <Analytics />;
     default:
-      return <NetworkStructure selectedRes={selectedRes} />;
+      return <NetworkStructure />;
   }
 };
 
