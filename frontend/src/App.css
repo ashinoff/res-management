@@ -4304,3 +4304,122 @@ padding: 16px 12px;
   background: #f8f9fb;
   font-size: 16px;
 }
+/* ===================================================== 
+   ОБНОВЛЕННЫЕ СТИЛИ ДЛЯ УВЕДОМЛЕНИЙ
+   ===================================================== */
+
+/* Контейнер уведомления с чекбоксом слева */
+.notification-compact {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+  border-left: 4px solid transparent;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* Чекбокс слева */
+.notification-checkbox-left {
+  flex-shrink: 0;
+  margin-top: 20px; /* Выравниваем по центру содержимого */
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Контент уведомления занимает всю ширину */
+.notification-compact-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notification-narrow-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+/* Новая синяя кнопка "Детали" без градиента */
+.btn-details-blue {
+  padding: 8px 16px;
+  background: #2563eb; /* Чистый синий цвет */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: auto;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.btn-details-blue:hover {
+  background: #1d4ed8; /* Более темный синий при наведении */
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.btn-details-blue:active {
+  transform: translateY(0);
+}
+
+/* Убираем старые стили для btn-details и btn-details-light */
+.btn-details,
+.btn-details-light {
+  display: none; /* Скрываем старые кнопки */
+}
+
+/* Стиль для выбранного уведомления */
+.notification-compact.selected {
+  background: #e3f2fd;
+  border-left-color: #2196f3;
+}
+
+/* Обновляем выравнивание для уведомлений АСКУЭ */
+.notification-compact-content.askue {
+  background: linear-gradient(to right, #fff5f5 0%, white 100%);
+  border-radius: 8px;
+  padding: 8px;
+  width: 100%;
+}
+
+/* Убеждаемся что проблемные ВЛ тоже правильно выровнены */
+.notification-compact-content.problem-vl {
+  background: linear-gradient(to right, #fff5f5 0%, white 100%);
+  border-radius: 8px;
+  padding: 12px;
+  width: 100%;
+}
+
+/* Фикс для кнопок в ряд */
+.notification-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Удаляем стили для старого расположения чекбокса */
+.notification-checkbox {
+  display: none;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .notification-compact {
+    flex-direction: column;
+  }
+  
+  .notification-checkbox-left {
+    margin-top: 0;
+    align-self: flex-start;
+  }
+}
