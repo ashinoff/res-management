@@ -944,7 +944,7 @@ const getPhaseErrors = () => {
 // КОМПОНЕНТ ЗАГРУЗКИ ФАЙЛОВ
 // =====================================================
 
-function FileUpload({ selectedRes }) {
+function FileUpload() {
   const [selectedType, setSelectedType] = useState('');
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
