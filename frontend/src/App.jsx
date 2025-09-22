@@ -1652,244 +1652,201 @@ function Notifications({ filterType, onSectionChange }) {
   )}
       
       <div className="notifications-list">
-        {filteredNotifications.map(notif => (
-          <div 
-            key={notif.id} 
-            className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''}`}
-          >
-            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
-            {notif.type === 'error' && (() => {
-              try {
-                const data = JSON.parse(notif.message);
-                const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
+  {filteredNotifications.map(notif => (
+    <div 
+      key={notif.id} 
+      className={`notification-compact ${notif.type} ${!notif.isRead ? 'unread' : ''} ${selectedNotificationIds.includes(notif.id) ? 'selected' : ''}`}
+    >
+      {/* ЧЕКБОКС ТЕПЕРЬ СНАРУЖИ И СЛЕВА */}
+      {user.role === 'admin' && (
+        <input 
+          type="checkbox"
+          className="notification-checkbox-left"
+          checked={selectedNotificationIds.includes(notif.id)}
+          onChange={() => handleSelectNotification(notif.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
+      
+      {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ ОБ ОШИБКАХ */}
+      {notif.type === 'error' && (() => {
+        try {
+          const data = JSON.parse(notif.message);
+          const phaseErrors = getPhaseErrors(data.details || data.errorDetails);
+          
+          return (
+            <div className="notification-narrow-content">
+              {/* УБИРАЕМ ЧЕКБОКС ОТСЮДА */}
+              
+              <div className="notification-phases">
+                <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
+                <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
+                <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
+              </div>
+              
+              <div className="notification-narrow-info">
+                <div className="notification-tp">{data.tpName}</div>
+                <div className="notification-narrow-details">
+                  <span className="label">РЭС:</span> {data.resName} | 
+                  <span className="label"> ТП:</span> {data.tpName} | 
+                  <span className="label"> ВЛ:</span> {data.vlName} | 
+                  <span className="label"> Позиция:</span> {
+                    data.position === 'start' ? 'Начало' : 
+                    data.position === 'middle' ? 'Середина' : 'Конец'
+                  }
+                </div>
+                <div className="notification-pu-number">
+                  ПУ №: <strong>{data.puNumber}</strong>
+                </div>
+              </div>
+              
+              <div className="notification-narrow-actions">
+                <button 
+                  className="btn-details-blue"
+                  onClick={() => {
+                    setDetailsNotification({ ...notif, data });
+                    setShowDetailsModal(true);
+                  }}
+                >
+                  Детали
+                </button>
                 
-                return (
-                  <div className="notification-narrow-content">
+                {user.role === 'res_responsible' && (
+                  <button 
+                    className="btn-complete"
+                    onClick={() => {
+                      setSelectedNotification({ id: notif.id, data });
+                      setShowCompleteModal(true);
+                    }}
+                    title="Выполнить мероприятия"
+                  >
+                    ✅
+                  </button>
+                )}
+                
+                {/* УБИРАЕМ КНОПКУ УДАЛЕНИЯ */}
+              </div>
+            </div>
+          );
+        } catch (e) {
+          return <div className="error-text">Ошибка отображения</div>;
+        }
+      })()}
+      
+      {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
+      {notif.type === 'pending_askue' && (() => {
+        try {
+          const data = JSON.parse(notif.message);
+          return (
+            <div className="notification-compact-content askue">
+              {/* УБИРАЕМ ЧЕКБОКС ОТСЮДА */}
+              
+              <div className="notification-main-info">
+                <div className="notification-location">
+                  <span className="label">ТП:</span> {data.tpName} | 
+                  <span className="label"> ПУ №:</span> <strong>{data.puNumber}</strong> | 
+                  <span className="label"> Журнал с:</span> <strong>{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</strong>
+                </div>
+              </div>
+              
+              <div className="notification-actions-row">
+                <div className="notification-buttons">
+                  <button 
+                    className="btn-upload"
+                    onClick={() => handleFileUpload(data.puNumber, data)}
+                    disabled={uploadingPu === data.puNumber}
+                    title="Загрузить файл"
+                  >
+                    {uploadingPu === data.puNumber ? '⏳ Загрузка...' : '📤 Загрузить'}
+                  </button>
+                  
+                  <button 
+                    className="btn-details-blue"
+                    onClick={() => {
+                      setDetailsNotification({ ...notif, data });
+                      setShowDetailsModal(true);
+                    }}
+                  >
+                    Детали
+                  </button>
+                  
+                  {/* УБИРАЕМ КНОПКУ УДАЛЕНИЯ */}
+                </div>
+              </div>
+            </div>
+          );
+        } catch (e) {
+          return <div className="error-text">Ошибка отображения</div>;
+        }
+      })()}
 
-                    {user.role === 'admin' && (
-          <input 
-            type="checkbox"
-            className="notification-checkbox"
-            checked={selectedNotificationIds.includes(notif.id)}
-            onChange={() => handleSelectNotification(notif.id)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        )}
-
-                    
-                    <div className="notification-phases">
-                      <div className={`phase-indicator ${phaseErrors.A ? 'phase-error' : ''}`}>A</div>
-                      <div className={`phase-indicator ${phaseErrors.B ? 'phase-error' : ''}`}>B</div>
-                      <div className={`phase-indicator ${phaseErrors.C ? 'phase-error' : ''}`}>C</div>
-                    </div>
-                    
-                    <div className="notification-narrow-info">
-                      <div className="notification-tp">{data.tpName}</div>
-                      <div className="notification-narrow-details">
-                        <span className="label">РЭС:</span> {data.resName} | 
-                        <span className="label"> ТП:</span> {data.tpName} | 
-                        <span className="label"> ВЛ:</span> {data.vlName} | 
-                        <span className="label"> Позиция:</span> {
-                          data.position === 'start' ? 'Начало' : 
-                          data.position === 'middle' ? 'Середина' : 'Конец'
-                        }
-                      </div>
-                      <div className="notification-pu-number">
-                        ПУ №: <strong>{data.puNumber}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="notification-narrow-actions">
-                      <button 
-                        className="btn-details-light"
-                        onClick={() => {
-                          setDetailsNotification({ ...notif, data });
-                          setShowDetailsModal(true);
-                        }}
-                        title="Подробности"
-                      >
-                        🔍
-                      </button>
-                      
-                      {user.role === 'res_responsible' && (
-                        <button 
-                          className="btn-complete"
-                          onClick={() => {
-                            setSelectedNotification({ id: notif.id, data });
-                            setShowCompleteModal(true);
-                          }}
-                          title="Выполнить мероприятия"
-                        >
-                          ✅
-                        </button>
-                      )}
-                      
-                      {user.role === 'admin' && (
-                        <button
-                          className="btn-delete"
-                          onClick={() => {
-                            setDeleteNotificationId(notif.id);
-                            setShowDeleteModal(true);
-                          }}
-                          title="Удалить"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              } catch (e) {
-                return <div className="error-text">Ошибка отображения</div>;
-              }
-            })()}
-            
-            {/* КОМПАКТНЫЕ УВЕДОМЛЕНИЯ АСКУЭ */}
-            {notif.type === 'pending_askue' && (() => {
-              try {
-                const data = JSON.parse(notif.message);
-                return (
-                  <div className="notification-compact-content askue">
-                    {user.role === 'admin' && (
-          <input 
-            type="checkbox"
-            className="notification-checkbox"
-            checked={selectedNotificationIds.includes(notif.id)}
-            onChange={() => handleSelectNotification(notif.id)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        )}
-
-
-                    
-                    <div className="notification-main-info">
-                      <div className="notification-location">
-                        <span className="label">ТП:</span> {data.tpName} | 
-                        <span className="label"> ПУ №:</span> <strong>{data.puNumber}</strong> | 
-                        <span className="label"> Журнал с:</span> <strong>{new Date(data.checkFromDate).toLocaleDateString('ru-RU')}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="notification-actions-row">
-                      <div className="notification-buttons">
-                        <button 
-                          className="btn-upload"
-                          onClick={() => handleFileUpload(data.puNumber, data)}
-                          disabled={uploadingPu === data.puNumber}
-                          title="Загрузить файл"
-                        >
-                          {uploadingPu === data.puNumber ? '⏳ Загрузка...' : '📤 Загрузить'}
-                        </button>
-                        
-                        <button 
-                          className="btn-details"
-                          onClick={() => {
-                            setDetailsNotification({ ...notif, data });
-                            setShowDetailsModal(true);
-                          }}
-                          title="Подробности"
-                        >
-                          🔍
-                        </button>
-                        
-                        {user.role === 'admin' && (
-                          <button
-                            className="btn-delete"
-                            onClick={() => {
-                              setDeleteNotificationId(notif.id);
-                              setShowDeleteModal(true);
-                            }}
-                            title="Удалить"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              } catch (e) {
-                return <div className="error-text">Ошибка отображения</div>;
-              }
-            })()}
-
-            {/* УВЕДОМЛЕНИЯ О ПРОБЛЕМНЫХ ВЛ */}
-{notif.type === 'problem_vl' && (() => {
-  try {
-    const data = JSON.parse(notif.message);
-    return (
-      <div className="notification-compact-content problem-vl">
-        <div className="problem-vl-alert">
-          <span className="critical-icon">🚨</span>
-          <div className="problem-vl-header">
-            <h4>Критическая проблема!</h4>
-            <span className="failure-count">{data.failureCount} неудачных проверок</span>
-          </div>
-        </div>
-        
-        <div className="notification-main-info">
-          <div className="notification-location">
-            <span className="label">РЭС:</span> {data.resName} | 
-            <span className="label"> ТП:</span> {data.tpName} | 
-            <span className="label"> ВЛ:</span> {data.vlName}
-          </div>
-          <div className="notification-pu">
-            <span className="label">ПУ №:</span> <strong>{data.puNumber}</strong> | 
-            <span className="label"> Позиция:</span> {
-              data.position === 'start' ? 'Начало' :
-              data.position === 'middle' ? 'Середина' : 'Конец'
-            }
-          </div>
-        </div>
-        
-        <div className="problem-error-details">
-          <p className="error-label">Последняя ошибка:</p>
-          <p className="error-text">{data.errorDetails}</p>
-        </div>
-        
-        {data.resComment && (
-          <div className="problem-res-comment">
-            <p className="comment-label">Комментарий РЭС:</p>
-            <p className="comment-text">{data.resComment}</p>
-          </div>
-        )}
-        
-        <div className="notification-actions-row">
-          <div className="notification-buttons">
-            <button 
-              className="btn-view-problem"
-              onClick={() => {
-                // Если есть функция смены раздела, используем её
-                if (typeof onSectionChange === 'function') {
-                  onSectionChange('problem_vl');
-                }
-              }}
-              title="Перейти к проблемным ВЛ"
-            >
-              📊 К проблемным ВЛ
-            </button>
-            
-            {user.role === 'admin' && (
-              <button
-                className="btn-delete"
-                onClick={() => {
-                  setDeleteNotificationId(notif.id);
-                  setShowDeleteModal(true);
-                }}
-                title="Удалить уведомление"
-              >
-                🗑️
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  } catch (e) {
-    console.error('Error parsing problem VL notification:', e);
-    return <div className="error-text">Ошибка отображения уведомления</div>;
-  }
-})()}
+      {/* УВЕДОМЛЕНИЯ О ПРОБЛЕМНЫХ ВЛ */}
+      {notif.type === 'problem_vl' && (() => {
+        try {
+          const data = JSON.parse(notif.message);
+          return (
+            <div className="notification-compact-content problem-vl">
+              {/* УБИРАЕМ ЧЕКБОКС ОТСЮДА */}
+              
+              <div className="problem-vl-alert">
+                <span className="critical-icon">🚨</span>
+                <div className="problem-vl-header">
+                  <h4>Критическая проблема!</h4>
+                  <span className="failure-count">{data.failureCount} неудачных проверок</span>
+                </div>
+              </div>
+              
+              <div className="notification-main-info">
+                <div className="notification-location">
+                  <span className="label">РЭС:</span> {data.resName} | 
+                  <span className="label"> ТП:</span> {data.tpName} | 
+                  <span className="label"> ВЛ:</span> {data.vlName}
+                </div>
+                <div className="notification-pu">
+                  <span className="label">ПУ №:</span> <strong>{data.puNumber}</strong> | 
+                  <span className="label"> Позиция:</span> {
+                    data.position === 'start' ? 'Начало' :
+                    data.position === 'middle' ? 'Середина' : 'Конец'
+                  }
+                </div>
+              </div>
+              
+              <div className="problem-error-details">
+                <p className="error-label">Последняя ошибка:</p>
+                <p className="error-text">{data.errorDetails}</p>
+              </div>
+              
+              {data.resComment && (
+                <div className="problem-res-comment">
+                  <p className="comment-label">Комментарий РЭС:</p>
+                  <p className="comment-text">{data.resComment}</p>
+                </div>
+              )}
+              
+              <div className="notification-actions-row">
+                <div className="notification-buttons">
+                  <button 
+                    className="btn-view-problem"
+                    onClick={() => {
+                      if (typeof onSectionChange === 'function') {
+                        onSectionChange('problem_vl');
+                      }
+                    }}
+                    title="Перейти к проблемным ВЛ"
+                  >
+                    📊 К проблемным ВЛ
+                  </button>
+                  
+                  {/* УБИРАЕМ КНОПКУ УДАЛЕНИЯ */}
+                </div>
+              </div>
+            </div>
+          );
+        } catch (e) {
+          console.error('Error parsing problem VL notification:', e);
+          return <div className="error-text">Ошибка отображения уведомления</div>;
+        }
+      })()}
             
             {/* УСПЕШНЫЕ УВЕДОМЛЕНИЯ */}
             {notif.type === 'success' && (
