@@ -1604,6 +1604,44 @@ app.delete('/api/notifications/:id',
       res.status(500).json({ error: error.message });
     }
 });
+// API для массового удаления уведомлений
+app.post('/api/notifications/delete-bulk', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { ids, password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'Не выбраны записи для удаления' });
+      }
+      
+      // Удаляем уведомления
+      const deletedCount = await Notification.destroy({
+        where: { id: { [Op.in]: ids } },
+        transaction
+      });
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `Удалено уведомлений: ${deletedCount}`,
+        deletedCount
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Bulk delete notifications error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
 
 // роут ДЛЯ ОТЧЕТОВ эксель
 app.get('/api/reports/export-history', 
