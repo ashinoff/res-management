@@ -1476,7 +1476,9 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
     }
     
     // Добавляем фильтр по РЭС для не-админов
-    if (req.user.role !== 'admin') {
+    if (req.user.role === 'admin' && req.query.resId) {
+      whereClause.resId = parseInt(req.query.resId);
+    } else if (req.user.role !== 'admin') {
       whereClause.resId = req.user.resId;
     }
     
@@ -2006,9 +2008,12 @@ app.get('/api/reports/problem-vl',
       }
       
       // Добавляем фильтр по РЭС для не-админов
-      if (req.user.role !== 'admin') {
-        whereClause.resId = req.user.resId;
-      }
+      // Добавляем фильтр по РЭС
+    if (req.user.role === 'admin' && req.query.resId) {
+      whereClause.resId = parseInt(req.query.resId);
+    } else if (req.user.role !== 'admin') {
+      whereClause.resId = req.user.resId;
+    }
       
       const problemVLs = await ProblemVL.findAll({
         where: whereClause,
