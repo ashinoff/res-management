@@ -5180,7 +5180,7 @@ const renderContent = () => {
           <header className="app-header">
             <div className="header-left">
               <h1>Система контроля уровня напряжения в сетях 0,4 кВ</h1>
-              {user.role === 'admin' && activeSection !== 'history' && (
+              {user.role === 'admin' && activeSection !== 'history' && activeSection !== 'analytics' && (
                 <select 
                   value={selectedRes || ''}
                   onChange={(e) => setSelectedRes(e.target.value ? parseInt(e.target.value) : null)}
