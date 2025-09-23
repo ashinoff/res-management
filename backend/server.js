@@ -2970,8 +2970,10 @@ app.get('/api/documents/list', authenticateToken, async (req, res) => {
     const { resId } = req.query; // ДОБАВИТЬ
     let whereClause = {};
     
-    // Фильтрация по РЭС для не-админов
-    if (req.user.role !== 'admin') {
+    // Фильтрация по РЭС
+    if (req.user.role === 'admin' && resId) {
+      whereClause.resId = parseInt(resId);
+    } else if (req.user.role !== 'admin') {
       whereClause.resId = req.user.resId;
     }
     
