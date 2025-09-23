@@ -94,36 +94,6 @@ body {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-button {
-  width: 100%;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
-}
-
-button:active {
-  transform: translateY(0);
-}
-
-button:disabled {
-  background: #cbd5e0;
-  cursor: not-allowed;
-  transform: none;
-}
-
 .error-message {
   color: #e53e3e;
   text-align: center;
@@ -4482,4 +4452,35 @@ padding: 16px 12px;
 
 .btn-complete-green:active {
   transform: translateY(0);
+}
+/* Базовый класс для обычных кнопок - темно-синий */
+.btn-default {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); /* Темно-синий градиент */
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-default:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); /* Чуть светлее при наведении */
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(30, 64, 175, 0.3);
+}
+
+.btn-default:active {
+  transform: translateY(0);
+}
+
+.btn-default:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  transform: none;
 }
