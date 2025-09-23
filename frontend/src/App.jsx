@@ -4536,7 +4536,7 @@ function SystemHistory() {
     if (activeTab === 'uploads') {
       const params = new URLSearchParams({
         page: currentPage,
-        limit: 50,
+        limit: 100,
         ...filters,
         resId: user.role === 'admin' ? filters.resId : user.resId // Принудительно для не-админов
       });
@@ -4547,7 +4547,7 @@ function SystemHistory() {
     } else {
       const params = new URLSearchParams({
         page: currentPage,
-        limit: 50,
+        limit: 100,
         puNumber: filters.puNumber,
         resId: user.role === 'admin' ? filters.resId : user.resId, // Принудительно для не-админов
         tpName: filters.tpName,
@@ -5180,7 +5180,7 @@ const renderContent = () => {
           <header className="app-header">
             <div className="header-left">
               <h1>Система контроля уровня напряжения в сетях 0,4 кВ</h1>
-              {user.role === 'admin' && (
+              {user.role === 'admin' && activeSection !== 'history' && (
                 <select 
                   value={selectedRes || ''}
                   onChange={(e) => setSelectedRes(e.target.value ? parseInt(e.target.value) : null)}
