@@ -1716,14 +1716,14 @@ const loadNotifications = useCallback(async () => {
                 
                 {user.role === 'res_responsible' && (
                   <button 
-                    className="btn-complete"
+                    className="btn-complete-green"
                     onClick={() => {
                       setSelectedNotification({ id: notif.id, data });
                       setShowCompleteModal(true);
                     }}
                     title="Выполнить мероприятия"
                   >
-                    ✅
+                    Завершить
                   </button>
                 )}
                 
