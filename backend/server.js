@@ -1069,10 +1069,11 @@ app.post('/api/network/upload-full-structure',
 
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
+    const { resId } = req.query;
     let whereClause = {};
     
     if (req.user.role === 'admin') {
-      whereClause = {};
+      whereClause = resId ? { resId: parseInt(resId) } : {};
     } else if (req.user.role === 'res_responsible') {
       whereClause = {
         resId: req.user.resId,
