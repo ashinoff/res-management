@@ -212,6 +212,9 @@ function NetworkStructure({ selectedRes }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+
+  // Используем переданный selectedRes, если нет - берем из контекста
+  const resId = selectedRes || contextSelectedRes;
   
   // Оптимизированная функция загрузки
   const loadNetworkStructure = useCallback(async () => {
@@ -223,7 +226,7 @@ function NetworkStructure({ selectedRes }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedRes]);
+  }, [resId]);
 
   useEffect(() => {
     loadNetworkStructure();
@@ -5137,7 +5140,7 @@ export default function App() {
 const renderContent = () => {
   switch (activeSection) {
     case 'structure':
-      return <NetworkStructure />;
+      return <NetworkStructure selectedRes={selectedRes} />;
     case 'upload':
       return <FileUpload />;
     case 'tech_pending':
