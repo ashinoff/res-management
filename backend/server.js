@@ -2967,6 +2967,7 @@ async function initializeDatabase() {
 // API для получения документов
 app.get('/api/documents/list', authenticateToken, async (req, res) => {
   try {
+    const { resId } = req.query; // ДОБАВИТЬ
     let whereClause = {};
     
     // Фильтрация по РЭС для не-админов
