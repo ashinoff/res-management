@@ -2169,7 +2169,7 @@ const loadNotifications = useCallback(async () => {
 function Reports() {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [selectedComment, setSelectedComment] = useState(null);
-  const { user } = useContext(AuthContext);
+  const { user, selectedRes } = useContext(AuthContext);
 
   const [reportType, setReportType] = useState('pending_work');
   const [reportData, setReportData] = useState([]);
@@ -2187,7 +2187,7 @@ function Reports() {
   
   useEffect(() => {
     loadReports();
-  }, [reportType, dateFrom, dateTo]);
+  }, [reportType, dateFrom, dateTo, selectedRes]);
 
   const loadReports = async () => {
   setLoading(true);
@@ -2199,7 +2199,7 @@ function Reports() {
         params: { 
           dateFrom, 
           dateTo,
-          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+          resId: user.role === 'admin' ? selectedRes : user.resId // Используем selectedRes для админа
         }
       });
     } else {
@@ -2208,7 +2208,7 @@ function Reports() {
           type: reportType,
           dateFrom,
           dateTo,
-          resId: user.role === 'admin' ? undefined : user.resId // ДОБАВЛЕНО
+          resId: user.role === 'admin' ? selectedRes : user.resId // Используем selectedRes для админа
         }
       });
     }
