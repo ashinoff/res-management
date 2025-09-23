@@ -3883,6 +3883,7 @@ function UploadedDocuments() {
   const [showFileViewer, setShowFileViewer] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const { user, selectedRes } = useContext(AuthContext);
   const { user } = useContext(AuthContext);
   const [deleteRecordId, setDeleteRecordId] = useState(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
@@ -3895,6 +3896,7 @@ function UploadedDocuments() {
   
   const loadDocuments = async () => {
     try {
+      const params = selectedRes ? `?resId=${selectedRes}` : '';
       const response = await api.get('/api/documents/list');
       setDocuments(response.data);
     } catch (error) {
@@ -5147,7 +5149,7 @@ const renderContent = () => {
     case 'tech_pending':
       return <Notifications filterType="error" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
     case 'askue_pending':
-      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
+      return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
     case 'problem_vl':
       return <ProblemVL />;
     case 'documents':
