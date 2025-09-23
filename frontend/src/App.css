@@ -4460,30 +4460,26 @@ padding: 16px 12px;
   height: 32px; /* Одинаковая высота для всех кнопок */
 }
 .btn-complete-green {
-  padding: 6px 12px;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  white-space: nowrap;
-}
-
-.btn-complete-green:hover {
-  background-color: #218838;
-}
-
-.btn-complete-green:active {
-  transform: translateY(1px);
-}
-.btn-complete-green {
   padding: 6px 12px !important;
-  background-color: #28a745 !important;
+  background: #28a745 !important;  /* Измените на просто background */
+  background-image: none !important;  /* Убираем градиент */
   color: white !important;
   border: none !important;
   border-radius: 4px !important;
   font-size: 13px !important;
   cursor: pointer !important;
+  width: auto !important;  /* Добавьте это, чтобы убрать width: 100% */
+  text-transform: none !important;  /* Убираем uppercase */
+  letter-spacing: normal !important;  /* Убираем letter-spacing */
+  font-weight: 500 !important;  /* Менее жирный шрифт */
+}
+
+.btn-complete-green:hover {
+  background: #218838 !important;
+  background-image: none !important;
+  transform: translateY(-1px);
+}
+
+.btn-complete-green:active {
+  transform: translateY(0);
 }
