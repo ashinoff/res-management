@@ -1311,7 +1311,8 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
  // Оптимизированная функция загрузки
 const loadNotifications = useCallback(async () => {
   try {
-    const response = await api.get('/api/notifications');
+    const params = selectedRes ? `?resId=${selectedRes}` : '';
+    const response = await api.get(`/api/notifications${params}`);
     // Фильтруем по переданному типу
     const filtered = response.data.filter(n => {
       if (filterType) return n.type === filterType;
@@ -5144,7 +5145,7 @@ const renderContent = () => {
     case 'upload':
       return <FileUpload />;
     case 'tech_pending':
-      return <Notifications filterType="error" onSectionChange={setActiveSection} />;
+      return <Notifications filterType="error" onSectionChange={setActiveSection} selectedRes={selectedRes} />;
     case 'askue_pending':
       return <Notifications filterType="pending_askue" onSectionChange={setActiveSection} />;
     case 'problem_vl':
