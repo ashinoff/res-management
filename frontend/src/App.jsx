@@ -182,7 +182,7 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
 // КОМПОНЕНТ СТРУКТУРЫ СЕТИ
 // =====================================================
 
-function NetworkStructure() {
+function NetworkStructure({ selectedRes }) {
   const [networkData, setNetworkData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTp, setSearchTp] = useState('');
