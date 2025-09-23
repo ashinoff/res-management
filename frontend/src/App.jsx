@@ -182,11 +182,11 @@ function MainMenu({ activeSection, onSectionChange, userRole }) {
 // КОМПОНЕНТ СТРУКТУРЫ СЕТИ
 // =====================================================
 
-function NetworkStructure({ selectedRes }) {
+function NetworkStructure() {
   const [networkData, setNetworkData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTp, setSearchTp] = useState('');
-  const { user } = useContext(AuthContext);
+  const { user, selectedRes } = useContext(AuthContext);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -226,7 +226,7 @@ function NetworkStructure({ selectedRes }) {
     } finally {
       setLoading(false);
     }
-  }, [resId]);
+  }, [selectedRes]);
 
   useEffect(() => {
     loadNetworkStructure();
@@ -5140,7 +5140,7 @@ export default function App() {
 const renderContent = () => {
   switch (activeSection) {
     case 'structure':
-      return <NetworkStructure selectedRes={selectedRes} />;
+      return <NetworkStructure />;
     case 'upload':
       return <FileUpload />;
     case 'tech_pending':
