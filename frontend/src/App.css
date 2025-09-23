@@ -4459,3 +4459,22 @@ padding: 16px 12px;
 .notification-buttons button {
   height: 32px; /* Одинаковая высота для всех кнопок */
 }
+.btn-complete-green {
+  padding: 6px 12px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-complete-green:hover {
+  background-color: #218838;
+}
+
+.btn-complete-green:active {
+  transform: translateY(1px);
+}
