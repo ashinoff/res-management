@@ -99,7 +99,7 @@ function LoginForm({ onLogin }) {
             />
           </div>
           {error && <div className="error-message">{error}</div>}
-          <button type="submit" disabled={loading}>
+          <button type="submit" className="btn-default" disabled={loading}>
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
@@ -1264,7 +1264,7 @@ for (let i = 0; i < files.length; i++) {
           <button 
             onClick={handleUpload} 
             disabled={!selectedType}
-            className="btn btn-primary btn-large"
+            className="btn btn-primary btn-large btn-default"
           >
             <span>🚀</span>
             Загрузить и анализировать ({files.length} файлов)
