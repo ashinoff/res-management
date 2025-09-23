@@ -214,7 +214,7 @@ function NetworkStructure() {
   const [deletePassword, setDeletePassword] = useState('');
 
   // Используем переданный selectedRes, если нет - берем из контекста
-  const resId = selectedRes || contextSelectedRes;
+  
   
   // Оптимизированная функция загрузки
   const loadNetworkStructure = useCallback(async () => {
