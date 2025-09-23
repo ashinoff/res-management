@@ -3884,7 +3884,7 @@ function UploadedDocuments() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const { user, selectedRes } = useContext(AuthContext);
-  const { user } = useContext(AuthContext);
+  
   const [deleteRecordId, setDeleteRecordId] = useState(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
