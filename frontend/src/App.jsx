@@ -623,13 +623,22 @@ const executeClearHistory = async () => {
   
   <div className="action-buttons-group">
     {user.role === 'admin' && selectedIds.length > 0 && (
-      <button 
-        className="delete-selected-btn"
-        onClick={() => setShowDeleteModal(true)}
-      >
-        Удалить выбранные ({selectedIds.length})
-      </button>
-    )}
+  <>
+    <button 
+      className="clear-history-btn"
+      onClick={handleClearTpHistory}
+    >
+      Очистить историю ({selectedIds.length})
+    </button>
+    
+    <button 
+      className="delete-selected-btn"
+      onClick={() => setShowDeleteModal(true)}
+    >
+      Удалить выбранные ({selectedIds.length})
+    </button>
+  </>
+)}
     
     <button 
       className="refresh-btn" 
