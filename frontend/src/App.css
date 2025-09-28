@@ -3688,6 +3688,10 @@ padding: 16px 12px;
   min-width: 160px; /* минимальная ширина для единообразия */
   height: 40px; /* фиксированная высота */
   white-space: nowrap;
+  margin-right: 10px;
+}
+.action-buttons-group button:last-child {
+  margin-right: 0;
 }
 /* ===================================================== 
    КНОПКА ПРОКРУТКИ ВВЕРХ
