@@ -426,30 +426,33 @@ const executeClearHistory = async () => {
         data: { password: clearHistoryPassword }
       });
     } else if (clearHistoryType === 'tp') {
-  console.log('=== DEBUG CLEAR TP ===');
-  console.log('selectedIds:', selectedIds);
-  console.log('networkData:', networkData);
-  console.log('filteredData:', filteredData);
-  
-  // Используйте правильный массив данных
-  const dataToUse = searchTp ? filteredData : networkData;
-  console.log('Using data:', dataToUse);
-  
-  // Собираем выбранные строки
-  const selectedRows = dataToUse.filter(item => selectedIds.includes(item.id));
-  console.log('Selected rows:', selectedRows);
-  
-  // Собираем уникальные ТП
-  const selectedTps = [...new Set(selectedRows.map(item => item.tpName))];
-  console.log('Selected TPs:', selectedTps);
-  console.log('RES ID:', selectedRes || user.resId);
-  
-  response = await api.post('/api/history/clear-tp', {
-    password: clearHistoryPassword,
-    tpNames: selectedTps,
-    resId: resIdToUse
-  });
-}
+      console.log('=== DEBUG CLEAR TP ===');
+      console.log('selectedIds:', selectedIds);
+      console.log('networkData:', networkData);
+      console.log('filteredData:', filteredData);
+      
+      // Используйте правильный массив данных
+      const dataToUse = searchTp ? filteredData : networkData;
+      console.log('Using data:', dataToUse);
+      
+      // Собираем выбранные строки
+      const selectedRows = dataToUse.filter(item => selectedIds.includes(item.id));
+      console.log('Selected rows:', selectedRows);
+      
+      // Собираем уникальные ТП
+      const selectedTps = [...new Set(selectedRows.map(item => item.tpName))];
+      console.log('Selected TPs:', selectedTps);
+      
+      // ДОБАВЬТЕ ЭТО - определение resIdToUse!
+      const resIdToUse = selectedRes || user.resId;
+      console.log('RES ID to use:', resIdToUse);
+      
+      response = await api.post('/api/history/clear-tp', {
+        password: clearHistoryPassword,
+        tpNames: selectedTps,
+        resId: resIdToUse  // Теперь переменная определена
+      });
+    }
     
     alert(response.data.message);
     setShowClearHistoryModal(false);
