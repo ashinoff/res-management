@@ -5161,6 +5161,36 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+  let inactivityTimer;
+  const INACTIVITY_TIME = 2 * 60 * 60 * 1000; // 2 часа
+  
+  const resetTimer = () => {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      localStorage.removeItem('token');
+      setUser(null);
+      alert('Сессия истекла из-за неактивности. Пожалуйста, войдите снова.');
+    }, INACTIVITY_TIME);
+  };
+  
+  const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+  
+  if (user) {
+    resetTimer();
+    events.forEach(event => {
+      document.addEventListener(event, resetTimer);
+    });
+  }
+  
+  return () => {
+    clearTimeout(inactivityTimer);
+    events.forEach(event => {
+      document.removeEventListener(event, resetTimer);
+    });
+  };
+}, [user]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     setUser(null);
