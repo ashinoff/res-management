@@ -418,54 +418,62 @@ const handleClearTpHistory = async () => {
   
 // Функция выполнения очистки
 const executeClearHistory = async () => {
-  try {
-    let response;
-    
-    if (clearHistoryType === 'pu') {
-      response = await api.delete(`/api/history/clear-pu/${clearHistoryPu}`, {
-        data: { password: clearHistoryPassword }
-      });
-    } else if (clearHistoryType === 'tp') {
-      console.log('=== DEBUG CLEAR TP ===');
-      console.log('selectedIds:', selectedIds);
-      console.log('networkData:', networkData);
-      console.log('filteredData:', filteredData);
+    try {
+      let response;
       
-      // Используйте правильный массив данных
-      const dataToUse = searchTp ? filteredData : networkData;
-      console.log('Using data:', dataToUse);
+      if (clearHistoryType === 'pu') {
+        response = await api.delete(`/api/history/clear-pu/${clearHistoryPu}`, {
+          data: { password: clearHistoryPassword }
+        });
+      } else if (clearHistoryType === 'tp') {
+        console.log('=== DEBUG CLEAR TP ===');
+        console.log('selectedIds:', selectedIds);
+        console.log('networkData:', networkData);
+        console.log('filteredData:', filteredData);
+        
+        // Используйте правильный массив данных
+        const dataToUse = searchTp ? filteredData : networkData;
+        console.log('Using data:', dataToUse);
+        
+        // Собираем выбранные строки
+        const selectedRows = dataToUse.filter(item => selectedIds.includes(item.id));
+        console.log('Selected rows:', selectedRows);
+        
+        // Собираем уникальные ТП
+        const selectedTps = [...new Set(selectedRows.map(item => item.tpName))];
+        console.log('Selected TPs:', selectedTps);
+        
+        // ИСПРАВЛЕНИЕ: Объявляем resIdToUse И проверяем значения
+        const resIdToUse = selectedRes || user?.resId || 1; // Добавляем fallback на 1
+        console.log('selectedRes:', selectedRes);
+        console.log('user:', user);
+        console.log('user.resId:', user?.resId);
+        console.log('RES ID to use:', resIdToUse);
+        
+        if (!resIdToUse) {
+          alert('Ошибка: не определен РЭС для очистки');
+          return;
+        }
+        
+        response = await api.post('/api/history/clear-tp', {
+          password: clearHistoryPassword,
+          tpNames: selectedTps,
+          resId: resIdToUse
+        });
+      }
       
-      // Собираем выбранные строки
-      const selectedRows = dataToUse.filter(item => selectedIds.includes(item.id));
-      console.log('Selected rows:', selectedRows);
+      alert(response.data.message);
+      setShowClearHistoryModal(false);
+      setClearHistoryPassword('');
+      setSelectedIds([]);
       
-      // Собираем уникальные ТП
-      const selectedTps = [...new Set(selectedRows.map(item => item.tpName))];
-      console.log('Selected TPs:', selectedTps);
+      // Обновляем структуру
+      await loadNetworkStructure();
       
-      // ДОБАВЬТЕ ЭТО - определение resIdToUse!
-      const resIdToUse = selectedRes || user.resId;
-      console.log('RES ID to use:', resIdToUse);
-      
-      response = await api.post('/api/history/clear-tp', {
-        password: clearHistoryPassword,
-        tpNames: selectedTps,
-        resId: resIdToUse  // Теперь переменная определена
-      });
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
-    
-    alert(response.data.message);
-    setShowClearHistoryModal(false);
-    setClearHistoryPassword('');
-    setSelectedIds([]);
-    
-    // Обновляем структуру
-    await loadNetworkStructure();
-    
-  } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  }
-};
+  };
 
   
   const renderPuCell = (item, position) => {
