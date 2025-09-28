@@ -447,7 +447,7 @@ const executeClearHistory = async () => {
   response = await api.post('/api/history/clear-tp', {
     password: clearHistoryPassword,
     tpNames: selectedTps,
-    resId: selectedRes || user.resId || 1 // добавляем fallback
+    resId: resIdToUse
   });
 }
     
