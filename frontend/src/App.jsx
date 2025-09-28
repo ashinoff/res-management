@@ -428,7 +428,7 @@ const executeClearHistory = async () => {
     } else if (clearHistoryType === 'tp') {
       // Собираем уникальные ТП из выбранных строк
       const selectedTps = [...new Set(
-        filteredData
+        networkData
           .filter(item => selectedIds.includes(item.id))
           .map(item => item.tpName)
       )];
@@ -437,6 +437,7 @@ const executeClearHistory = async () => {
         password: clearHistoryPassword,
         tpNames: selectedTps,
         resId: selectedRes
+        resId: selectedRes || user.resId
       });
     }
     
