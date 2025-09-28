@@ -426,19 +426,19 @@ const executeClearHistory = async () => {
         data: { password: clearHistoryPassword }
       });
     } else if (clearHistoryType === 'tp') {
-  // Собираем уникальные ТП из выбранных строк
-  const selectedTps = [...new Set(
-    filteredData
-      .filter(item => selectedIds.includes(item.id))
-      .map(item => item.tpName)
-  )];
-  
-  response = await api.post('/api/history/clear-tp', {
-    password: clearHistoryPassword,
-    tpNames: selectedTps,
-    resId: selectedRes
-  });
-}
+      // Собираем уникальные ТП из выбранных строк
+      const selectedTps = [...new Set(
+        filteredData
+          .filter(item => selectedIds.includes(item.id))
+          .map(item => item.tpName)
+      )];
+      
+      response = await api.post('/api/history/clear-tp', {
+        password: clearHistoryPassword,
+        tpNames: selectedTps,
+        resId: selectedRes
+      });
+    }
     
     alert(response.data.message);
     setShowClearHistoryModal(false);
