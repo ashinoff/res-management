@@ -3039,6 +3039,12 @@ function Settings() {
         >
           Управление файлами
         </button>
+        <button 
+          className={activeTab === 'database' ? 'active' : ''}
+          onClick={() => setActiveTab('database')}
+        >
+          База данных
+        </button>
       </div>
       
       <div className="settings-content">
@@ -5098,6 +5104,239 @@ function Analytics() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function DatabaseMaintenance() {
+  const [healthCheck, setHealthCheck] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
+  const [cleanupType, setCleanupType] = useState('');
+  const [cleanupPassword, setCleanupPassword] = useState('');
+  const [cleaning, setCleaning] = useState(false);
+  
+  const runHealthCheck = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/api/admin/database-health');
+      setHealthCheck(response.data);
+    } catch (error) {
+      alert('Ошибка проверки БД: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleCleanup = async () => {
+    setCleaning(true);
+    try {
+      const response = await api.post('/api/admin/database-cleanup', {
+        cleanupType,
+        password: cleanupPassword
+      });
+      
+      alert(`Очистка завершена! Удалено записей: ${response.data.cleaned}`);
+      setShowCleanupModal(false);
+      setCleanupPassword('');
+      
+      // Запускаем проверку заново
+      runHealthCheck();
+      
+    } catch (error) {
+      alert('Ошибка очистки: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setCleaning(false);
+    }
+  };
+  
+  const getSeverityColor = (severity) => {
+    switch(severity) {
+      case 'error': return '#ff4d4f';
+      case 'warning': return '#faad14';
+      case 'info': return '#1890ff';
+      default: return '#52c41a';
+    }
+  };
+  
+  const getSeverityIcon = (severity) => {
+    switch(severity) {
+      case 'error': return '❌';
+      case 'warning': return '⚠️';
+      case 'info': return 'ℹ️';
+      default: return '✅';
+    }
+  };
+  
+  const getCleanupDescription = (type) => {
+    switch(type) {
+      case 'orphaned_pu_status':
+        return 'Удалить статусы ПУ без привязки к структуре сети';
+      case 'old_unread_notifications':
+        return 'Удалить непрочитанные уведомления старше года';
+      case 'orphaned_notifications':
+        return 'Удалить уведомления с несуществующими связями';
+      default:
+        return '';
+    }
+  };
+  
+  return (
+    <div className="database-maintenance">
+      <h3>Проверка целостности базы данных</h3>
+      
+      <div className="maintenance-controls">
+        <button 
+          className="btn-primary"
+          onClick={runHealthCheck}
+          disabled={loading}
+        >
+          {loading ? 'Проверка...' : 'Запустить проверку'}
+        </button>
+      </div>
+      
+      {healthCheck && (
+        <>
+          <div className="health-summary">
+            <div className="summary-card">
+              <h4>Общая статистика</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span>Всего проблем:</span>
+                  <strong>{healthCheck.stats.totalIssues}</strong>
+                </div>
+                <div className="stat-item error">
+                  <span>Критических:</span>
+                  <strong>{healthCheck.stats.byType.error}</strong>
+                </div>
+                <div className="stat-item warning">
+                  <span>Предупреждений:</span>
+                  <strong>{healthCheck.stats.byType.warning}</strong>
+                </div>
+                <div className="stat-item info">
+                  <span>Информация:</span>
+                  <strong>{healthCheck.stats.byType.info}</strong>
+                </div>
+              </div>
+            </div>
+            
+            <div className="summary-card">
+              <h4>Записей в БД</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span>Структура сети:</span>
+                  <strong>{healthCheck.stats.totalRecords.networkStructures}</strong>
+                </div>
+                <div className="stat-item">
+                  <span>Статусы ПУ:</span>
+                  <strong>{healthCheck.stats.totalRecords.puStatuses}</strong>
+                </div>
+                <div className="stat-item">
+                  <span>Уведомления:</span>
+                  <strong>{healthCheck.stats.totalRecords.notifications}</strong>
+                </div>
+                <div className="stat-item">
+                  <span>История проверок:</span>
+                  <strong>{healthCheck.stats.totalRecords.checkHistory}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {healthCheck.issues.length === 0 ? (
+            <div className="no-issues">
+              <h4>База данных в порядке!</h4>
+              <p>Проблем не обнаружено</p>
+            </div>
+          ) : (
+            <div className="issues-list">
+              <h4>Обнаруженные проблемы:</h4>
+              {healthCheck.issues.map((issue, idx) => (
+                <div key={idx} className="issue-card" style={{borderLeftColor: getSeverityColor(issue.severity)}}>
+                  <div className="issue-header">
+                    <span className="issue-icon">{getSeverityIcon(issue.severity)}</span>
+                    <span className="issue-description">{issue.description}</span>
+                    <span className="issue-count">Количество: {issue.count}</span>
+                  </div>
+                  
+                  {issue.items && issue.items.length > 0 && (
+                    <details className="issue-details">
+                      <summary>Показать детали (первые 10)</summary>
+                      <ul>
+                        {issue.items.slice(0, 10).map((item, i) => (
+                          <li key={i}>
+                            {typeof item === 'object' ? 
+                              `ПУ: ${item.puNumber} (встречается ${item.count} раз)` : 
+                              item
+                            }
+                          </li>
+                        ))}
+                        {issue.items.length > 10 && (
+                          <li>... и еще {issue.items.length - 10}</li>
+                        )}
+                      </ul>
+                    </details>
+                  )}
+                  
+                  {['orphaned_pu_status', 'old_unread_notifications', 'orphaned_notifications'].includes(issue.type) && (
+                    <button 
+                      className="btn-cleanup"
+                      onClick={() => {
+                        setCleanupType(issue.type);
+                        setShowCleanupModal(true);
+                      }}
+                    >
+                      Очистить
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="check-time">
+            <small>Последняя проверка: {new Date(healthCheck.checkedAt).toLocaleString('ru-RU')}</small>
+          </div>
+        </>
+      )}
+      
+      {/* Модальное окно очистки */}
+      {showCleanupModal && (
+        <div className="modal-backdrop" onClick={() => setShowCleanupModal(false)}>
+          <div className="modal-content cleanup-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Подтверждение очистки</h3>
+              <button className="close-btn" onClick={() => setShowCleanupModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="cleanup-description">{getCleanupDescription(cleanupType)}</p>
+              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <div className="form-group">
+                <label>Введите пароль администратора:</label>
+                <input
+                  type="password"
+                  value={cleanupPassword}
+                  onChange={(e) => setCleanupPassword(e.target.value)}
+                  placeholder="Пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowCleanupModal(false)}>
+                Отмена
+              </button>
+              <button 
+                className="danger-btn" 
+                onClick={handleCleanup}
+                disabled={!cleanupPassword || cleaning}
+              >
+                {cleaning ? 'Очистка...' : 'Очистить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
