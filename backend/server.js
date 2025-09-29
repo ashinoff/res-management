@@ -3152,6 +3152,297 @@ app.delete('/api/admin/files/:public_id',
     }
 });
 
+// API для проверки целостности базы данных
+app.get('/api/admin/database-health', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const issues = [];
+      
+      // 1. Проверка ПУ без структуры сети
+      const orphanedPuStatuses = await PuStatus.findAll({
+        where: {
+          networkStructureId: null
+        }
+      });
+      
+      if (orphanedPuStatuses.length > 0) {
+        issues.push({
+          type: 'orphaned_pu_status',
+          severity: 'warning',
+          count: orphanedPuStatuses.length,
+          description: 'Найдены статусы ПУ без привязки к структуре сети',
+          items: orphanedPuStatuses.map(p => p.puNumber)
+        });
+      }
+      
+      // 2. Проверка дубликатов ПУ в структуре
+      const duplicates = await sequelize.query(`
+        SELECT puNumber, COUNT(*) as count
+        FROM (
+          SELECT startPu as puNumber FROM "NetworkStructures" WHERE startPu IS NOT NULL
+          UNION ALL
+          SELECT middlePu as puNumber FROM "NetworkStructures" WHERE middlePu IS NOT NULL
+          UNION ALL
+          SELECT endPu as puNumber FROM "NetworkStructures" WHERE endPu IS NOT NULL
+        ) as all_pu
+        GROUP BY puNumber
+        HAVING COUNT(*) > 1
+      `, { type: sequelize.QueryTypes.SELECT });
+      
+      if (duplicates.length > 0) {
+        issues.push({
+          type: 'duplicate_pu_in_structure',
+          severity: 'error',
+          count: duplicates.length,
+          description: 'Найдены ПУ, которые встречаются в структуре несколько раз',
+          items: duplicates
+        });
+      }
+      
+      // 3. Проверка уведомлений без связей
+      const orphanedNotifications = await Notification.findAll({
+        where: {
+          [Op.or]: [
+            {
+              networkStructureId: {
+                [Op.not]: null
+              },
+              '$NetworkStructure.id$': null
+            }
+          ]
+        },
+        include: [{
+          model: NetworkStructure,
+          required: false
+        }]
+      });
+      
+      if (orphanedNotifications.length > 0) {
+        issues.push({
+          type: 'orphaned_notifications',
+          severity: 'warning',
+          count: orphanedNotifications.length,
+          description: 'Найдены уведомления со ссылками на несуществующие структуры'
+        });
+      }
+      
+      // 4. Проверка истории проверок без РЭС
+      const checksWithoutRes = await CheckHistory.count({
+        where: {
+          resId: null
+        }
+      });
+      
+      if (checksWithoutRes > 0) {
+        issues.push({
+          type: 'checks_without_res',
+          severity: 'warning',
+          count: checksWithoutRes,
+          description: 'Найдены записи истории без привязки к РЭС'
+        });
+      }
+      
+      // 5. Проверка старых неактивных данных
+      const oldDate = new Date();
+      oldDate.setFullYear(oldDate.getFullYear() - 1); // Год назад
+      
+      const oldNotifications = await Notification.count({
+        where: {
+          createdAt: {
+            [Op.lt]: oldDate
+          },
+          isRead: false
+        }
+      });
+      
+      if (oldNotifications > 0) {
+        issues.push({
+          type: 'old_unread_notifications',
+          severity: 'info',
+          count: oldNotifications,
+          description: 'Найдены непрочитанные уведомления старше года'
+        });
+      }
+      
+      // 6. Проверка битых файлов в CheckHistory
+      const checksWithBrokenFiles = await CheckHistory.findAll({
+        where: {
+          attachments: {
+            [Op.not]: null,
+            [Op.ne]: []
+          }
+        }
+      });
+      
+      let brokenFilesCount = 0;
+      for (const check of checksWithBrokenFiles) {
+        if (check.attachments && Array.isArray(check.attachments)) {
+          for (const file of check.attachments) {
+            if (!file.url || !file.public_id) {
+              brokenFilesCount++;
+            }
+          }
+        }
+      }
+      
+      if (brokenFilesCount > 0) {
+        issues.push({
+          type: 'broken_file_references',
+          severity: 'warning',
+          count: brokenFilesCount,
+          description: 'Найдены записи с некорректными ссылками на файлы'
+        });
+      }
+      
+      // 7. Проверка пользователей без РЭС (кроме админов)
+      const usersWithoutRes = await User.count({
+        where: {
+          role: {
+            [Op.ne]: 'admin'
+          },
+          resId: null
+        }
+      });
+      
+      if (usersWithoutRes > 0) {
+        issues.push({
+          type: 'users_without_res',
+          severity: 'error',
+          count: usersWithoutRes,
+          description: 'Найдены не-админы без привязки к РЭС'
+        });
+      }
+      
+      // 8. Проверка проблемных ВЛ со статусом active но без recent activity
+      const oldProblemVLs = await ProblemVL.count({
+        where: {
+          status: 'active',
+          lastErrorDate: {
+            [Op.lt]: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 дней
+          }
+        }
+      });
+      
+      if (oldProblemVLs > 0) {
+        issues.push({
+          type: 'stale_problem_vl',
+          severity: 'info',
+          count: oldProblemVLs,
+          description: 'Найдены активные проблемные ВЛ без активности более 90 дней'
+        });
+      }
+      
+      // Итоговая статистика
+      const stats = {
+        totalIssues: issues.length,
+        byType: {
+          error: issues.filter(i => i.severity === 'error').length,
+          warning: issues.filter(i => i.severity === 'warning').length,
+          info: issues.filter(i => i.severity === 'info').length
+        },
+        totalRecords: {
+          networkStructures: await NetworkStructure.count(),
+          puStatuses: await PuStatus.count(),
+          notifications: await Notification.count(),
+          checkHistory: await CheckHistory.count(),
+          uploadHistory: await UploadHistory.count(),
+          users: await User.count()
+        }
+      };
+      
+      res.json({
+        success: true,
+        stats,
+        issues,
+        checkedAt: new Date()
+      });
+      
+    } catch (error) {
+      console.error('Database health check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// API для очистки определенного типа "мусора"
+app.post('/api/admin/database-cleanup', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { cleanupType, password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      let cleaned = 0;
+      
+      switch (cleanupType) {
+        case 'orphaned_pu_status':
+          // Удаляем статусы ПУ без структуры
+          cleaned = await PuStatus.destroy({
+            where: {
+              networkStructureId: null
+            },
+            transaction
+          });
+          break;
+          
+        case 'old_unread_notifications':
+          // Удаляем старые непрочитанные уведомления
+          const oldDate = new Date();
+          oldDate.setFullYear(oldDate.getFullYear() - 1);
+          
+          cleaned = await Notification.destroy({
+            where: {
+              createdAt: {
+                [Op.lt]: oldDate
+              },
+              isRead: false
+            },
+            transaction
+          });
+          break;
+          
+        case 'orphaned_notifications':
+          // Находим и удаляем уведомления с несуществующими связями
+          const orphaned = await sequelize.query(`
+            DELETE FROM "Notifications" n
+            WHERE n."networkStructureId" IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM "NetworkStructures" ns 
+              WHERE ns.id = n."networkStructureId"
+            )
+          `, { transaction });
+          
+          cleaned = orphaned[1].rowCount || 0;
+          break;
+          
+        default:
+          await transaction.rollback();
+          return res.status(400).json({ error: 'Неизвестный тип очистки' });
+      }
+      
+      await transaction.commit();
+      
+      res.json({
+        success: true,
+        message: `Очищено записей: ${cleaned}`,
+        cleanupType,
+        cleaned
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Database cleanup error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // Запуск сервера
 initializeDatabase().then(() => {
   app.listen(PORT, () => {
