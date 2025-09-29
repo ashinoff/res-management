@@ -37,58 +37,68 @@ class RIMAnalyzer:
             import os
             os.remove(temp_csv)
             
-            # Ищем строку с заголовками (максимум до 4-й строки для РИМ)
+            # ОТЛАДКА: Выводим первые несколько строк
+            print("=== ПЕРВЫЕ 5 СТРОК ФАЙЛА ===", file=sys.stderr)
+            for i in range(min(5, len(rows))):
+                print(f"Строка {i}: {rows[i][:5] if len(rows[i]) > 5 else rows[i]}", file=sys.stderr)
+            
+            # Ищем строку со словом "Время" в первой колонке
             data_start_row = 0
-            for idx in range(min(4, len(rows))):  # Проверяем только первые 4 строки
-                if len(rows[idx]) >= 2:
-                    # Проверяем наличие ключевых слов заголовков
-                    row_text = ' '.join(str(cell) for cell in rows[idx]).lower()
-                    if 'время' in row_text or 'событие' in row_text:
+            for idx, row in enumerate(rows):
+                if len(row) >= 1:
+                    # Проверяем только первую колонку на наличие слова "Время"
+                    if 'время' in str(row[0]).lower():
+                        print(f"=== Нашли заголовок 'Время' в строке {idx} ===", file=sys.stderr)
                         data_start_row = idx + 1  # Данные начинаются со следующей строки
                         break
             
-            # Если заголовки не найдены в первых 4 строках, ищем первую строку с датой
-            if data_start_row == 0:
-                for idx in range(min(5, len(rows))):  # Проверяем первые 5 строк
-                    if len(rows[idx]) >= 1 and re.match(r'\d{2}\.\d{2}\.\d{4}', str(rows[idx][0])):
-                        data_start_row = idx
-                        break
+            print(f"=== Начинаем обработку с строки {data_start_row} ===", file=sys.stderr)
+            
+            # Счетчики для отладки
+            total_rows = 0
+            total_events = 0
+            filtered_by_duration = 0
+            filtered_by_voltage = 0
+            no_date = 0
+            no_phase = 0
             
             # Обрабатываем данные начиная с найденной строки
             for idx in range(data_start_row, len(rows)):
                 try:
+                    row = rows[idx]
+                    total_rows += 1
+                    
                     if len(row) < 5:
                         continue
                     
-                    # Колонки: Время | Событие | Напряжение, В | Глубина от U ном., % | Продолж., с
-                    datetime_str = row[0]
-                    event = row[1]
+                    # Фиксированная структура колонок:
+                    # A(0) - Время, B(1) - Событие, C(2) - Напряжение, D(3) - %, E(4) - Продолжительность
+                    datetime_str = str(row[0])
+                    event = str(row[1])
                     
                     # Парсим числа с запятой
                     try:
-                        voltage = float(row[2].replace(',', '.'))
+                        voltage = float(str(row[2]).replace(',', '.'))
                     except:
                         continue
                         
                     try:
-                        percent = float(row[3].replace(',', '.'))
-                    except:
-                        percent = 0
-                        
-                    try:
-                        duration = float(row[4].replace(',', '.'))
+                        duration = float(str(row[4]).replace(',', '.'))
                     except:
                         continue
                     
                     # Фильтры
                     if duration <= 60:
+                        filtered_by_duration += 1
                         continue
                     if abs(voltage - 11.50) < 0.001 or voltage == 0:
+                        filtered_by_voltage += 1
                         continue
                     
                     # Извлекаем месяц из даты
                     date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
                     if not date_match:
+                        no_date += 1
                         continue
                     month = int(date_match.group(2))
                     
@@ -111,16 +121,37 @@ class RIMAnalyzer:
                             event_type = 'overvoltage'
                     
                     if phase and event_type:
+                        total_events += 1
                         events_data[event_type][phase].append({
                             'voltage': voltage,
                             'month': month,
                             'duration': duration
                         })
+                        # Выводим первые несколько найденных событий
+                        if total_events <= 3:
+                            print(f"=== Найдено событие: {event}, V={voltage}, T={duration}с ===", file=sys.stderr)
+                    else:
+                        no_phase += 1
                         
                 except Exception as e:
-                    # Для отладки можно раскомментировать
-                    # print(f"Error processing row {idx}: {e}", file=sys.stderr)
+                    print(f"Ошибка в строке {idx}: {e}", file=sys.stderr)
                     continue
+            
+            # Отладочная статистика
+            print(f"\n=== СТАТИСТИКА ОБРАБОТКИ ===", file=sys.stderr)
+            print(f"Всего строк обработано: {total_rows}", file=sys.stderr)
+            print(f"Событий найдено: {total_events}", file=sys.stderr)
+            print(f"Отфильтровано по длительности (<=60с): {filtered_by_duration}", file=sys.stderr)
+            print(f"Отфильтровано по напряжению (11.5В или 0В): {filtered_by_voltage}", file=sys.stderr)
+            print(f"Не найдена дата: {no_date}", file=sys.stderr)
+            print(f"Не определена фаза/тип: {no_phase}", file=sys.stderr)
+            
+            # Выводим количество событий по типам
+            for event_type in ['overvoltage', 'undervoltage']:
+                for phase in ['A', 'B', 'C']:
+                    count = len(events_data[event_type][phase])
+                    if count > 0:
+                        print(f"{event_type} фаза {phase}: {count} событий", file=sys.stderr)
             
             return self._generate_result(events_data)
             
@@ -180,6 +211,8 @@ class RIMAnalyzer:
             summary = "Напряжение в пределах ГОСТ"
         else:
             summary = '; '.join(summary_parts)
+        
+        print(f"\n=== РЕЗУЛЬТАТ: {summary} ===", file=sys.stderr)
         
         return {'success': True, 'summary': summary, 'has_errors': has_errors, 'details': details}
 
