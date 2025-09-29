@@ -3052,6 +3052,7 @@ function Settings() {
         {activeTab === 'users' && <UserSettings />}
         {activeTab === 'maintenance' && <MaintenanceSettings />}
         {activeTab === 'files' && <FileManagement />}
+        {activeTab === 'database' && <DatabaseMaintenance />}
       </div>
     </div>
   );
@@ -5109,6 +5110,7 @@ function Analytics() {
 }
 
 function DatabaseMaintenance() {
+  console.log("DatabaseMaintenance component rendered!");
   const [healthCheck, setHealthCheck] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
