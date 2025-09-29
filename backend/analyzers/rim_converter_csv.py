@@ -16,8 +16,21 @@ class RIMAnalyzer:
     def analyze_file(self, filepath):
         """Анализ файла журнала событий через промежуточный CSV"""
         try:
-            # Читаем Excel и сразу сохраняем в CSV без первой строки
-            df = pd.read_excel(filepath, header=None, skiprows=1)
+            # Сначала читаем первую строку, чтобы понять - это заголовок или данные
+            df_check = pd.read_excel(filepath, header=None, nrows=1)
+            first_row = df_check.iloc[0, 0] if not df_check.empty else ""
+            
+            # Проверяем, является ли первая строка заголовком
+            has_header = False
+            if isinstance(first_row, str):
+                if 'Время' in first_row or not re.match(r'\d{2}\.\d{2}\.\d{4}', str(first_row)):
+                    has_header = True
+            
+            # Читаем файл с учетом наличия заголовков
+            if has_header:
+                df = pd.read_excel(filepath, header=None, skiprows=1)
+            else:
+                df = pd.read_excel(filepath, header=None)
             
             # Сохраняем во временный CSV
             temp_csv = filepath + '.temp.csv'
@@ -37,29 +50,31 @@ class RIMAnalyzer:
             import os
             os.remove(temp_csv)
             
-            # Ищем начало данных
-            start_row = 0
+            # Обрабатываем все строки (заголовки уже пропущены при чтении Excel)
             for idx, row in enumerate(rows):
-                if len(row) >= 2:
-                    if 'Время' in row[0]:
-                        start_row = idx + 1
-                        break
-                    if re.match(r'\d{2}\.\d{2}\.\d{4}', row[0]):
-                        start_row = idx
-                        break
-            
-            # Обрабатываем данные
-            for idx in range(start_row, len(rows)):
                 try:
-                    row = rows[idx]
                     if len(row) < 5:
                         continue
                     
+                    # Колонки: Время | Событие | Напряжение, В | Глубина от U ном., % | Продолж., с
                     datetime_str = row[0]
                     event = row[1]
-                    voltage = float(row[2].replace(',', '.'))
-                    percent = float(row[3].replace(',', '.'))
-                    duration = float(row[4].replace(',', '.'))
+                    
+                    # Парсим числа с запятой
+                    try:
+                        voltage = float(row[2].replace(',', '.'))
+                    except:
+                        continue
+                        
+                    try:
+                        percent = float(row[3].replace(',', '.'))
+                    except:
+                        percent = 0
+                        
+                    try:
+                        duration = float(row[4].replace(',', '.'))
+                    except:
+                        continue
                     
                     # Фильтры
                     if duration <= 60:
@@ -67,13 +82,13 @@ class RIMAnalyzer:
                     if abs(voltage - 11.50) < 0.001 or voltage == 0:
                         continue
                     
-                    # Месяц
+                    # Извлекаем месяц из даты
                     date_match = re.match(r'(\d{2})\.(\d{2})\.(\d{4})', datetime_str)
                     if not date_match:
                         continue
                     month = int(date_match.group(2))
                     
-                    # Фаза и тип
+                    # Определяем фазу и тип события
                     phase = None
                     event_type = None
                     event_lower = event.lower()
@@ -98,7 +113,9 @@ class RIMAnalyzer:
                             'duration': duration
                         })
                         
-                except:
+                except Exception as e:
+                    # Для отладки можно раскомментировать
+                    # print(f"Error processing row {idx}: {e}", file=sys.stderr)
                     continue
             
             return self._generate_result(events_data)
