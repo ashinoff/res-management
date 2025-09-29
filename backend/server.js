@@ -3177,30 +3177,7 @@ app.get('/api/admin/database-health',
         });
       }
       
-      // 2. Проверка дубликатов ПУ в структуре
-      const duplicates = await sequelize.query(`
-        SELECT puNumber, COUNT(*) as count
-        FROM (
-          SELECT startPu as puNumber FROM "NetworkStructures" WHERE startPu IS NOT NULL
-          UNION ALL
-          SELECT middlePu as puNumber FROM "NetworkStructures" WHERE middlePu IS NOT NULL
-          UNION ALL
-          SELECT endPu as puNumber FROM "NetworkStructures" WHERE endPu IS NOT NULL
-        ) as all_pu
-        GROUP BY puNumber
-        HAVING COUNT(*) > 1
-      `, { type: sequelize.QueryTypes.SELECT });
-      
-      if (duplicates.length > 0) {
-        issues.push({
-          type: 'duplicate_pu_in_structure',
-          severity: 'error',
-          count: duplicates.length,
-          description: 'Найдены ПУ, которые встречаются в структуре несколько раз',
-          items: duplicates
-        });
-      }
-      
+           
       // 3. Проверка уведомлений без связей
       const orphanedNotifications = await Notification.findAll({
         where: {
