@@ -16,21 +16,8 @@ class RIMAnalyzer:
     def analyze_file(self, filepath):
         """Анализ файла журнала событий через промежуточный CSV"""
         try:
-            # Сначала читаем первую строку, чтобы понять - это заголовок или данные
-            df_check = pd.read_excel(filepath, header=None, nrows=1)
-            first_row = df_check.iloc[0, 0] if not df_check.empty else ""
-            
-            # Проверяем, является ли первая строка заголовком
-            has_header = False
-            if isinstance(first_row, str):
-                if 'Время' in first_row or not re.match(r'\d{2}\.\d{2}\.\d{4}', str(first_row)):
-                    has_header = True
-            
-            # Читаем файл с учетом наличия заголовков
-            if has_header:
-                df = pd.read_excel(filepath, header=None, skiprows=1)
-            else:
-                df = pd.read_excel(filepath, header=None)
+            # Читаем весь Excel файл без пропуска строк
+            df = pd.read_excel(filepath, header=None)
             
             # Сохраняем во временный CSV
             temp_csv = filepath + '.temp.csv'
@@ -50,8 +37,25 @@ class RIMAnalyzer:
             import os
             os.remove(temp_csv)
             
-            # Обрабатываем все строки (заголовки уже пропущены при чтении Excel)
-            for idx, row in enumerate(rows):
+            # Ищем строку с заголовками (максимум до 4-й строки для РИМ)
+            data_start_row = 0
+            for idx in range(min(4, len(rows))):  # Проверяем только первые 4 строки
+                if len(rows[idx]) >= 2:
+                    # Проверяем наличие ключевых слов заголовков
+                    row_text = ' '.join(str(cell) for cell in rows[idx]).lower()
+                    if 'время' in row_text or 'событие' in row_text:
+                        data_start_row = idx + 1  # Данные начинаются со следующей строки
+                        break
+            
+            # Если заголовки не найдены в первых 4 строках, ищем первую строку с датой
+            if data_start_row == 0:
+                for idx in range(min(5, len(rows))):  # Проверяем первые 5 строк
+                    if len(rows[idx]) >= 1 and re.match(r'\d{2}\.\d{2}\.\d{4}', str(rows[idx][0])):
+                        data_start_row = idx
+                        break
+            
+            # Обрабатываем данные начиная с найденной строки
+            for idx in range(data_start_row, len(rows)):
                 try:
                     if len(row) < 5:
                         continue
