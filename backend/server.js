@@ -3893,7 +3893,7 @@ app.get('/api/analytics/summary',
           });
           
           const tpCount = new Set(structures.map(s => s.tpName)).size;
-          const vlCount = new Set(structures.map(s => s.vlName)).size; // ДОБАВЛЕНО
+          const vlCount = structures.length; // ДОБАВЛЕНО
           
           let totalPuCount = 0;
           const allPuNumbers = new Set();
