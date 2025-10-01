@@ -4994,9 +4994,10 @@ function Analytics() {
     const data = analytics.map(row => ({
       'РЭС': row.resName,
       'Всего ТП': row.tpCount,
+      'Всего ВЛ': row.vlCount, // ДОБАВЛЕНО
       'Всего ПУ': row.totalPuCount,
       'Загружено файлов': row.uploadedCount,
-      'Процент охвата': row.percentage + '%',
+      '% охвата': row.percentage + '%',
       'Соответствует ГОСТ': row.okCount,
       'Не соответствует ГОСТ': row.errorCount
     }));
@@ -5006,9 +5007,10 @@ function Analytics() {
       data.push({
         'РЭС': 'ИТОГО',
         'Всего ТП': totals.tpCount,
+        'Всего ВЛ': totals.vlCount, // ДОБАВЛЕНО
         'Всего ПУ': totals.totalPuCount,
         'Загружено файлов': totals.uploadedCount,
-        'Процент охвата': totals.totalPuCount > 0 
+        '% охвата': totals.totalPuCount > 0 
           ? Math.round((totals.uploadedCount / totals.totalPuCount) * 100) + '%'
           : '0%',
         'Соответствует ГОСТ': totals.okCount,
@@ -5056,6 +5058,7 @@ function Analytics() {
             <tr>
               <th>РЭС</th>
               <th>Всего ТП</th>
+              <th>Всего ВЛ</th> {/* ДОБАВЛЕНО */}
               <th>Всего ПУ</th>
               <th>Загружено файлов</th>
               <th>% охвата</th>
@@ -5068,6 +5071,7 @@ function Analytics() {
               <tr key={row.resId}>
                 <td>{row.resName}</td>
                 <td>{row.tpCount}</td>
+                <td>{row.vlCount}</td> {/* ДОБАВЛЕНО */}
                 <td>{row.totalPuCount}</td>
                 <td>{row.uploadedCount}</td>
                 <td>
@@ -5089,6 +5093,7 @@ function Analytics() {
               <tr className="totals-row">
                 <td><strong>ИТОГО</strong></td>
                 <td><strong>{totals.tpCount}</strong></td>
+                <td><strong>{totals.vlCount}</strong></td> {/* ДОБАВЛЕНО */}
                 <td><strong>{totals.totalPuCount}</strong></td>
                 <td><strong>{totals.uploadedCount}</strong></td>
                 <td>
