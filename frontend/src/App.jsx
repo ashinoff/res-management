@@ -5050,22 +5050,22 @@ function Analytics() {
         'Проверено/Всего ПУ': `${row.checkedPuCount}/${row.totalPuCount}`,
         
         'ПУ Начало': row.startPu.number,
-        'Статус начала': row.startPu.status,
-        'Ошибка начала': row.startPu.error,
-        'Кто проверил начало': row.startPu.uploadedBy,
-        'Дата проверки начала': row.startPu.uploadDate,
+        'Статус ПУ начала': row.startPu.status,
+        'Ошибка ПУ начала': row.startPu.error,
+        'Кто проверил ПУ начало': row.startPu.uploadedBy,
+        'Дата проверки ПУ начала': row.startPu.uploadDate,
         
         'ПУ Середина': row.middlePu.number,
-        'Статус середины': row.middlePu.status,
-        'Ошибка середины': row.middlePu.error,
-        'Кто проверил середину': row.middlePu.uploadedBy,
-        'Дата проверки середины': row.middlePu.uploadDate,
+        'Статус ПУ середины': row.middlePu.status,
+        'Ошибка ПУ середины': row.middlePu.error,
+        'Кто проверил ПУ середину': row.middlePu.uploadedBy,
+        'Дата проверки ПУ середины': row.middlePu.uploadDate,
         
         'ПУ Конец': row.endPu.number,
-        'Статус конца': row.endPu.status,
-        'Ошибка конца': row.endPu.error,
-        'Кто проверил конец': row.endPu.uploadedBy,
-        'Дата проверки конца': row.endPu.uploadDate
+        'Статус ПУ конца': row.endPu.status,
+        'Ошибка ПУ конца': row.endPu.error,
+        'Кто проверил ПУ конец': row.endPu.uploadedBy,
+        'Дата проверки ПУ конца': row.endPu.uploadDate
       }));
       
       const wb = XLSX.utils.book_new();
@@ -5129,14 +5129,14 @@ function Analytics() {
         </div>
         
         <button onClick={exportToExcel} className="export-btn">
-          📊 Экспорт сводного отчета
+          Экспорт сводного отчета
         </button>
         <button 
           onClick={exportDetailedReport} 
           className="export-btn detailed"
           disabled={loadingDetailed}
         >
-          {loadingDetailed ? '⏳ Формирование...' : '📋 Выгрузить детальный отчет'}
+          {loadingDetailed ? '⏳ Формирование...' : 'Экспорт детального отчета'}
         </button>
       </div>
       
