@@ -3863,7 +3863,7 @@ app.get('/api/analytics/summary',
         resCondition.id = req.user.resId;
       }
       
-      // Получаем все РЭС (для админа все, для остальных - только их)
+      // Получаем все РЭС
       const resList = await ResUnit.findAll({
         where: resCondition,
         order: [['name', 'ASC']]
@@ -3893,7 +3893,7 @@ app.get('/api/analytics/summary',
           });
           
           const tpCount = new Set(structures.map(s => s.tpName)).size;
-          const vlCount = structures.length; // ДОБАВЛЕНО
+          const vlCount = structures.length;
           
           let totalPuCount = 0;
           const allPuNumbers = new Set();
@@ -3904,28 +3904,52 @@ app.get('/api/analytics/summary',
             if (s.endPu) { totalPuCount++; allPuNumbers.add(s.endPu); }
           });
           
-          // 2. Считаем загрузки в периоде
+          // 2. Получаем ВСЕ загрузки в периоде для этого РЭС
           const uploads = await PuUploadHistory.findAll({
             where: {
               puNumber: Array.from(allPuNumbers),
               ...dateCondition
+            },
+            order: [['uploadedAt', 'DESC']]
+          });
+          
+          // 3. НОВАЯ ЛОГИКА: уникальные ПУ (берем только последнюю загрузку каждого ПУ)
+          const uniquePuUploads = new Map();
+          uploads.forEach(upload => {
+            if (!uniquePuUploads.has(upload.puNumber)) {
+              uniquePuUploads.set(upload.puNumber, upload);
             }
           });
           
-          const uploadedCount = uploads.length;
-          const okCount = uploads.filter(u => !u.hasErrors).length;
-          const errorCount = uploads.filter(u => u.hasErrors).length;
+          const uniqueCheckedPuCount = uniquePuUploads.size;
+          
+          // 4. НОВАЯ ЛОГИКА: проверенные ВЛ (где хотя бы один ПУ проверен)
+          const checkedVLCount = structures.filter(structure => {
+            const puNumbers = [structure.startPu, structure.middlePu, structure.endPu]
+              .filter(Boolean);
+            
+            // Проверяем есть ли хотя бы одна загрузка по ПУ этой ВЛ
+            return puNumbers.some(puNumber => uniquePuUploads.has(puNumber));
+          }).length;
+          
+          // 5. Проценты
+          const vlCoveragePercent = vlCount > 0 
+            ? Math.round((checkedVLCount / vlCount) * 100) 
+            : 0;
+          
+          const puCoveragePercent = totalPuCount > 0 
+            ? Math.round((uniqueCheckedPuCount / totalPuCount) * 100) 
+            : 0;
           
           return {
             resId: res.id,
             resName: res.name,
             tpCount,
-            vlCount, // ДОБАВЛЕНО
+            vlCount,
+            vlCoveragePercent,
             totalPuCount,
-            uploadedCount,
-            okCount,
-            errorCount,
-            percentage: totalPuCount > 0 ? Math.round((uploadedCount / totalPuCount) * 100) : 0
+            uniqueCheckedPuCount,
+            puCoveragePercent
           };
         })
       );
@@ -3933,19 +3957,24 @@ app.get('/api/analytics/summary',
       // Итоги
       const totals = analytics.reduce((acc, curr) => ({
         tpCount: acc.tpCount + curr.tpCount,
-        vlCount: acc.vlCount + curr.vlCount, // ДОБАВЛЕНО
+        vlCount: acc.vlCount + curr.vlCount,
         totalPuCount: acc.totalPuCount + curr.totalPuCount,
-        uploadedCount: acc.uploadedCount + curr.uploadedCount,
-        okCount: acc.okCount + curr.okCount,
-        errorCount: acc.errorCount + curr.errorCount
+        uniqueCheckedPuCount: acc.uniqueCheckedPuCount + curr.uniqueCheckedPuCount
       }), {
         tpCount: 0,
-        vlCount: 0, // ДОБАВЛЕНО
+        vlCount: 0,
         totalPuCount: 0,
-        uploadedCount: 0,
-        okCount: 0,
-        errorCount: 0
+        uniqueCheckedPuCount: 0
       });
+      
+      // Добавляем проценты к итогам
+      totals.vlCoveragePercent = totals.vlCount > 0
+        ? Math.round((analytics.reduce((sum, a) => sum + (a.vlCoveragePercent * a.vlCount / 100), 0) / totals.vlCount) * 100)
+        : 0;
+      
+      totals.puCoveragePercent = totals.totalPuCount > 0
+        ? Math.round((totals.uniqueCheckedPuCount / totals.totalPuCount) * 100)
+        : 0;
       
       res.json({
         analytics,
