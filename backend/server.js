@@ -2905,6 +2905,448 @@ async function createNotifications(fromUserId, resId, errors) {
 }
 
 // =====================================================
+// API ДЛЯ ПРОВЕРКИ ЦЕЛОСТНОСТИ БАЗЫ ДАННЫХ
+// =====================================================
+
+// Проверка целостности базы данных
+app.get('/api/admin/database-health', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const issues = [];
+      
+      console.log('Starting database health check...');
+      
+      // 1. Проверка ПУ без структуры сети
+      try {
+        const orphanedPuStatuses = await PuStatus.findAll({
+          where: {
+            networkStructureId: null
+          }
+        });
+        
+        if (orphanedPuStatuses.length > 0) {
+          issues.push({
+            type: 'orphaned_pu_status',
+            severity: 'warning',
+            count: orphanedPuStatuses.length,
+            description: 'Найдены статусы ПУ без привязки к структуре сети',
+            items: orphanedPuStatuses.map(p => p.puNumber).slice(0, 10)
+          });
+        }
+        console.log('Check 1: orphaned_pu_status - OK');
+      } catch (err) {
+        console.error('Error in check 1:', err);
+      }
+      
+      // 2. Проверка дублирующихся статусов ПУ
+      try {
+        const [duplicates] = await sequelize.query(`
+          SELECT "puNumber", COUNT(*) as count
+          FROM "PuStatuses"
+          GROUP BY "puNumber"
+          HAVING COUNT(*) > 1
+        `);
+        
+        if (duplicates.length > 0) {
+          issues.push({
+            type: 'duplicate_pu_statuses',
+            severity: 'warning',
+            count: duplicates.length,
+            description: 'Найдены дублирующиеся статусы ПУ',
+            items: duplicates.slice(0, 10).map(d => ({
+              puNumber: d.puNumber,
+              count: parseInt(d.count)
+            }))
+          });
+        }
+        console.log('Check 2: duplicate_pu_statuses - OK');
+      } catch (err) {
+        console.error('Error in check 2:', err);
+      }
+      
+      // 3. Проверка уведомлений без связей
+      try {
+        const orphanedNotifications = await Notification.findAll({
+          where: {
+            networkStructureId: {
+              [Op.not]: null
+            }
+          },
+          include: [{
+            model: NetworkStructure,
+            required: false
+          }]
+        });
+        
+        const orphaned = orphanedNotifications.filter(n => !n.NetworkStructure);
+        
+        if (orphaned.length > 0) {
+          issues.push({
+            type: 'orphaned_notifications',
+            severity: 'warning',
+            count: orphaned.length,
+            description: 'Найдены уведомления со ссылками на несуществующие структуры'
+          });
+        }
+        console.log('Check 3: orphaned_notifications - OK');
+      } catch (err) {
+        console.error('Error in check 3:', err);
+      }
+      
+      // 4. Проверка истории проверок без РЭС
+      try {
+        const checksWithoutRes = await CheckHistory.count({
+          where: {
+            resId: null
+          }
+        });
+        
+        if (checksWithoutRes > 0) {
+          issues.push({
+            type: 'checks_without_res',
+            severity: 'warning',
+            count: checksWithoutRes,
+            description: 'Найдены записи истории без привязки к РЭС'
+          });
+        }
+        console.log('Check 4: checks_without_res - OK');
+      } catch (err) {
+        console.error('Error in check 4:', err);
+      }
+      
+      // 5. Проверка старых неактивных данных
+      try {
+        const oldDate = new Date();
+        oldDate.setFullYear(oldDate.getFullYear() - 1); // Год назад
+        
+        const oldNotifications = await Notification.count({
+          where: {
+            createdAt: {
+              [Op.lt]: oldDate
+            }
+          }
+        });
+        
+        if (oldNotifications > 0) {
+          issues.push({
+            type: 'old_unread_notifications',
+            severity: 'info',
+            count: oldNotifications,
+            description: 'Найдены уведомления старше года'
+          });
+        }
+        console.log('Check 5: old_unread_notifications - OK');
+      } catch (err) {
+        console.error('Error in check 5:', err);
+      }
+      
+      // 6. Проверка битых файлов в CheckHistory
+      try {
+        const checksWithFiles = await CheckHistory.findAll({
+          where: {
+            attachments: {
+              [Op.not]: null,
+              [Op.ne]: []
+            }
+          }
+        });
+        
+        let brokenFilesCount = 0;
+        for (const check of checksWithFiles) {
+          if (check.attachments && Array.isArray(check.attachments)) {
+            for (const file of check.attachments) {
+              if (!file.url || !file.public_id) {
+                brokenFilesCount++;
+              }
+            }
+          }
+        }
+        
+        if (brokenFilesCount > 0) {
+          issues.push({
+            type: 'broken_file_references',
+            severity: 'warning',
+            count: brokenFilesCount,
+            description: 'Найдены записи с некорректными ссылками на файлы'
+          });
+        }
+        console.log('Check 6: broken_file_references - OK');
+      } catch (err) {
+        console.error('Error in check 6:', err);
+      }
+      
+      // 7. Проверка пользователей без РЭС (кроме админов)
+      try {
+        const usersWithoutRes = await User.count({
+          where: {
+            role: {
+              [Op.ne]: 'admin'
+            },
+            resId: null
+          }
+        });
+        
+        if (usersWithoutRes > 0) {
+          issues.push({
+            type: 'users_without_res',
+            severity: 'error',
+            count: usersWithoutRes,
+            description: 'Найдены не-админы без привязки к РЭС'
+          });
+        }
+        console.log('Check 7: users_without_res - OK');
+      } catch (err) {
+        console.error('Error in check 7:', err);
+      }
+      
+      // 8. Проверка проблемных ВЛ со статусом active но без recent activity
+      try {
+        const oldProblemVLs = await ProblemVL.count({
+          where: {
+            status: 'active',
+            lastErrorDate: {
+              [Op.lt]: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 дней
+            }
+          }
+        });
+        
+        if (oldProblemVLs > 0) {
+          issues.push({
+            type: 'stale_problem_vl',
+            severity: 'info',
+            count: oldProblemVLs,
+            description: 'Найдены активные проблемные ВЛ без активности более 90 дней'
+          });
+        }
+        console.log('Check 8: stale_problem_vl - OK');
+      } catch (err) {
+        console.error('Error in check 8:', err);
+      }
+      
+      // Итоговая статистика
+      const stats = {
+        totalIssues: issues.length,
+        byType: {
+          error: issues.filter(i => i.severity === 'error').length,
+          warning: issues.filter(i => i.severity === 'warning').length,
+          info: issues.filter(i => i.severity === 'info').length
+        },
+        totalRecords: {
+          networkStructures: await NetworkStructure.count(),
+          puStatuses: await PuStatus.count(),
+          notifications: await Notification.count(),
+          checkHistory: await CheckHistory.count(),
+          uploadHistory: await UploadHistory.count(),
+          users: await User.count()
+        }
+      };
+      
+      console.log('Database health check completed!');
+      console.log('Total issues found:', issues.length);
+      
+      res.json({
+        success: true,
+        stats,
+        issues,
+        checkedAt: new Date()
+      });
+      
+    } catch (error) {
+      console.error('Database health check error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+});
+
+// Очистка определенного типа проблем
+app.post('/api/admin/database-cleanup', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { cleanupType, password } = req.body;
+      
+      console.log('Cleanup request:', cleanupType);
+      
+      if (password !== DELETE_PASSWORD) {
+        await transaction.rollback();
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      let cleaned = 0;
+      
+      switch (cleanupType) {
+        case 'orphaned_pu_status':
+          // Удаляем статусы ПУ без структуры
+          cleaned = await PuStatus.destroy({
+            where: {
+              networkStructureId: null
+            },
+            transaction
+          });
+          console.log(`Cleaned orphaned_pu_status: ${cleaned}`);
+          break;
+          
+        case 'duplicate_pu_statuses':
+          // Удаляем дубликаты, оставляя последний
+          const [duplicates] = await sequelize.query(`
+            SELECT "puNumber", COUNT(*) as count
+            FROM "PuStatuses"
+            GROUP BY "puNumber"
+            HAVING COUNT(*) > 1
+          `, { transaction });
+          
+          for (const dup of duplicates) {
+            // Оставляем самый новый
+            const allStatuses = await PuStatus.findAll({
+              where: { puNumber: dup.puNumber },
+              order: [['updatedAt', 'DESC']],
+              transaction
+            });
+            
+            // Удаляем все кроме первого
+            for (let i = 1; i < allStatuses.length; i++) {
+              await allStatuses[i].destroy({ transaction });
+              cleaned++;
+            }
+          }
+          console.log(`Cleaned duplicate_pu_statuses: ${cleaned}`);
+          break;
+          
+        case 'old_unread_notifications':
+          // Удаляем старые уведомления
+          const oldDate = new Date();
+          oldDate.setFullYear(oldDate.getFullYear() - 1);
+          
+          cleaned = await Notification.destroy({
+            where: {
+              createdAt: {
+                [Op.lt]: oldDate
+              }
+            },
+            transaction
+          });
+          console.log(`Cleaned old_unread_notifications: ${cleaned}`);
+          break;
+          
+        case 'orphaned_notifications':
+          // Находим и удаляем уведомления с несуществующими связями
+          const orphanedNotifs = await Notification.findAll({
+            where: {
+              networkStructureId: {
+                [Op.not]: null
+              }
+            },
+            include: [{
+              model: NetworkStructure,
+              required: false
+            }],
+            transaction
+          });
+          
+          for (const notif of orphanedNotifs) {
+            if (!notif.NetworkStructure) {
+              await notif.destroy({ transaction });
+              cleaned++;
+            }
+          }
+          console.log(`Cleaned orphaned_notifications: ${cleaned}`);
+          break;
+          
+        case 'checks_without_res':
+          // Удаляем историю проверок без РЭС
+          cleaned = await CheckHistory.destroy({
+            where: {
+              resId: null
+            },
+            transaction
+          });
+          console.log(`Cleaned checks_without_res: ${cleaned}`);
+          break;
+          
+        case 'broken_file_references':
+          // Чистим битые ссылки на файлы
+          const checksWithFiles = await CheckHistory.findAll({
+            where: {
+              attachments: {
+                [Op.not]: null,
+                [Op.ne]: []
+              }
+            },
+            transaction
+          });
+          
+          for (const check of checksWithFiles) {
+            if (check.attachments && Array.isArray(check.attachments)) {
+              const validFiles = check.attachments.filter(
+                file => file.url && file.public_id
+              );
+              
+              if (validFiles.length !== check.attachments.length) {
+                await check.update({ attachments: validFiles }, { transaction });
+                cleaned++;
+              }
+            }
+          }
+          console.log(`Cleaned broken_file_references: ${cleaned}`);
+          break;
+          
+        case 'stale_problem_vl':
+          // Закрываем старые проблемные ВЛ
+          const oldProblemDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+          
+          cleaned = await ProblemVL.update(
+            { status: 'dismissed' },
+            {
+              where: {
+                status: 'active',
+                lastErrorDate: {
+                  [Op.lt]: oldProblemDate
+                }
+              },
+              transaction
+            }
+          );
+          console.log(`Cleaned stale_problem_vl: ${cleaned}`);
+          break;
+          
+        default:
+          await transaction.rollback();
+          return res.status(400).json({ error: 'Неизвестный тип очистки' });
+      }
+      
+      await transaction.commit();
+      
+      console.log(`Cleanup completed! Type: ${cleanupType}, Cleaned: ${cleaned}`);
+      
+      res.json({
+        success: true,
+        message: `Очищено записей: ${cleaned}`,
+        cleanupType,
+        cleaned
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Database cleanup error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+});
+
+
+
+// =====================================================
 // ИНИЦИАЛИЗАЦИЯ БД И ЗАПУСК СЕРВЕРА
 // =====================================================
 
