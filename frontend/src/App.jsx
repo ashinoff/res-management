@@ -4965,6 +4965,7 @@ function Analytics() {
   const [analytics, setAnalytics] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingDetailed, setLoadingDetailed] = useState(false);
   const [dateFrom, setDateFrom] = useState(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
@@ -5020,6 +5021,95 @@ function Analytics() {
     XLSX.writeFile(wb, `Аналитика_${new Date().toLocaleDateString('ru-RU')}.xlsx`);
   };
   
+  // НОВАЯ ФУНКЦИЯ: Экспорт детального отчета
+  const exportDetailedReport = async () => {
+    setLoadingDetailed(true);
+    
+    try {
+      const response = await api.get('/api/analytics/detailed', {
+        params: { dateFrom, dateTo }
+      });
+      
+      const detailedData = response.data.data;
+      
+      if (detailedData.length === 0) {
+        alert('Нет данных для детального отчета');
+        return;
+      }
+      
+      // Формируем данные для Excel
+      const excelData = detailedData.map(row => ({
+        'РЭС': row.resName,
+        'ТП': row.tpName,
+        'ВЛ': row.vlName,
+        'Статус ВЛ': row.vlStatus,
+        'Проверено/Всего ПУ': `${row.checkedPuCount}/${row.totalPuCount}`,
+        
+        'ПУ Начало': row.startPu.number,
+        'Статус начала': row.startPu.status,
+        'Ошибка начала': row.startPu.error,
+        'Кто проверил начало': row.startPu.uploadedBy,
+        'Дата проверки начала': row.startPu.uploadDate,
+        
+        'ПУ Середина': row.middlePu.number,
+        'Статус середины': row.middlePu.status,
+        'Ошибка середины': row.middlePu.error,
+        'Кто проверил середину': row.middlePu.uploadedBy,
+        'Дата проверки середины': row.middlePu.uploadDate,
+        
+        'ПУ Конец': row.endPu.number,
+        'Статус конца': row.endPu.status,
+        'Ошибка конца': row.endPu.error,
+        'Кто проверил конец': row.endPu.uploadedBy,
+        'Дата проверки конца': row.endPu.uploadDate
+      }));
+      
+      // Создаем Excel файл
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      
+      // Устанавливаем ширину колонок
+      ws['!cols'] = [
+        { wch: 20 }, // РЭС
+        { wch: 15 }, // ТП
+        { wch: 15 }, // ВЛ
+        { wch: 20 }, // Статус ВЛ
+        { wch: 15 }, // Проверено/Всего
+        
+        { wch: 15 }, // ПУ Начало
+        { wch: 15 }, // Статус начала
+        { wch: 50 }, // Ошибка начала
+        { wch: 20 }, // Кто проверил начало
+        { wch: 18 }, // Дата проверки начала
+        
+        { wch: 15 }, // ПУ Середина
+        { wch: 15 }, // Статус середины
+        { wch: 50 }, // Ошибка середины
+        { wch: 20 }, // Кто проверил середину
+        { wch: 18 }, // Дата проверки середины
+        
+        { wch: 15 }, // ПУ Конец
+        { wch: 15 }, // Статус конца
+        { wch: 50 }, // Ошибка конца
+        { wch: 20 }, // Кто проверил конец
+        { wch: 18 }  // Дата проверки конца
+      ];
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Детальный отчет');
+      
+      const fileName = `Детальный_отчет_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      alert(`✅ Детальный отчет успешно выгружен!\n\nВсего строк: ${detailedData.length}\nФайл: ${fileName}`);
+      
+    } catch (error) {
+      console.error('Error exporting detailed report:', error);
+      alert('❌ Ошибка при выгрузке детального отчета: ' + error.message);
+    } finally {
+      setLoadingDetailed(false);
+    }
+  };
+  
   if (loading) return <div className="loading">Загрузка аналитики...</div>;
   
   return (
@@ -5043,8 +5133,17 @@ function Analytics() {
             onChange={(e) => setDateTo(e.target.value)}
           />
         </div>
+        
+        {/* ДВЕ КНОПКИ ЭКСПОРТА */}
         <button onClick={exportToExcel} className="export-btn">
-          📊 Экспорт в Excel
+          📊 Экспорт сводного отчета
+        </button>
+        <button 
+          onClick={exportDetailedReport} 
+          className="export-btn detailed"
+          disabled={loadingDetailed}
+        >
+          {loadingDetailed ? '⏳ Формирование...' : '📋 Выгрузить детальный отчет'}
         </button>
       </div>
       
