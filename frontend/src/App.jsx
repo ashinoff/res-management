@@ -1,4 +1,4 @@
-// =====================================================
+    // =====================================================
 // УЛУЧШЕННЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
 // Версия с исправленными фазами и загрузкой из АСКУЭ
@@ -49,6 +49,61 @@ api.interceptors.response.use(
 // =====================================================
 
 const AuthContext = createContext(null);
+
+// =====================================================
+// УНИВЕРСАЛЬНЫЙ КОМПОНЕНТ ЗАГРУЗКИ
+// =====================================================
+
+function LoadingSpinner({ type = 'default', message = 'Загрузка...', submessage = null }) {
+  const spinnerTypes = {
+    default: (
+      <div className="loading-container">
+        <div className="loading-spinner-large"></div>
+        <p className="loading-message">{message}</p>
+        {submessage && <small className="loading-submessage">{submessage}</small>}
+      </div>
+    ),
+    
+    inline: (
+      <div className="loading-inline">
+        <div className="loading-spinner-small"></div>
+        <span>{message}</span>
+      </div>
+    ),
+    
+    overlay: (
+      <div className="loading-overlay">
+        <div className="loading-container">
+          <div className="loading-spinner-large"></div>
+          <p className="loading-message">{message}</p>
+          {submessage && <small className="loading-submessage">{submessage}</small>}
+        </div>
+      </div>
+    ),
+    
+    dots: (
+      <div className="loading-dots-container">
+        <div className="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <p className="loading-message">{message}</p>
+      </div>
+    ),
+    
+    pulse: (
+      <div className="loading-pulse-container">
+        <div className="loading-pulse"></div>
+        <p className="loading-message">{message}</p>
+        {submessage && <small className="loading-submessage">{submessage}</small>}
+      </div>
+    )
+  };
+  
+  return spinnerTypes[type] || spinnerTypes.default;
+}
+
 
 // =====================================================
 // КОМПОНЕНТ АВТОРИЗАЦИИ
@@ -524,7 +579,7 @@ const executeClearHistory = async () => {
     );
   };
   
-  if (loading) return <div className="loading">Загрузка...</div>;
+  if (loading) return <LoadingSpinner message="Загрузка структуры сети..." submessage="Это может занять несколько секунд" />;
   
   const filteredData = networkData.filter(item => {
   // Фильтр по ТП
@@ -1276,16 +1331,11 @@ for (let i = 0; i < files.length; i++) {
       {/* Прогресс загрузки */}
       {uploading && (
         <div className="upload-progress-section">
-          <div className="progress-header">
-            <h4>Загрузка и анализ файлов</h4>
-            <span>{uploadProgress.current} из {uploadProgress.total}</span>
-          </div>
-          <div className="progress-bar">
-            <div 
-              className="progress-fill"
-              style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
-            />
-          </div>
+          <LoadingSpinner 
+            type="pulse"
+            message={`Обработка файлов: ${uploadProgress.current} из ${uploadProgress.total}`}
+            submessage="Пожалуйста, не закрывайте страницу"
+          />
         </div>
       )}
 
@@ -1626,7 +1676,7 @@ const loadNotifications = useCallback(async () => {
     return phases;
   }, []);
 
-  if (loading) return <div className="loading">Загрузка...</div>;
+  if (loading) return <LoadingSpinner type="dots" message="Загрузка уведомлений..." />;
 
   const title = filterType === 'error' ? 'Ожидающие мероприятий' : 
                 filterType === 'pending_askue' ? 'Ожидающие проверки АСКУЭ' : 
@@ -2416,7 +2466,7 @@ function Reports() {
     ), [reportData, searchTp]
   );
 
-  if (loading) return <div className="loading">Загрузка отчета...</div>;
+  if (loading) return <LoadingSpinner message="Формирование отчета..." submessage="Собираем данные из базы" />;
 
   return (
     <div className="reports">
@@ -2477,15 +2527,8 @@ function Reports() {
         <p>Найдено записей: {filteredData.length}</p>
       </div>
       
-      <div className="report-table-wrapper" style={{ position: 'relative' }}>
-  {loading && (
-    <div className="loading-overlay">
-      <div className="loading-spinner">
-        <div className="spinner"></div>
-        <span>Обновление данных...</span>
-      </div>
-    </div>
-  )}
+     <div className="report-table-wrapper" style={{ position: 'relative' }}>
+      {loading && <LoadingSpinner type="overlay" message="Обновление данных..." />}
   
   <div className={`report-table ${loading ? 'loading' : ''}`}>
     <table>
@@ -2744,8 +2787,7 @@ const handleSendEmail = async () => {
     }
   };
 
-  if (loading) return <div className="loading">Загрузка проблемных ВЛ...</div>;
-
+  if (loading) return <LoadingSpinner type="pulse" message="Загрузка проблемных ВЛ..." submessage="Анализируем критические проблемы" />;
   return (
     <div className="problem-vl-container">
       <h2>Проблемные ВЛ</h2>
@@ -3293,9 +3335,16 @@ function StructureSettings() {
       <button 
         onClick={handleUploadStructure} 
         disabled={uploading || !file}
-        className="primary-btn"
+        className={`primary-btn ${uploading ? 'btn-loading' : ''}`}
       >
-        {uploading ? 'Загрузка...' : 'Загрузить структуру'}
+        {uploading ? (
+          <>
+            <div className="loading-spinner-small"></div>
+            Загрузка...
+          </>
+        ) : (
+          'Загрузить структуру'
+        )}
       </button>
       
       {message && (
@@ -3454,7 +3503,7 @@ function UserSettings() {
       
       <div className="users-table-container">
         {loading ? (
-          <div className="loading">Загрузка...</div>
+          <LoadingSpinner type="inline" message="Загрузка пользователей..." />
         ) : (
           <table className="users-table">
             <thead>
@@ -4020,7 +4069,7 @@ function UploadedDocuments() {
     }
   };
   
-  if (loading) return <div className="loading">Загрузка документов...</div>;
+  if (loading) return <LoadingSpinner type="dots" message="Загрузка документов..." />;
   
   return (
     <div className="uploaded-documents">
@@ -4825,7 +4874,11 @@ function SystemHistory() {
       
       <div className="history-content">
         {loading ? (
-          <div className="loading">Загрузка истории...</div>
+          <LoadingSpinner 
+            type="dots"
+            message="Загрузка истории системы..." 
+            submessage="Обрабатываем записи за выбранный период" 
+          />
         ) : (
           <>
             {activeTab === 'uploads' && (
@@ -5097,7 +5150,7 @@ function Analytics() {
     }
   };
   
-  if (loading) return <div className="loading">Загрузка аналитики...</div>;
+  if (loading) return <LoadingSpinner type="pulse" message="Загрузка аналитики..." submessage="Подсчитываем статистику" />;
   
   return (
     <div className="analytics-container">
@@ -5136,7 +5189,17 @@ function Analytics() {
           className="export-btn detailed"
           disabled={loadingDetailed}
         >
-          {loadingDetailed ? '⏳ Формирование...' : 'Экспорт детального отчета'}
+          {loadingDetailed ? (
+            <>
+              <div className="loading-spinner-small" style={{marginRight: '8px'}}></div>
+              Формирование...
+            </>
+          ) : (
+            <>
+              <span>📋</span>
+              Экспорт детального отчета
+            </>
+          )}
         </button>
       </div>
       
