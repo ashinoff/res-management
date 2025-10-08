@@ -5208,7 +5208,6 @@ function Analytics() {
 }
 
 function DatabaseMaintenance() {
-  console.log("DatabaseMaintenance component rendered!");
   const [healthCheck, setHealthCheck] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
@@ -5236,7 +5235,7 @@ function DatabaseMaintenance() {
         password: cleanupPassword
       });
       
-      alert(`Очистка завершена! Удалено записей: ${response.data.cleaned}`);
+      alert(`✅ Очистка завершена!\n\nУдалено записей: ${response.data.cleaned}`);
       setShowCleanupModal(false);
       setCleanupPassword('');
       
@@ -5261,7 +5260,7 @@ function DatabaseMaintenance() {
   
   const getSeverityIcon = (severity) => {
     switch(severity) {
-      case 'error': return '❌';
+      case 'error': return '🔴';
       case 'warning': return '⚠️';
       case 'info': return 'ℹ️';
       default: return '✅';
@@ -5269,169 +5268,288 @@ function DatabaseMaintenance() {
   };
   
   const getCleanupDescription = (type) => {
-    switch(type) {
-      case 'orphaned_pu_status':
-        return 'Удалить статусы ПУ без привязки к структуре сети';
-      case 'old_unread_notifications':
-        return 'Удалить непрочитанные уведомления старше года';
-      case 'orphaned_notifications':
-        return 'Удалить уведомления с несуществующими связями';
-      default:
-        return '';
-    }
+    const descriptions = {
+      'orphaned_pu_status': {
+        title: 'Статусы ПУ без структуры',
+        desc: 'Удалить статусы приборов учета, которые не привязаны к структуре сети',
+        icon: '🔌'
+      },
+      'duplicate_pu_statuses': {
+        title: 'Дубликаты статусов',
+        desc: 'Удалить дублирующиеся статусы ПУ, оставив только последние',
+        icon: '📋'
+      },
+      'old_unread_notifications': {
+        title: 'Старые уведомления',
+        desc: 'Удалить уведомления старше одного года',
+        icon: '📅'
+      },
+      'orphaned_notifications': {
+        title: 'Уведомления без связей',
+        desc: 'Удалить уведомления, ссылающиеся на несуществующие объекты',
+        icon: '🔗'
+      },
+      'checks_without_res': {
+        title: 'Проверки без РЭС',
+        desc: 'Удалить записи истории проверок без привязки к РЭС',
+        icon: '📍'
+      },
+      'broken_file_references': {
+        title: 'Битые ссылки на файлы',
+        desc: 'Очистить некорректные ссылки на файлы в истории проверок',
+        icon: '📎'
+      },
+      'stale_problem_vl': {
+        title: 'Старые проблемные ВЛ',
+        desc: 'Закрыть проблемные ВЛ без активности более 90 дней',
+        icon: '⚡'
+      }
+    };
+    return descriptions[type] || { title: 'Неизвестная операция', desc: '', icon: '❓' };
   };
   
   return (
     <div className="database-maintenance">
-      <h3>Проверка целостности базы данных</h3>
-      
-      <div className="maintenance-controls">
+      {/* Красивый заголовок */}
+      <div className="db-header">
+        <div className="db-header-content">
+          <div className="db-header-icon">🔧</div>
+          <div className="db-header-text">
+            <h3>Проверка целостности базы данных</h3>
+            <p>Диагностика и устранение проблем в структуре данных</p>
+          </div>
+        </div>
         <button 
-          className="btn-primary"
+          className="btn-check-db"
           onClick={runHealthCheck}
           disabled={loading}
         >
-          {loading ? 'Проверка...' : 'Запустить проверку'}
+          {loading ? (
+            <>
+              <span className="spinner-small"></span>
+              Проверка...
+            </>
+          ) : (
+            <>
+              <span>🔍</span>
+              Запустить проверку
+            </>
+          )}
         </button>
       </div>
       
-      {healthCheck && (
-        <>
-          <div className="health-summary">
-            <div className="summary-card">
-              <h4>Общая статистика</h4>
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <span>Всего проблем:</span>
-                  <strong>{healthCheck.stats.totalIssues}</strong>
-                </div>
-                <div className="stat-item error">
-                  <span>Критических:</span>
-                  <strong>{healthCheck.stats.byType.error}</strong>
-                </div>
-                <div className="stat-item warning">
-                  <span>Предупреждений:</span>
-                  <strong>{healthCheck.stats.byType.warning}</strong>
-                </div>
-                <div className="stat-item info">
-                  <span>Информация:</span>
-                  <strong>{healthCheck.stats.byType.info}</strong>
-                </div>
+      {loading && (
+        <div className="db-loading">
+          <div className="loading-animation">
+            <div className="loading-spinner-large"></div>
+            <p>Анализируем базу данных...</p>
+            <small>Это может занять несколько секунд</small>
+          </div>
+        </div>
+      )}
+      
+      {healthCheck && !loading && (
+        <div className="db-results">
+          {/* Общая статистика */}
+          <div className="db-summary-grid">
+            <div className="db-summary-card total">
+              <div className="summary-icon">📊</div>
+              <div className="summary-content">
+                <h4>Всего проблем</h4>
+                <p className="summary-value">{healthCheck.stats.totalIssues}</p>
               </div>
             </div>
             
-            <div className="summary-card">
-              <h4>Записей в БД</h4>
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <span>Структура сети:</span>
-                  <strong>{healthCheck.stats.totalRecords.networkStructures}</strong>
-                </div>
-                <div className="stat-item">
-                  <span>Статусы ПУ:</span>
-                  <strong>{healthCheck.stats.totalRecords.puStatuses}</strong>
-                </div>
-                <div className="stat-item">
-                  <span>Уведомления:</span>
-                  <strong>{healthCheck.stats.totalRecords.notifications}</strong>
-                </div>
-                <div className="stat-item">
-                  <span>История проверок:</span>
-                  <strong>{healthCheck.stats.totalRecords.checkHistory}</strong>
-                </div>
+            <div className="db-summary-card error">
+              <div className="summary-icon">🔴</div>
+              <div className="summary-content">
+                <h4>Критических</h4>
+                <p className="summary-value">{healthCheck.stats.byType.error}</p>
+              </div>
+            </div>
+            
+            <div className="db-summary-card warning">
+              <div className="summary-icon">⚠️</div>
+              <div className="summary-content">
+                <h4>Предупреждений</h4>
+                <p className="summary-value">{healthCheck.stats.byType.warning}</p>
+              </div>
+            </div>
+            
+            <div className="db-summary-card info">
+              <div className="summary-icon">ℹ️</div>
+              <div className="summary-content">
+                <h4>Информация</h4>
+                <p className="summary-value">{healthCheck.stats.byType.info}</p>
               </div>
             </div>
           </div>
           
+          {/* Статистика записей */}
+          <div className="db-records-section">
+            <h4>📈 Статистика базы данных</h4>
+            <div className="db-records-grid">
+              <div className="record-stat">
+                <span className="record-label">Структура сети:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.networkStructures}</span>
+              </div>
+              <div className="record-stat">
+                <span className="record-label">Статусы ПУ:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.puStatuses}</span>
+              </div>
+              <div className="record-stat">
+                <span className="record-label">Уведомления:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.notifications}</span>
+              </div>
+              <div className="record-stat">
+                <span className="record-label">История проверок:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.checkHistory}</span>
+              </div>
+              <div className="record-stat">
+                <span className="record-label">История загрузок:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.uploadHistory}</span>
+              </div>
+              <div className="record-stat">
+                <span className="record-label">Пользователи:</span>
+                <span className="record-value">{healthCheck.stats.totalRecords.users}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Обнаруженные проблемы */}
           {healthCheck.issues.length === 0 ? (
-            <div className="no-issues">
-              <h4>База данных в порядке!</h4>
-              <p>Проблем не обнаружено</p>
+            <div className="db-no-issues">
+              <div className="no-issues-icon">✨</div>
+              <h4>База данных в отличном состоянии!</h4>
+              <p>Проблем не обнаружено. Все работает корректно.</p>
             </div>
           ) : (
-            <div className="issues-list">
-              <h4>Обнаруженные проблемы:</h4>
-              {healthCheck.issues.map((issue, idx) => (
-                <div key={idx} className="issue-card" style={{borderLeftColor: getSeverityColor(issue.severity)}}>
-                  <div className="issue-header">
-                    <span className="issue-icon">{getSeverityIcon(issue.severity)}</span>
-                    <span className="issue-description">{issue.description}</span>
-                    <span className="issue-count">Количество: {issue.count}</span>
-                  </div>
-                  
-                  {issue.items && issue.items.length > 0 && (
-                    <details className="issue-details">
-                      <summary>Показать детали (первые 10)</summary>
-                      <ul>
-                        {issue.items.slice(0, 10).map((item, i) => (
-                          <li key={i}>
-                            {typeof item === 'object' ? 
-                              `ПУ: ${item.puNumber} (встречается ${item.count} раз)` : 
-                              item
-                            }
-                          </li>
-                        ))}
-                        {issue.items.length > 10 && (
-                          <li>... и еще {issue.items.length - 10}</li>
-                        )}
-                      </ul>
-                    </details>
-                  )}
-                  
-                  {['orphaned_pu_status', 'old_unread_notifications', 'orphaned_notifications'].includes(issue.type) && (
-                    <button 
-                      className="btn-cleanup"
-                      onClick={() => {
-                        setCleanupType(issue.type);
-                        setShowCleanupModal(true);
-                      }}
+            <div className="db-issues-section">
+              <h4>🔍 Обнаруженные проблемы</h4>
+              <div className="db-issues-list">
+                {healthCheck.issues.map((issue, idx) => {
+                  const cleanupInfo = getCleanupDescription(issue.type);
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`db-issue-card severity-${issue.severity}`}
+                      style={{borderLeftColor: getSeverityColor(issue.severity)}}
                     >
-                      Очистить
-                    </button>
-                  )}
-                </div>
-              ))}
+                      <div className="issue-header">
+                        <div className="issue-title-row">
+                          <span className="issue-type-icon">{cleanupInfo.icon}</span>
+                          <span className="issue-severity-icon">{getSeverityIcon(issue.severity)}</span>
+                          <h5>{issue.description}</h5>
+                        </div>
+                        <span className="issue-count-badge">{issue.count} записей</span>
+                      </div>
+                      
+                      {issue.items && issue.items.length > 0 && (
+                        <details className="issue-details">
+                          <summary>
+                            <span>📋</span>
+                            Показать примеры (первые 10)
+                          </summary>
+                          <ul className="issue-items-list">
+                            {issue.items.slice(0, 10).map((item, i) => (
+                              <li key={i}>
+                                {typeof item === 'object' ? 
+                                  `ПУ: ${item.puNumber} (встречается ${item.count} раз)` : 
+                                  item
+                                }
+                              </li>
+                            ))}
+                            {issue.items.length > 10 && (
+                              <li className="more-items">... и еще {issue.items.length - 10}</li>
+                            )}
+                          </ul>
+                        </details>
+                      )}
+                      
+                      {['orphaned_pu_status', 'duplicate_pu_statuses', 'old_unread_notifications', 
+                        'orphaned_notifications', 'checks_without_res', 'broken_file_references', 
+                        'stale_problem_vl'].includes(issue.type) && (
+                        <button 
+                          className="btn-cleanup"
+                          onClick={() => {
+                            setCleanupType(issue.type);
+                            setShowCleanupModal(true);
+                          }}
+                        >
+                          <span>🧹</span>
+                          Очистить
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           
-          <div className="check-time">
-            <small>Последняя проверка: {new Date(healthCheck.checkedAt).toLocaleString('ru-RU')}</small>
+          <div className="db-check-time">
+            <span>⏱️</span>
+            Последняя проверка: {new Date(healthCheck.checkedAt).toLocaleString('ru-RU')}
           </div>
-        </>
+        </div>
       )}
       
       {/* Модальное окно очистки */}
       {showCleanupModal && (
         <div className="modal-backdrop" onClick={() => setShowCleanupModal(false)}>
-          <div className="modal-content cleanup-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение очистки</h3>
+          <div className="modal-content cleanup-modal-modern" onClick={e => e.stopPropagation()}>
+            <div className="modal-header-modern">
+              <div className="modal-icon-large">{getCleanupDescription(cleanupType).icon}</div>
+              <h3>{getCleanupDescription(cleanupType).title}</h3>
               <button className="close-btn" onClick={() => setShowCleanupModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <p className="cleanup-description">{getCleanupDescription(cleanupType)}</p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
+              <p className="cleanup-description">{getCleanupDescription(cleanupType).desc}</p>
+              <div className="warning-box">
+                <span className="warning-icon">⚠️</span>
+                <div>
+                  <strong>Внимание!</strong>
+                  <p>Это действие нельзя отменить. Все удаленные данные будут потеряны безвозвратно.</p>
+                </div>
+              </div>
               <div className="form-group">
-                <label>Введите пароль администратора:</label>
+                <label>
+                  <span className="label-icon">🔒</span>
+                  Введите пароль администратора:
+                </label>
                 <input
                   type="password"
                   value={cleanupPassword}
                   onChange={(e) => setCleanupPassword(e.target.value)}
-                  placeholder="Пароль"
+                  placeholder="••••••••"
                   autoFocus
+                  className="password-input-modern"
                 />
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowCleanupModal(false)}>
+            <div className="modal-footer-modern">
+              <button 
+                className="btn-cancel-modern" 
+                onClick={() => setShowCleanupModal(false)}
+              >
                 Отмена
               </button>
               <button 
-                className="danger-btn" 
+                className="btn-danger-modern" 
                 onClick={handleCleanup}
                 disabled={!cleanupPassword || cleaning}
               >
-                {cleaning ? 'Очистка...' : 'Очистить'}
+                {cleaning ? (
+                  <>
+                    <span className="spinner-small"></span>
+                    Очистка...
+                  </>
+                ) : (
+                  <>
+                    <span>🧹</span>
+                    Очистить
+                  </>
+                )}
               </button>
             </div>
           </div>
