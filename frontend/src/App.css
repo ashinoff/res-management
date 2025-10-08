@@ -4685,3 +4685,20 @@ padding: 16px 12px;
     grid-template-columns: 1fr;
   }
 }
+.export-btn.detailed {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+}
+
+.export-btn.detailed:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5568d3 0%, #63408a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.export-btn.detailed:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
