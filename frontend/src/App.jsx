@@ -4994,12 +4994,11 @@ function Analytics() {
     const data = analytics.map(row => ({
       'РЭС': row.resName,
       'Всего ТП': row.tpCount,
-      'Всего ВЛ': row.vlCount, // ДОБАВЛЕНО
+      'Всего ВЛ': row.vlCount,
+      '% охвата ВЛ': row.vlCoveragePercent + '%',
       'Всего ПУ': row.totalPuCount,
-      'Загружено файлов': row.uploadedCount,
-      '% охвата': row.percentage + '%',
-      'Соответствует ГОСТ': row.okCount,
-      'Не соответствует ГОСТ': row.errorCount
+      'Проверено ПУ': row.uniqueCheckedPuCount,
+      '% охвата ПУ': row.puCoveragePercent + '%'
     }));
     
     // Добавляем итоги
@@ -5007,14 +5006,11 @@ function Analytics() {
       data.push({
         'РЭС': 'ИТОГО',
         'Всего ТП': totals.tpCount,
-        'Всего ВЛ': totals.vlCount, // ДОБАВЛЕНО
+        'Всего ВЛ': totals.vlCount,
+        '% охвата ВЛ': totals.vlCoveragePercent + '%',
         'Всего ПУ': totals.totalPuCount,
-        'Загружено файлов': totals.uploadedCount,
-        '% охвата': totals.totalPuCount > 0 
-          ? Math.round((totals.uploadedCount / totals.totalPuCount) * 100) + '%'
-          : '0%',
-        'Соответствует ГОСТ': totals.okCount,
-        'Не соответствует ГОСТ': totals.errorCount
+        'Проверено ПУ': totals.uniqueCheckedPuCount,
+        '% охвата ПУ': totals.puCoveragePercent + '%'
       });
     }
     
@@ -5058,12 +5054,11 @@ function Analytics() {
             <tr>
               <th>РЭС</th>
               <th>Всего ТП</th>
-              <th>Всего ВЛ</th> {/* ДОБАВЛЕНО */}
+              <th>Всего ВЛ</th>
+              <th>% охвата ВЛ</th>
               <th>Всего ПУ</th>
-              <th>Загружено файлов</th>
-              <th>% охвата</th>
-              <th>Соответствует ГОСТ</th>
-              <th>Не соответствует ГОСТ</th>
+              <th>Проверено ПУ</th>
+              <th>% охвата ПУ</th>
             </tr>
           </thead>
           <tbody>
@@ -5071,40 +5066,46 @@ function Analytics() {
               <tr key={row.resId}>
                 <td>{row.resName}</td>
                 <td>{row.tpCount}</td>
-                <td>{row.vlCount}</td> {/* ДОБАВЛЕНО */}
-                <td>{row.totalPuCount}</td>
-                <td>{row.uploadedCount}</td>
+                <td>{row.vlCount}</td>
                 <td>
                   <div className="progress-cell">
                     <div className="progress-bar-small">
                       <div 
                         className="progress-fill-small"
-                        style={{ width: `${row.percentage}%` }}
+                        style={{ width: `${row.vlCoveragePercent}%` }}
                       />
                     </div>
-                    <span>{row.percentage}%</span>
+                    <span>{row.vlCoveragePercent}%</span>
                   </div>
                 </td>
-                <td className="ok-count">{row.okCount}</td>
-                <td className="error-count">{row.errorCount}</td>
+                <td>{row.totalPuCount}</td>
+                <td><strong>{row.uniqueCheckedPuCount}</strong></td>
+                <td>
+                  <div className="progress-cell">
+                    <div className="progress-bar-small">
+                      <div 
+                        className="progress-fill-small"
+                        style={{ width: `${row.puCoveragePercent}%` }}
+                      />
+                    </div>
+                    <span>{row.puCoveragePercent}%</span>
+                  </div>
+                </td>
               </tr>
             ))}
             {user.role === 'admin' && (
               <tr className="totals-row">
                 <td><strong>ИТОГО</strong></td>
                 <td><strong>{totals.tpCount}</strong></td>
-                <td><strong>{totals.vlCount}</strong></td> {/* ДОБАВЛЕНО */}
-                <td><strong>{totals.totalPuCount}</strong></td>
-                <td><strong>{totals.uploadedCount}</strong></td>
+                <td><strong>{totals.vlCount}</strong></td>
                 <td>
-                  <strong>
-                    {totals.totalPuCount > 0 
-                      ? Math.round((totals.uploadedCount / totals.totalPuCount) * 100) 
-                      : 0}%
-                  </strong>
+                  <strong>{totals.vlCoveragePercent}%</strong>
                 </td>
-                <td className="ok-count"><strong>{totals.okCount}</strong></td>
-                <td className="error-count"><strong>{totals.errorCount}</strong></td>
+                <td><strong>{totals.totalPuCount}</strong></td>
+                <td><strong>{totals.uniqueCheckedPuCount}</strong></td>
+                <td>
+                  <strong>{totals.puCoveragePercent}%</strong>
+                </td>
               </tr>
             )}
           </tbody>
