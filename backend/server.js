@@ -3850,6 +3850,160 @@ app.delete('/api/history/clear-all',
       res.status(500).json({ error: error.message });
     }
 });
+
+// API для детального отчета аналитики
+app.get('/api/analytics/detailed', 
+  authenticateToken, 
+  async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+      
+      // Условие по РЭС
+      let resCondition = {};
+      if (req.user.role !== 'admin') {
+        resCondition.id = req.user.resId;
+      }
+      
+      // Получаем РЭСы
+      const resList = await ResUnit.findAll({
+        where: resCondition,
+        order: [['name', 'ASC']]
+      });
+
+      // Фильтруем СИРИУС
+      const filteredResList = resList.filter(res => res.name !== 'СИРИУС');
+
+      // Условие по дате
+      let dateCondition = {};
+      if (dateFrom || dateTo) {
+        dateCondition.uploadedAt = {};
+        if (dateFrom) dateCondition.uploadedAt[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateCondition.uploadedAt[Op.lte] = endDate;
+        }
+      }
+
+      const detailedData = [];
+
+      // Для каждого РЭС
+      for (const res of filteredResList) {
+        // Получаем структуру сети
+        const structures = await NetworkStructure.findAll({
+          where: { resId: res.id },
+          order: [['tpName', 'ASC'], ['vlName', 'ASC']]
+        });
+
+        // Собираем все номера ПУ для этого РЭС
+        const allPuNumbers = new Set();
+        structures.forEach(s => {
+          if (s.startPu) allPuNumbers.add(s.startPu);
+          if (s.middlePu) allPuNumbers.add(s.middlePu);
+          if (s.endPu) allPuNumbers.add(s.endPu);
+        });
+
+        // Получаем историю загрузок для всех ПУ в периоде
+        const uploads = await PuUploadHistory.findAll({
+          where: {
+            puNumber: Array.from(allPuNumbers),
+            ...dateCondition
+          },
+          include: [{
+            model: User,
+            attributes: ['fio']
+          }],
+          order: [['uploadedAt', 'DESC']]
+        });
+
+        // Создаем Map для быстрого доступа к последней загрузке каждого ПУ
+        const latestUploads = new Map();
+        uploads.forEach(upload => {
+          if (!latestUploads.has(upload.puNumber)) {
+            latestUploads.set(upload.puNumber, upload);
+          }
+        });
+
+        // Обрабатываем каждую ВЛ
+        for (const structure of structures) {
+          const puPositions = [
+            { pu: structure.startPu, position: 'start' },
+            { pu: structure.middlePu, position: 'middle' },
+            { pu: structure.endPu, position: 'end' }
+          ];
+
+          // Собираем информацию о ПУ
+          const puData = {};
+          let checkedCount = 0;
+
+          for (const { pu, position } of puPositions) {
+            if (pu) {
+              const upload = latestUploads.get(pu);
+              
+              puData[position] = {
+                number: pu,
+                status: upload ? (upload.hasErrors ? 'Ошибка ✗' : 'Проверен ✓') : 'Не проверен',
+                error: upload && upload.hasErrors ? upload.errorSummary : '—',
+                uploadedBy: upload ? upload.User?.fio || 'Неизвестно' : '—',
+                uploadDate: upload ? new Date(upload.uploadedAt).toLocaleString('ru-RU') : '—'
+              };
+              
+              if (upload) checkedCount++;
+            } else {
+              puData[position] = {
+                number: '—',
+                status: 'Пусто',
+                error: '—',
+                uploadedBy: '—',
+                uploadDate: '—'
+              };
+            }
+          }
+
+          // Определяем статус ВЛ
+          const totalPu = [structure.startPu, structure.middlePu, structure.endPu]
+            .filter(Boolean).length;
+          
+          let vlStatus;
+          if (checkedCount === 0) {
+            vlStatus = '❌ Не проверена';
+          } else if (checkedCount === totalPu) {
+            vlStatus = '✅ Проверена';
+          } else {
+            vlStatus = '⚠️ Частично проверена';
+          }
+
+          // Добавляем строку в отчет
+          detailedData.push({
+            resName: res.name,
+            tpName: structure.tpName,
+            vlName: structure.vlName,
+            vlStatus,
+            checkedPuCount: checkedCount,
+            totalPuCount: totalPu,
+            startPu: puData.start,
+            middlePu: puData.middle,
+            endPu: puData.end
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        data: detailedData,
+        period: {
+          from: dateFrom,
+          to: dateTo
+        },
+        totalRows: detailedData.length
+      });
+
+    } catch (error) {
+      console.error('Detailed analytics error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // Новый эндпоинт для аналитики
 app.get('/api/analytics/summary', 
   authenticateToken, 
