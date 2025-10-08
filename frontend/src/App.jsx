@@ -5018,10 +5018,15 @@ function Analytics() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Аналитика');
-    XLSX.writeFile(wb, `Аналитика_${new Date().toLocaleDateString('ru-RU')}.xlsx`);
+    
+    // УЛУЧШЕНО: добавляем РЭС в имя файла для не-админов
+    const fileName = user.role !== 'admin' 
+      ? `Аналитика_${user.resName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`
+      : `Аналитика_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    
+    XLSX.writeFile(wb, fileName);
   };
   
-  // НОВАЯ ФУНКЦИЯ: Экспорт детального отчета
   const exportDetailedReport = async () => {
     setLoadingDetailed(true);
     
@@ -5037,7 +5042,6 @@ function Analytics() {
         return;
       }
       
-      // Формируем данные для Excel
       const excelData = detailedData.map(row => ({
         'РЭС': row.resName,
         'ТП': row.tpName,
@@ -5064,40 +5068,23 @@ function Analytics() {
         'Дата проверки конца': row.endPu.uploadDate
       }));
       
-      // Создаем Excel файл
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
       
-      // Устанавливаем ширину колонок
       ws['!cols'] = [
-        { wch: 20 }, // РЭС
-        { wch: 15 }, // ТП
-        { wch: 15 }, // ВЛ
-        { wch: 20 }, // Статус ВЛ
-        { wch: 15 }, // Проверено/Всего
-        
-        { wch: 15 }, // ПУ Начало
-        { wch: 15 }, // Статус начала
-        { wch: 50 }, // Ошибка начала
-        { wch: 20 }, // Кто проверил начало
-        { wch: 18 }, // Дата проверки начала
-        
-        { wch: 15 }, // ПУ Середина
-        { wch: 15 }, // Статус середины
-        { wch: 50 }, // Ошибка середины
-        { wch: 20 }, // Кто проверил середину
-        { wch: 18 }, // Дата проверки середины
-        
-        { wch: 15 }, // ПУ Конец
-        { wch: 15 }, // Статус конца
-        { wch: 50 }, // Ошибка конца
-        { wch: 20 }, // Кто проверил конец
-        { wch: 18 }  // Дата проверки конца
+        { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 },
+        { wch: 15 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 18 },
+        { wch: 15 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 18 },
+        { wch: 15 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 18 }
       ];
       
       XLSX.utils.book_append_sheet(wb, ws, 'Детальный отчет');
       
-      const fileName = `Детальный_отчет_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+      // УЛУЧШЕНО: добавляем РЭС в имя файла для не-админов
+      const fileName = user.role !== 'admin'
+        ? `Детальный_отчет_${user.resName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`
+        : `Детальный_отчет_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+      
       XLSX.writeFile(wb, fileName);
       
       alert(`✅ Детальный отчет успешно выгружен!\n\nВсего строк: ${detailedData.length}\nФайл: ${fileName}`);
@@ -5115,6 +5102,13 @@ function Analytics() {
   return (
     <div className="analytics-container">
       <h2>📈 Аналитика по загрузкам</h2>
+      
+      {/* НОВОЕ: Индикатор для не-админов */}
+      {user.role !== 'admin' && (
+        <div className="res-indicator">
+          <span>📍 Показаны данные для: <strong>{user.resName}</strong></span>
+        </div>
+      )}
       
       <div className="analytics-controls">
         <div className="control-group">
@@ -5134,7 +5128,6 @@ function Analytics() {
           />
         </div>
         
-        {/* ДВЕ КНОПКИ ЭКСПОРТА */}
         <button onClick={exportToExcel} className="export-btn">
           📊 Экспорт сводного отчета
         </button>
