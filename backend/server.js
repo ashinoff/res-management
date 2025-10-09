@@ -82,10 +82,12 @@ cloudinary.config({
 const cloudinaryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'res-management', // папка в Cloudinary
+    folder: 'res-management',
     allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+    resource_type: 'auto', // ДОБАВИЛИ - автоопределение типа (image/raw)
+    type: 'upload', // ДОБАВИЛИ - тип загрузки
+    access_mode: 'public', // ДОБАВИЛИ - ПУБЛИЧНЫЙ ДОСТУП!
     transformation: [{ width: 1920, height: 1920, crop: 'limit', quality: 'auto' }],
-    // Генерируем уникальное имя файла
     public_id: (req, file) => {
       const timestamp = Date.now();
       const originalName = file.originalname.split('.')[0];
