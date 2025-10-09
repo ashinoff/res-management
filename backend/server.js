@@ -3469,102 +3469,123 @@ app.post('/api/admin/migrate-pdfs',
         const newAttachments = [];
         
         for (const file of record.attachments) {
-          const isPdf = file.original_name && 
-                       file.original_name.toLowerCase().endsWith('.pdf');
-          
-          if (!isPdf) {
-            newAttachments.push(file);
-            continue;
-          }
-          
-          console.log(`\nChecking PDF: ${file.original_name}`);
-          results.push({ file: file.original_name, status: 'checking' });
-          
-          try {
-            // Проверяем как RAW
-            try {
-              await cloudinary.api.resource(file.public_id, { 
-                resource_type: 'raw' 
-              });
-              console.log('  Already RAW - OK');
-              results[results.length - 1].status = 'already_raw';
-              newAttachments.push(file);
-              continue;
-            } catch (e) {
-              // Не RAW
-            }
-            
-            // Проверяем как IMAGE
-            try {
-              await cloudinary.api.resource(file.public_id, { 
-                resource_type: 'image' 
-              });
-              console.log('  Found as IMAGE - fixing...');
-            } catch (e) {
-              console.log('  Not found');
-              results[results.length - 1].status = 'not_found';
-              newAttachments.push(file);
-              errorCount++;
-              continue;
-            }
-            
-            // Скачиваем
-            console.log('  Downloading...');
-            const response = await fetch(file.url);
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            
-            // Загружаем как RAW
-            console.log('  Re-uploading as RAW...');
-            
-            const result = await new Promise((resolve, reject) => {
-              const uploadStream = cloudinary.uploader.upload_stream(
-                {
-                  folder: 'res-management',
-                  resource_type: 'raw',
-                  public_id: file.public_id.replace(/^res-management\//, '') + '_fixed',
-                  access_mode: 'public',
-                  overwrite: false
-                },
-                (error, result) => {
-                  if (error) reject(error);
-                  else resolve(result);
-                }
-              );
-              
-              const bufferStream = require('stream').Readable.from(buffer);
-              bufferStream.pipe(uploadStream);
-            });
-            
-            // Удаляем старый
-            console.log('  Deleting old...');
-            await cloudinary.uploader.destroy(
-              file.public_id.replace(/^res-management\//, ''), 
-              { resource_type: 'image' }
-            );
-            
-            // Обновляем
-            newAttachments.push({
-              ...file,
-              url: result.secure_url,
-              public_id: result.public_id,
-              resource_type: 'raw'
-            });
-            
-            needsUpdate = true;
-            fixedCount++;
-            results[results.length - 1].status = 'fixed';
-            results[results.length - 1].newUrl = result.secure_url;
-            console.log('  ✅ FIXED!');
-            
-          } catch (error) {
-            console.error(`  ❌ Error: ${error.message}`);
-            results[results.length - 1].status = 'error';
-            results[results.length - 1].error = error.message;
-            newAttachments.push(file);
-            errorCount++;
-          }
+  const isPdf = file.original_name && 
+               file.original_name.toLowerCase().endsWith('.pdf');
+  
+  if (!isPdf) {
+    newAttachments.push(file);
+    continue;
+  }
+  
+  console.log(`\nChecking PDF: ${file.original_name}`);
+  results.push({ file: file.original_name, status: 'checking' });
+  
+  // ===== НАЧАЛО БОЛЬШОГО TRY-CATCH =====
+  try {
+    // Проверяем как RAW
+    try {
+      await cloudinary.api.resource(file.public_id, { 
+        resource_type: 'raw' 
+      });
+      console.log('  Already RAW - OK');
+      results[results.length - 1].status = 'already_raw';
+      newAttachments.push(file);
+      continue;
+    } catch (e) {
+      // Не RAW, идем дальше
+    }
+    
+    // Проверяем как IMAGE
+    try {
+      await cloudinary.api.resource(file.public_id, { 
+        resource_type: 'image' 
+      });
+      console.log('  Found as IMAGE - fixing...');
+    } catch (e) {
+      console.log('  Not found in Cloudinary');
+      results[results.length - 1].status = 'not_found';
+      newAttachments.push(file);
+      errorCount++;
+      continue;
+    }
+    
+    // Скачиваем файл
+    console.log('  Downloading...');
+    const response = await fetch(file.url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Проверка: не пустой ли?
+    if (buffer.length === 0) {
+      throw new Error('Empty file downloaded');
+    }
+    
+    console.log(`  File size: ${(buffer.length / 1024).toFixed(2)} KB`);
+    
+    // Загружаем как RAW
+    console.log('  Re-uploading as RAW...');
+    
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'res-management',
+          resource_type: 'raw',
+          public_id: file.public_id.replace(/^res-management\//, '') + '_fixed',
+          access_mode: 'public',
+          overwrite: false
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
         }
+      );
+      
+      const bufferStream = require('stream').Readable.from(buffer);
+      bufferStream.pipe(uploadStream);
+    });
+    
+    // Удаляем старый файл
+    console.log('  Deleting old version...');
+    try {
+      await cloudinary.uploader.destroy(
+        file.public_id.replace(/^res-management\//, ''), 
+        { resource_type: 'image' }
+      );
+    } catch (deleteError) {
+      console.log('  Warning: Could not delete old file');
+    }
+    
+    // Обновляем запись
+    newAttachments.push({
+      ...file,
+      url: result.secure_url,
+      public_id: result.public_id,
+      resource_type: 'raw'
+    });
+    
+    needsUpdate = true;
+    fixedCount++;
+    results[results.length - 1].status = 'fixed';
+    results[results.length - 1].newUrl = result.secure_url;
+    console.log('  ✅ FIXED!');
+    
+  } catch (error) {
+    // ===== ОБРАБОТКА ЛЮБОЙ ОШИБКИ =====
+    console.error(`  ❌ Error: ${error.message}`);
+    results[results.length - 1].status = 'error';
+    results[results.length - 1].error = error.message;
+    
+    // ВАЖНО: сохраняем старый файл, чтобы не потерять!
+    newAttachments.push(file);
+    errorCount++;
+  }
+  // ===== КОНЕЦ БОЛЬШОГО TRY-CATCH =====
+}
         
         if (needsUpdate) {
           await record.update({ attachments: newAttachments });
