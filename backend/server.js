@@ -81,18 +81,26 @@ cloudinary.config({
 // Настройка хранилища для multer
 const cloudinaryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: 'res-management',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
-    resource_type: 'auto', // ДОБАВИЛИ - автоопределение типа (image/raw)
-    type: 'upload', // ДОБАВИЛИ - тип загрузки
-    access_mode: 'public', // ДОБАВИЛИ - ПУБЛИЧНЫЙ ДОСТУП!
-    transformation: [{ width: 1920, height: 1920, crop: 'limit', quality: 'auto' }],
-    public_id: (req, file) => {
-      const timestamp = Date.now();
-      const originalName = file.originalname.split('.')[0];
-      return `${req.body.type || 'attachment'}_${timestamp}_${originalName}`;
-    }
+  params: async (req, file) => {
+    const isPdf = file.mimetype === 'application/pdf';
+    const timestamp = Date.now();
+    const originalName = file.originalname.split('.')[0];
+    
+    // ВАЖНО: для PDF и изображений разные параметры!
+    return {
+      folder: 'res-management',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+      resource_type: isPdf ? 'raw' : 'image', // PDF = raw, картинки = image
+      type: 'upload',
+      access_mode: 'public',
+      // Трансформации ТОЛЬКО для изображений!
+      transformation: isPdf ? undefined : [
+        { width: 1920, height: 1920, crop: 'limit', quality: 'auto' }
+      ],
+      public_id: `${req.body.type || 'attachment'}_${timestamp}_${originalName}`,
+      // Для PDF добавляем флаг
+      flags: isPdf ? 'attachment' : undefined
+    };
   }
 });
 
