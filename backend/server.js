@@ -83,7 +83,7 @@ cloudinary.config({
 
 // Используем обычный multer с памятью
 const upload = multer({
-  storage: multer.memoryStorage(), // Храним в памяти!
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB
     files: 5
@@ -118,15 +118,14 @@ async function uploadToCloudinary(file, type = 'attachment') {
     
     const uploadOptions = {
       folder: 'res-management',
-      resource_type: isPdf ? 'raw' : 'image', // КРИТИЧНО!
+      resource_type: isPdf ? 'raw' : 'image',
       public_id: `${type}_${timestamp}_${safeName}`,
       access_mode: 'public',
       use_filename: false,
       unique_filename: true,
-      overwrite: false // НЕ перезаписываем!
+      overwrite: false
     };
     
-    // Трансформации только для изображений
     if (!isPdf) {
       uploadOptions.transformation = [
         { width: 1920, height: 1920, crop: 'limit', quality: 'auto' }
@@ -136,30 +135,26 @@ async function uploadToCloudinary(file, type = 'attachment') {
     console.log('=== UPLOADING TO CLOUDINARY ===');
     console.log('File:', file.originalname);
     console.log('Type:', isPdf ? 'PDF (raw)' : 'Image');
-    console.log('Options:', uploadOptions);
     
-    // Создаем stream для загрузки
     const uploadStream = cloudinary.uploader.upload_stream(
       uploadOptions,
       (error, result) => {
         if (error) {
-          console.error('❌ Cloudinary upload error:', error);
+          console.error('❌ Cloudinary error:', error);
           reject(error);
         } else {
-          console.log('✅ Upload successful:', result.secure_url);
+          console.log('✅ Uploaded:', result.secure_url);
           resolve({
             url: result.secure_url,
             public_id: result.public_id,
             original_name: file.originalname,
             mime_type: file.mimetype,
-            size: file.size,
-            resource_type: result.resource_type
+            size: file.size
           });
         }
       }
     );
     
-    // Отправляем buffer в stream
     const bufferStream = require('stream').Readable.from(file.buffer);
     bufferStream.pipe(uploadStream);
   });
@@ -750,7 +745,7 @@ const checkRole = (roles) => {
 };
 
 // Настройка multer для загрузки файлов с ограничением размера
-const storage = multer.diskStorage({
+const storageExcel = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
   },
@@ -760,8 +755,8 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
-  storage: storage,
+const uploadExcel = multer({ 
+  storage: storageExcel,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB максимум
   },
@@ -951,7 +946,7 @@ app.put('/api/network/structure/:id',
 app.post('/api/upload/analyze',
   authenticateToken,
   checkRole(['admin', 'uploader']),
-  upload.single('file'),
+  uploadExcel.single('file'),
   async (req, res) => {
     let uploadRecord;
     try {
@@ -1050,7 +1045,7 @@ app.post('/api/upload/analyze',
 app.post('/api/network/upload-full-structure', 
   authenticateToken, 
   checkRole(['admin']), 
-  upload.single('file'), 
+  uploadExcel.single('file'), 
   async (req, res) => {
     const transaction = await sequelize.transaction();
     
