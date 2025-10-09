@@ -3906,21 +3906,35 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
               className="file-viewer-image"
             />
           ) : isPdf ? (
-            <div className="pdf-viewer">
-              <iframe 
-                src={currentFile.url} 
-                width="100%" 
-                height="600px"
-                title={currentFile.original_name}
-              />
-              <a 
-                href={currentFile.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="pdf-download-link"
-              >
-                📥 Открыть PDF в новой вкладке
-              </a>
+            <div className="pdf-viewer-modern">
+              <div className="pdf-preview">
+                <div className="pdf-icon">📄</div>
+                <h4>{currentFile.original_name}</h4>
+                <p className="pdf-info">PDF документ</p>
+                <div className="pdf-actions">
+                  <a 
+                    href={currentFile.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="btn-view-pdf"
+                  >
+                    <span>👁️</span>
+                    Открыть в новой вкладке
+                  </a>
+                  <a 
+                    href={currentFile.url}
+                    download={currentFile.original_name}
+                    className="btn-download-pdf"
+                  >
+                    <span>📥</span>
+                    Скачать PDF
+                  </a>
+                </div>
+              </div>
+              <div className="pdf-note">
+                <span>💡</span>
+                <p>PDF откроется в новой вкладке браузера</p>
+              </div>
             </div>
           ) : (
             <div className="file-not-supported">
@@ -3931,7 +3945,7 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
                 rel="noopener noreferrer"
                 className="download-link"
               >
-                📥 Скачать файл
+                Скачать файл
               </a>
             </div>
           )}
