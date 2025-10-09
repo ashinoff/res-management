@@ -3433,7 +3433,6 @@ app.post('/api/admin/migrate-pdfs',
   async (req, res) => {
     const { password } = req.body;
     
-    // Проверка пароля
     if (password !== DELETE_PASSWORD) {
       return res.status(403).json({ error: 'Неверный пароль' });
     }
@@ -3441,21 +3440,31 @@ app.post('/api/admin/migrate-pdfs',
     try {
       console.log('🔄 Starting PDF migration...');
       
+      // ИСПРАВЛЕНО: правильный запрос для PostgreSQL
       const records = await CheckHistory.findAll({
         where: {
-          attachments: { [Op.ne]: [] }
+          attachments: {
+            [Op.not]: null  // ✅ РАБОТАЕТ!
+          }
         }
       });
       
       console.log(`Found ${records.length} records with attachments`);
       
+      // Дополнительная фильтрация в JS (для пустых массивов)
+      const recordsWithFiles = records.filter(r => 
+        r.attachments && 
+        Array.isArray(r.attachments) && 
+        r.attachments.length > 0
+      );
+      
+      console.log(`Records with actual files: ${recordsWithFiles.length}`);
+      
       let fixedCount = 0;
       let errorCount = 0;
       const results = [];
       
-      for (const record of records) {
-        if (!record.attachments || !Array.isArray(record.attachments)) continue;
-        
+      for (const record of recordsWithFiles) {
         let needsUpdate = false;
         const newAttachments = [];
         
