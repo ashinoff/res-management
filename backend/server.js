@@ -160,13 +160,7 @@ async function uploadToCloudinary(file, type = 'attachment') {
   });
 }
 
-// Создаем новый upload middleware для Cloudinary
-const uploadToCloud = multer({ 
-  storage: cloudinaryStorage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB максимум
-  }
-});
+
 
 
 // =====================================================
