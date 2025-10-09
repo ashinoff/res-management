@@ -5537,3 +5537,112 @@ padding: 16px 12px;
 .btn-loading {
   animation: button-pulse 1.5s ease-in-out infinite;
 }
+/* PDF Viewer - Современный дизайн */
+.pdf-viewer-modern {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 40px;
+}
+
+.pdf-preview {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 20px;
+  padding: 60px 40px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  width: 100%;
+}
+
+.pdf-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.pdf-preview h4 {
+  margin: 0 0 10px 0;
+  font-size: 20px;
+  color: #333;
+  word-break: break-word;
+}
+
+.pdf-info {
+  color: #666;
+  margin: 0 0 30px 0;
+  font-size: 14px;
+}
+
+.pdf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-view-pdf,
+.btn-download-pdf {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.btn-view-pdf {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-view-pdf:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.btn-download-pdf {
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+}
+
+.btn-download-pdf:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.pdf-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 30px;
+  padding: 16px 24px;
+  background: #e6f7ff;
+  border-radius: 12px;
+  border-left: 4px solid #1890ff;
+}
+
+.pdf-note span {
+  font-size: 24px;
+}
+
+.pdf-note p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
