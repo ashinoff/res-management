@@ -71,38 +71,99 @@ app.get('/', (req, res) => {
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
-// Конфигурация Cloudinary - автоматически использует CLOUDINARY_URL из .env
+// =====================================================
+// CLOUDINARY - ПРЯМАЯ ЗАГРУЗКА БЕЗ MULTER-STORAGE
+// =====================================================
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Настройка хранилища для multer
-const cloudinaryStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    const isPdf = file.mimetype === 'application/pdf';
-    const timestamp = Date.now();
-    const originalName = file.originalname.split('.')[0];
+// Используем обычный multer с памятью
+const upload = multer({
+  storage: multer.memoryStorage(), // Храним в памяти!
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+    files: 5
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'application/pdf'
+    ];
     
-    // ВАЖНО: для PDF и изображений разные параметры!
-    return {
-      folder: 'res-management',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
-      resource_type: isPdf ? 'raw' : 'image', // PDF = raw, картинки = image
-      type: 'upload',
-      access_mode: 'public',
-      // Трансформации ТОЛЬКО для изображений!
-      transformation: isPdf ? undefined : [
-        { width: 1920, height: 1920, crop: 'limit', quality: 'auto' }
-      ],
-      public_id: `${req.body.type || 'attachment'}_${timestamp}_${originalName}`,
-      // Для PDF добавляем флаг
-      flags: isPdf ? 'attachment' : undefined
-    };
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Тип файла ${file.mimetype} не поддерживается`));
+    }
   }
 });
+
+// Функция загрузки в Cloudinary
+async function uploadToCloudinary(file, type = 'attachment') {
+  const isPdf = file.mimetype === 'application/pdf';
+  
+  return new Promise((resolve, reject) => {
+    const timestamp = Date.now();
+    const safeName = file.originalname
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 50);
+    
+    const uploadOptions = {
+      folder: 'res-management',
+      resource_type: isPdf ? 'raw' : 'image', // КРИТИЧНО!
+      public_id: `${type}_${timestamp}_${safeName}`,
+      access_mode: 'public',
+      use_filename: false,
+      unique_filename: true,
+      overwrite: false // НЕ перезаписываем!
+    };
+    
+    // Трансформации только для изображений
+    if (!isPdf) {
+      uploadOptions.transformation = [
+        { width: 1920, height: 1920, crop: 'limit', quality: 'auto' }
+      ];
+    }
+    
+    console.log('=== UPLOADING TO CLOUDINARY ===');
+    console.log('File:', file.originalname);
+    console.log('Type:', isPdf ? 'PDF (raw)' : 'Image');
+    console.log('Options:', uploadOptions);
+    
+    // Создаем stream для загрузки
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) {
+          console.error('❌ Cloudinary upload error:', error);
+          reject(error);
+        } else {
+          console.log('✅ Upload successful:', result.secure_url);
+          resolve({
+            url: result.secure_url,
+            public_id: result.public_id,
+            original_name: file.originalname,
+            mime_type: file.mimetype,
+            size: file.size,
+            resource_type: result.resource_type
+          });
+        }
+      }
+    );
+    
+    // Отправляем buffer в stream
+    const bufferStream = require('stream').Readable.from(file.buffer);
+    bufferStream.pipe(uploadStream);
+  });
+}
 
 // Создаем новый upload middleware для Cloudinary
 const uploadToCloud = multer({ 
@@ -1132,34 +1193,44 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
 app.post('/api/notifications/:id/complete-work', 
   authenticateToken, 
   checkRole(['res_responsible']),
-  uploadToCloud.array('attachments', 5), // Позволяем загрузить до 5 файлов
+  upload.array('attachments', 5), // Используем обычный multer!
   async (req, res) => {
+    console.log('\n=== COMPLETE WORK START ===');
+    console.log('Files received:', req.files?.length || 0);
+    
     const transaction = await sequelize.transaction();
+    const uploadedFiles = []; // Для отслеживания загруженных
     
     try {
       const { comment, checkFromDate } = req.body;
       
-      // Проверка на количество слов (минимум 5)
-      const wordCount = comment.trim().split(/\s+/).filter(word => word.length > 0).length;
+      // Проверка комментария
+      const wordCount = comment.trim().split(/\s+/).filter(w => w.length > 0).length;
       if (wordCount < 5) {
+        await transaction.rollback();
         return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
       }
-      // Обрабатываем загруженные файлы
+      
+      // Загружаем файлы в Cloudinary
       const attachments = [];
       if (req.files && req.files.length > 0) {
+        console.log(`Uploading ${req.files.length} files to Cloudinary...`);
+        
         for (const file of req.files) {
-          attachments.push({
-            url: file.path, // Cloudinary URL
-            public_id: file.filename, // Cloudinary public_id для удаления
-            original_name: file.originalname,
-            size: file.size,
-            uploaded_at: new Date()
-          });
+          try {
+            console.log(`Uploading: ${file.originalname} (${file.mimetype})`);
+            const result = await uploadToCloudinary(file, req.body.type);
+            attachments.push(result);
+            uploadedFiles.push(result.public_id); // Сохраняем для cleanup
+            console.log(`✅ Uploaded: ${result.url}`);
+          } catch (uploadError) {
+            console.error(`❌ Failed to upload ${file.originalname}:`, uploadError);
+            throw new Error(`Ошибка загрузки файла ${file.originalname}: ${uploadError.message}`);
+          }
         }
-        console.log(`Uploaded ${attachments.length} files to Cloudinary`);
-        console.log('Attachments data:', JSON.stringify(attachments, null, 2));
+        
+        console.log(`✅ All ${attachments.length} files uploaded successfully`);
       }
-
       
       // Находим уведомление
       const notification = await Notification.findByPk(req.params.id);
@@ -1168,27 +1239,28 @@ app.post('/api/notifications/:id/complete-work',
         return res.status(404).json({ error: 'Уведомление не найдено' });
       }
       
-      // Парсим данные об ошибке
       const errorData = JSON.parse(notification.message);
       
-      // Создаем запись в истории проверок
+      // Создаем запись в CheckHistory
       await CheckHistory.create({
-  resId: notification.resId,
-  networkStructureId: notification.networkStructureId,
-  puNumber: errorData.puNumber,
-  tpName: errorData.tpName,
-  vlName: errorData.vlName,
-  position: errorData.position,
-  initialError: errorData.errorDetails,
-  initialCheckDate: notification.createdAt,
-  resComment: comment,
-  workCompletedDate: new Date(),
-  checkFromDate: checkFromDate ? new Date(checkFromDate) : new Date(), // ДОБАВИТЬ ЭТО
-  status: 'awaiting_recheck',
-  attachments: attachments
-}, { transaction });
-      console.log('CheckHistory created with attachments:', attachments.length);
-      // Обновляем статус ПУ на pending_recheck
+        resId: notification.resId,
+        networkStructureId: notification.networkStructureId,
+        puNumber: errorData.puNumber,
+        tpName: errorData.tpName,
+        vlName: errorData.vlName,
+        position: errorData.position,
+        initialError: errorData.errorDetails,
+        initialCheckDate: notification.createdAt,
+        resComment: comment,
+        workCompletedDate: new Date(),
+        checkFromDate: checkFromDate ? new Date(checkFromDate) : new Date(),
+        status: 'awaiting_recheck',
+        attachments: attachments
+      }, { transaction });
+      
+      console.log('✅ CheckHistory created');
+      
+      // Обновляем статус ПУ
       await PuStatus.update(
         { status: 'pending_recheck' },
         { 
@@ -1197,15 +1269,12 @@ app.post('/api/notifications/:id/complete-work',
         }
       );
       
-      // УДАЛЯЕМ старое уведомление
+      // Удаляем старое уведомление
       await notification.destroy({ transaction });
       
-      // Создаем новое уведомление для АСКУЭ
+      // Создаем уведомление для АСКУЭ
       const askueUsers = await User.findAll({
-        where: {
-          resId: notification.resId,
-          role: 'uploader'
-        }
+        where: { resId: notification.resId, role: 'uploader' }
       });
       
       const askueMessage = {
@@ -1234,22 +1303,33 @@ app.post('/api/notifications/:id/complete-work',
       }
       
       await transaction.commit();
-      res.json({ success: true, message: 'Мероприятия отмечены как выполненные' });
+      
+      console.log('✅ Complete work finished successfully');
+      res.json({ 
+        success: true, 
+        message: 'Мероприятия отмечены как выполненные',
+        filesUploaded: attachments.length
+      });
       
     } catch (error) {
-       // Если ошибка - удаляем загруженные файлы из Cloudinary
-      if (req.files && req.files.length > 0) {
-        for (const file of req.files) {
+      await transaction.rollback();
+      
+      // Cleanup: удаляем загруженные файлы из Cloudinary
+      if (uploadedFiles.length > 0) {
+        console.log('❌ Error occurred, cleaning up files...');
+        for (const publicId of uploadedFiles) {
           try {
-            await cloudinary.uploader.destroy(file.filename);
+            await cloudinary.uploader.destroy(publicId, { 
+              resource_type: publicId.includes('.pdf') ? 'raw' : 'image' 
+            });
+            console.log(`Deleted: ${publicId}`);
           } catch (err) {
-            console.error('Error deleting file from Cloudinary:', err);
+            console.error(`Error deleting ${publicId}:`, err.message);
           }
         }
       }
       
-      await transaction.rollback();
-      console.error('Complete work error:', error);
+      console.error('❌ Complete work error:', error);
       res.status(500).json({ error: error.message });
     }
 });
