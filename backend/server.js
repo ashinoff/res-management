@@ -34,6 +34,7 @@ const fs = require('fs');
 const { Sequelize, DataTypes, Op } = require('sequelize');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const axios = require('axios');
 
 // =====================================================
 // КОНФИГУРАЦИЯ И ИНИЦИАЛИЗАЦИЯ
@@ -111,15 +112,23 @@ async function uploadToCloudinary(file, type = 'attachment') {
   
   return new Promise((resolve, reject) => {
     const timestamp = Date.now();
-    const safeName = file.originalname
-      .replace(/\.[^/.]+$/, '')
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .substring(0, 50);
     
-    const uploadOptions = {
-      folder: 'res-management',
-      resource_type: isPdf ? 'raw' : 'image',
-      public_id: `${type}_${timestamp}_${safeName}`,
+// ИСПРАВЛЕНО: извлекаем расширение файла
+const ext = path.extname(file.originalname); // .pdf или .jpg
+const nameWithoutExt = file.originalname.replace(/\.[^/.]+$/, '');
+
+// Делаем безопасное имя (только латиница)
+const safeName = nameWithoutExt
+  .replace(/[^a-zA-Z0-9_-]/g, '_')
+  .substring(0, 50);
+
+// ВАЖНО: для PDF добавляем расширение!
+const finalPublicId = `${type}_${timestamp}_${safeName}${ext}`;
+
+const uploadOptions = {
+  folder: 'res-management',
+  resource_type: isPdf ? 'raw' : 'image',
+  public_id: finalPublicId,
       access_mode: 'public',
       use_filename: false,
       unique_filename: true,
@@ -3424,175 +3433,42 @@ app.post('/api/admin/database-cleanup',
 });
 
 // =====================================================
-// ВРЕМЕННЫЙ ENDPOINT ДЛЯ МИГРАЦИИ PDF (УДАЛИТЬ ПОСЛЕ!)
+// ENDPOINT ДЛЯ СКАЧИВАНИЯ ФАЙЛОВ С ПРАВИЛЬНЫМ ИМЕНЕМ
 // =====================================================
 
-app.post('/api/admin/migrate-pdfs', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  async (req, res) => {
-    const { password } = req.body;
-    
-    if (password !== DELETE_PASSWORD) {
-      return res.status(403).json({ error: 'Неверный пароль' });
-    }
-    
-    try {
-      console.log('🔄 Starting PDF migration...');
-      
-      // ИСПРАВЛЕНО: правильный запрос для PostgreSQL
-      const records = await CheckHistory.findAll({
-        where: {
-          attachments: {
-            [Op.not]: null  // ✅ РАБОТАЕТ!
-          }
-        }
-      });
-      
-      console.log(`Found ${records.length} records with attachments`);
-      
-      // Дополнительная фильтрация в JS (для пустых массивов)
-      const recordsWithFiles = records.filter(r => 
-        r.attachments && 
-        Array.isArray(r.attachments) && 
-        r.attachments.length > 0
-      );
-      
-      console.log(`Records with actual files: ${recordsWithFiles.length}`);
-      
-      let fixedCount = 0;
-      let errorCount = 0;
-      const results = [];
-      
-      for (const record of recordsWithFiles) {
-        let needsUpdate = false;
-        const newAttachments = [];
-        
-        for (const file of record.attachments) {
-  const isPdf = file.original_name && 
-               file.original_name.toLowerCase().endsWith('.pdf');
-  
-  if (!isPdf) {
-    newAttachments.push(file);
-    continue;
-  }
-  
-  console.log(`\nChecking PDF: ${file.original_name}`);
-  results.push({ file: file.original_name, status: 'checking' });
-  
-  // ===== НАЧАЛО БОЛЬШОГО TRY-CATCH =====
+app.get('/api/download/:public_id', async (req, res) => {
   try {
-    // Проверяем как RAW
-    try {
-      await cloudinary.api.resource(file.public_id, { 
-        resource_type: 'raw' 
-      });
-      console.log('  Already RAW - OK');
-      results[results.length - 1].status = 'already_raw';
-      newAttachments.push(file);
-      continue;
-    } catch (e) {
-      // Не RAW, идем дальше
-    }
+    const publicId = decodeURIComponent(req.params.public_id);
+    const originalName = req.query.name || 'file';
     
-    // Проверяем как IMAGE
-    try {
-      await cloudinary.api.resource(file.public_id, { 
-        resource_type: 'image' 
-      });
-      console.log('  Found as IMAGE - fixing...');
-    } catch (e) {
-      console.log('  Not found in Cloudinary');
-      results[results.length - 1].status = 'not_found';
-      newAttachments.push(file);
-      errorCount++;
-      continue;
-    }
+    console.log('Download request:', { publicId, originalName });
     
+    // Определяем тип ресурса по расширению
+    const isPdf = publicId.toLowerCase().endsWith('.pdf');
+    const resourceType = isPdf ? 'raw' : 'image';
     
-    
-    console.log(`  File size: ${(buffer.length / 1024).toFixed(2)} KB`);
-    
-    // Загружаем как RAW
-    console.log('  Re-uploading as RAW...');
-    
-    const result = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'res-management',
-          resource_type: 'raw',
-          public_id: file.public_id.replace(/^res-management\//, '') + '_fixed',
-          access_mode: 'public',
-          overwrite: false
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      
-      const bufferStream = require('stream').Readable.from(buffer);
-      bufferStream.pipe(uploadStream);
+    // Получаем информацию о файле из Cloudinary
+    const fileInfo = await cloudinary.api.resource(publicId, {
+      resource_type: resourceType
     });
     
-    // Удаляем старый файл
-    console.log('  Deleting old version...');
-    try {
-      await cloudinary.uploader.destroy(
-        file.public_id.replace(/^res-management\//, ''), 
-        { resource_type: 'image' }
-      );
-    } catch (deleteError) {
-      console.log('  Warning: Could not delete old file');
-    }
-    
-    // Обновляем запись
-    newAttachments.push({
-      ...file,
-      url: result.secure_url,
-      public_id: result.public_id,
-      resource_type: 'raw'
+    // Скачиваем файл
+    const response = await axios.get(fileInfo.secure_url, {
+      responseType: 'arraybuffer'
     });
     
-    needsUpdate = true;
-    fixedCount++;
-    results[results.length - 1].status = 'fixed';
-    results[results.length - 1].newUrl = result.secure_url;
-    console.log('  ✅ FIXED!');
+    // ВАЖНО: устанавливаем правильные заголовки с кириллицей!
+    const encodedName = encodeURIComponent(originalName);
+    res.setHeader('Content-Type', response.headers['content-type']);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`);
+    res.setHeader('Content-Length', response.data.length);
+    
+    res.send(response.data);
     
   } catch (error) {
-    // ===== ОБРАБОТКА ЛЮБОЙ ОШИБКИ =====
-    console.error(`  ❌ Error: ${error.message}`);
-    results[results.length - 1].status = 'error';
-    results[results.length - 1].error = error.message;
-    
-    // ВАЖНО: сохраняем старый файл, чтобы не потерять!
-    newAttachments.push(file);
-    errorCount++;
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Ошибка скачивания файла' });
   }
-  // ===== КОНЕЦ БОЛЬШОГО TRY-CATCH =====
-}
-        
-        if (needsUpdate) {
-          await record.update({ attachments: newAttachments });
-          console.log(`  Updated record ${record.id}`);
-        }
-      }
-      
-      console.log('\n✅ Migration complete!');
-      
-      res.json({
-        success: true,
-        message: 'Миграция завершена',
-        fixed: fixedCount,
-        errors: errorCount,
-        results: results
-      });
-      
-    } catch (error) {
-      console.error('Migration error:', error);
-      res.status(500).json({ error: error.message });
-    }
 });
 
 // =====================================================
