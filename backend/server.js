@@ -113,25 +113,28 @@ async function uploadToCloudinary(file, type = 'attachment') {
   return new Promise((resolve, reject) => {
     const timestamp = Date.now();
     
-// ИСПРАВЛЕНО: извлекаем расширение файла
-const ext = path.extname(file.originalname); // .pdf или .jpg
-const nameWithoutExt = file.originalname.replace(/\.[^/.]+$/, '');
-
-// Делаем безопасное имя (только латиница)
-const safeName = nameWithoutExt
-  .replace(/[^a-zA-Z0-9_-]/g, '_')
-  .substring(0, 50);
-
-// ВАЖНО: для PDF добавляем расширение!
-const finalPublicId = `${type}_${timestamp}_${safeName}${ext}`;
-
-const uploadOptions = {
-  folder: 'res-management',
-  resource_type: isPdf ? 'raw' : 'image',
-  public_id: finalPublicId,
-      access_mode: 'public',
+    // ИСПРАВЛЕНО: сохраняем оригинальное имя в UTF-8 СРАЗУ
+    const originalNameUtf8 = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    
+    // Извлекаем расширение
+    const ext = path.extname(originalNameUtf8);
+    const nameWithoutExt = originalNameUtf8.replace(/\.[^/.]+$/, '');
+    
+    // Безопасное имя для public_id (только латиница)
+    const safeName = nameWithoutExt
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 50);
+    
+    const finalPublicId = `${type}_${timestamp}_${safeName}${ext}`;
+    
+    const uploadOptions = {
+      folder: 'res-management',
+      resource_type: isPdf ? 'raw' : 'image',
+      public_id: finalPublicId,
+      type: 'upload',  // ← ВАЖНО! Вместо дефолтного
+      access_mode: 'public',  // ← Делаем публичным
       use_filename: false,
-      unique_filename: true,
+      unique_filename: false,
       overwrite: false
     };
     
@@ -142,7 +145,7 @@ const uploadOptions = {
     }
     
     console.log('=== UPLOADING TO CLOUDINARY ===');
-    console.log('File:', file.originalname);
+    console.log('Original name (UTF-8):', originalNameUtf8);
     console.log('Type:', isPdf ? 'PDF (raw)' : 'Image');
     
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -156,7 +159,7 @@ const uploadOptions = {
           resolve({
             url: result.secure_url,
             public_id: result.public_id,
-            original_name: file.originalname,
+            original_name: originalNameUtf8,  // ← Сохраняем UTF-8 имя!
             mime_type: file.mimetype,
             size: file.size
           });
@@ -3400,26 +3403,31 @@ app.post('/api/admin/database-cleanup',
 app.get('/api/download/:public_id', async (req, res) => {
   try {
     const publicId = decodeURIComponent(req.params.public_id);
-    const originalName = req.query.name || 'file';
+    const originalName = req.query.name || 'file.pdf';
     
-    console.log('Download request:', { publicId, originalName });
+    console.log('📥 Download request:', { publicId, originalName });
     
     // Определяем тип ресурса
     const isPdf = publicId.toLowerCase().endsWith('.pdf');
     const resourceType = isPdf ? 'raw' : 'image';
     
-    // Получаем URL файла из Cloudinary
-    const fileInfo = await cloudinary.api.resource(publicId, {
-      resource_type: resourceType
+    // ИСПРАВЛЕНО: Генерируем signed URL для доступа к приватным файлам
+    const downloadUrl = cloudinary.url(publicId, {
+      resource_type: resourceType,
+      type: 'upload',
+      secure: true,
+      attachment: true,  // Заставляет браузер скачивать
+      sign_url: true     // Подписываем URL
     });
     
-    // Редирект с правильным именем файла
-    const encodedName = encodeURIComponent(originalName);
-    res.redirect(302, `${fileInfo.secure_url}?response-content-disposition=attachment;filename*=UTF-8''${encodedName}`);
+    console.log('✅ Redirect to:', downloadUrl);
+    
+    // Редирект на signed URL
+    res.redirect(302, downloadUrl);
     
   } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Ошибка скачивания файла' });
+    console.error('❌ Download error:', error);
+    res.status(500).json({ error: 'Ошибка скачивания файла: ' + error.message });
   }
 });
 
