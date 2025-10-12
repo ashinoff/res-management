@@ -3921,12 +3921,14 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
                     Открыть в новой вкладке
                   </a>
                   <a 
-                      href={`${API_URL}/api/download/${encodeURIComponent(currentFile.public_id)}?name=${encodeURIComponent(currentFile.original_name)}`}
-                      className="btn-download-pdf"
-                    >
-                      <span>📥</span>
-                      Скачать {currentFile.original_name}
-                    </a>
+  href={`${API_URL}/api/download/${encodeURIComponent(currentFile.public_id)}?name=${encodeURIComponent(currentFile.original_name)}`}
+  target="_blank"
+  download={currentFile.original_name}
+  className="btn-download-pdf"
+>
+  <span>📥</span>
+  Скачать {currentFile.original_name}
+</a>
                 </div>
               </div>
               <div className="pdf-note">
