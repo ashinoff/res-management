@@ -34,7 +34,7 @@ const fs = require('fs');
 const { Sequelize, DataTypes, Op } = require('sequelize');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const axios = require('axios');
+
 
 // =====================================================
 // КОНФИГУРАЦИЯ И ИНИЦИАЛИЗАЦИЯ
@@ -3443,27 +3443,18 @@ app.get('/api/download/:public_id', async (req, res) => {
     
     console.log('Download request:', { publicId, originalName });
     
-    // Определяем тип ресурса по расширению
+    // Определяем тип ресурса
     const isPdf = publicId.toLowerCase().endsWith('.pdf');
     const resourceType = isPdf ? 'raw' : 'image';
     
-    // Получаем информацию о файле из Cloudinary
+    // Получаем URL файла из Cloudinary
     const fileInfo = await cloudinary.api.resource(publicId, {
       resource_type: resourceType
     });
     
-    // Скачиваем файл
-    const response = await axios.get(fileInfo.secure_url, {
-      responseType: 'arraybuffer'
-    });
-    
-    // ВАЖНО: устанавливаем правильные заголовки с кириллицей!
+    // Редирект с правильным именем файла
     const encodedName = encodeURIComponent(originalName);
-    res.setHeader('Content-Type', response.headers['content-type']);
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`);
-    res.setHeader('Content-Length', response.data.length);
-    
-    res.send(response.data);
+    res.redirect(302, `${fileInfo.secure_url}?response-content-disposition=attachment;filename*=UTF-8''${encodedName}`);
     
   } catch (error) {
     console.error('Download error:', error);
