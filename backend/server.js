@@ -1155,8 +1155,17 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         ]
       };
     } else {
-      whereClause = { toUserId: req.user.id };
-    }
+      whereClause = {
+    [Op.or]: [
+      { toUserId: req.user.id },
+      { 
+        toUserId: null,
+        resId: req.user.resId,
+        type: 'pending_askue'  // только уведомления АСКУЭ показываем всем
+      }
+    ]
+  };
+}
     
     const notifications = await Notification.findAll({
       where: whereClause,
@@ -1273,35 +1282,33 @@ app.post('/api/notifications/:id/complete-work',
       // Удаляем старое уведомление
       await notification.destroy({ transaction });
       
-      // Создаем уведомление для АСКУЭ
-      const askueUsers = await User.findAll({
-        where: { resId: notification.resId, role: 'uploader' }
-      });
-      
-      const askueMessage = {
-        puNumber: errorData.puNumber,
-        position: errorData.position,
-        tpName: errorData.tpName,
-        vlName: errorData.vlName,
-        resName: errorData.resName,
-        errorDetails: errorData.errorDetails,
-        checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
-        completedComment: comment,
-        completedBy: req.user.id,
-        completedAt: new Date()
-      };
-      
-      for (const askueUser of askueUsers) {
-        await Notification.create({
-          fromUserId: req.user.id,
-          toUserId: askueUser.id,
-          resId: notification.resId,
-          networkStructureId: notification.networkStructureId,
-          type: 'pending_askue',
-          message: JSON.stringify(askueMessage),
-          isRead: false
-        }, { transaction });
-      }
+     // Создаем уведомление для АСКУЭ
+const askueMessage = {
+  puNumber: errorData.puNumber,
+  position: errorData.position,
+  tpName: errorData.tpName,
+  vlName: errorData.vlName,
+  resName: errorData.resName,
+  errorDetails: errorData.errorDetails,
+  checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
+  completedComment: comment,
+  completedBy: req.user.id,
+  completedAt: new Date()
+};
+
+// ИСПРАВЛЕНО: создаем ОДНО уведомление БЕЗ привязки к конкретному пользователю
+// Все загрузчики РЭС увидят это уведомление
+await Notification.create({
+  fromUserId: req.user.id,
+  toUserId: null,  // ← NULL = все загрузчики этого РЭС увидят
+  resId: notification.resId,
+  networkStructureId: notification.networkStructureId,
+  type: 'pending_askue',
+  message: JSON.stringify(askueMessage),
+  isRead: false
+}, { transaction });
+
+console.log('✅ Created ONE notification for all ASKUE users');
       
       await transaction.commit();
       
