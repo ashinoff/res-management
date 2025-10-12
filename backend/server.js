@@ -3509,21 +3509,7 @@ app.post('/api/admin/migrate-pdfs',
       continue;
     }
     
-    // Скачиваем файл
-    console.log('  Downloading...');
-    const response = await fetch(file.url);
     
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Проверка: не пустой ли?
-    if (buffer.length === 0) {
-      throw new Error('Empty file downloaded');
-    }
     
     console.log(`  File size: ${(buffer.length / 1024).toFixed(2)} KB`);
     
