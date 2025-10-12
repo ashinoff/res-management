@@ -1772,45 +1772,6 @@ app.get('/api/reports/export-history',
     }
 });
 
-
-// Удаление файла
-app.delete('/api/admin/files/:public_id', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  async (req, res) => {
-    try {
-      const { password } = req.body;
-      
-      if (password !== DELETE_PASSWORD) {
-        return res.status(403).json({ error: 'Неверный пароль' });
-      }
-      
-      // Удаляем из Cloudinary
-      await cloudinary.uploader.destroy(req.params.public_id);
-      
-      // Удаляем из БД
-      const records = await CheckHistory.findAll({
-        where: {
-          attachments: {
-            [Op.contains]: [{public_id: req.params.public_id}]
-          }
-        }
-      });
-      
-      for (const record of records) {
-        const newAttachments = record.attachments.filter(
-          file => file.public_id !== req.params.public_id
-        );
-        await record.update({ attachments: newAttachments });
-      }
-      
-      res.json({ success: true, message: 'Файл удален' });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-});
-
-
 // =====================================================
 // УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
 // =====================================================
@@ -3660,23 +3621,38 @@ app.delete('/api/documents/record/:recordId',
 });
 
 // ИСПРАВЛЕННЫЙ эндпоинт для управления файлами в настройках
+ 
 app.delete('/api/admin/files/:public_id', 
   authenticateToken, 
   checkRole(['admin']), 
   async (req, res) => {
     try {
       const { password } = req.body;
-      const { public_id } = req.params;
+      const publicId = decodeURIComponent(req.params.public_id);
       
       if (password !== DELETE_PASSWORD) {
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
-      console.log(`Attempting to delete file with public_id: ${public_id}`);
+      console.log(`🗑️ Attempting to delete file: ${publicId}`);
       
-      // Удаляем из Cloudinary
-      await cloudinary.uploader.destroy(public_id);
-      console.log('File deleted from Cloudinary');
+      // ИСПРАВЛЕНО: определяем resource_type по расширению файла
+      const isPdf = publicId.toLowerCase().endsWith('.pdf');
+      const resourceType = isPdf ? 'raw' : 'image';
+      
+      console.log(`Resource type: ${resourceType}`);
+      
+      // Удаляем из Cloudinary с правильным типом
+      try {
+        await cloudinary.uploader.destroy(publicId, {
+          resource_type: resourceType,
+          invalidate: true  // очищаем CDN кеш
+        });
+        console.log(`✅ File deleted from Cloudinary: ${publicId}`);
+      } catch (cloudinaryError) {
+        console.error('⚠️ Cloudinary deletion warning:', cloudinaryError.message);
+        // Продолжаем даже если файл уже удален
+      }
       
       // Находим все записи в CheckHistory с этим файлом
       const records = await CheckHistory.findAll();
@@ -3686,27 +3662,31 @@ app.delete('/api/admin/files/:public_id',
         if (record.attachments && Array.isArray(record.attachments)) {
           const originalLength = record.attachments.length;
           const newAttachments = record.attachments.filter(
-            file => file.public_id !== public_id
+            file => file.public_id !== publicId
           );
           
           if (newAttachments.length < originalLength) {
             await record.update({ attachments: newAttachments });
             updatedCount++;
+            console.log(`✅ Updated record ${record.id}`);
           }
         }
       }
       
-      console.log(`Updated ${updatedCount} records`);
+      console.log(`📊 Total records updated: ${updatedCount}`);
       
       res.json({ 
         success: true, 
-        message: 'Файл удален',
+        message: 'Файл успешно удален',
         updatedRecords: updatedCount
       });
       
     } catch (error) {
-      console.error('Delete file error:', error);
-      res.status(500).json({ error: error.message });
+      console.error('❌ Delete file error:', error);
+      res.status(500).json({ 
+        error: error.message,
+        details: 'Ошибка при удалении файла. Проверьте консоль сервера.'
+      });
     }
 });
 
