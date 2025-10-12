@@ -4172,6 +4172,18 @@ function UploadedDocuments() {
                         👁️
                       </button>
                     )}
+                      {user.role === 'admin' && (
+      <button 
+        className="btn-icon danger"
+        onClick={() => {
+          setDeleteRecordId(doc.id);
+          setShowDeleteRecordModal(true);
+        }}
+        title="Удалить запись"
+      >
+        🗑️
+      </button>
+    )}
                   </div>
                 </td>
               </tr>
