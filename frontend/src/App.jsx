@@ -3088,35 +3088,6 @@ function Settings() {
           База данных
         </button>
       </div>
-      <button 
-        onClick={async () => {
-          const pass = prompt('Пароль:');
-          if (!pass) return;
-          
-          if (!confirm('Запустить миграцию PDF? Может занять несколько минут!')) return;
-          
-          try {
-            const res = await api.post('/api/admin/migrate-pdfs', { password: pass });
-            alert(`✅ Готово!\nИсправлено: ${res.data.fixed}\nОшибок: ${res.data.errors}`);
-          } catch (e) {
-            alert('Ошибка: ' + e.message);
-          }
-        }}
-        style={{
-          margin: '20px',
-          padding: '15px 30px',
-          background: '#ff9800',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: '16px',
-          cursor: 'pointer'
-        }}
-      >
-        🔄 МИГРАЦИЯ PDF (ВРЕМЕННАЯ КНОПКА - УДАЛИТЬ ПОСЛЕ!)
-      </button>
-     
-        
       <div className="settings-content">
         {activeTab === 'structure' && <StructureSettings />}
         {activeTab === 'users' && <UserSettings />}
@@ -3950,13 +3921,12 @@ function FileViewer({ files, currentIndex, onClose, onNext, onPrev }) {
                     Открыть в новой вкладке
                   </a>
                   <a 
-                    href={currentFile.url}
-                    download={currentFile.original_name}
-                    className="btn-download-pdf"
-                  >
-                    <span>📥</span>
-                    Скачать PDF
-                  </a>
+                      href={`${API_URL}/api/download/${encodeURIComponent(currentFile.public_id)}?name=${encodeURIComponent(currentFile.original_name)}`}
+                      className="btn-download-pdf"
+                    >
+                      <span>📥</span>
+                      Скачать {currentFile.original_name}
+                    </a>
                 </div>
               </div>
               <div className="pdf-note">
