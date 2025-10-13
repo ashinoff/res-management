@@ -3993,12 +3993,23 @@ function UploadedDocuments() {
   
   useEffect(() => {
     loadDocuments();
-  }, []);
+  }, [selectedRes]);
   
   const loadDocuments = async () => {
     try {
-      const params = selectedRes ? `?resId=${selectedRes}` : '';
-      const response = await api.get('/api/documents/list');
+      // ИСПРАВЛЕНО: используем selectedRes для фильтрации
+      const params = new URLSearchParams();
+      
+      if (user.role === 'admin' && selectedRes) {
+        params.append('resId', selectedRes);
+      }
+      
+      const queryString = params.toString();
+      const url = `/api/documents/list${queryString ? `?${queryString}` : ''}`;
+      
+      console.log('Loading documents:', { url, selectedRes });
+      
+      const response = await api.get(url);
       setDocuments(response.data);
     } catch (error) {
       console.error('Error loading documents:', error);
