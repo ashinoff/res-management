@@ -1144,9 +1144,13 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
     const { resId } = req.query;
     let whereClause = {};
     
+    // ИСПРАВЛЕНО: правильная логика для каждой роли
     if (req.user.role === 'admin') {
+      // Админ видит ВСЕ уведомления (или фильтр по РЭС)
       whereClause = resId ? { resId: parseInt(resId) } : {};
+      
     } else if (req.user.role === 'res_responsible') {
+      // РЭС видит уведомления для своего РЭС
       whereClause = {
         resId: req.user.resId,
         [Op.or]: [
@@ -1154,18 +1158,24 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
           { toUserId: req.user.id }
         ]
       };
-    } else {
+      
+    } else if (req.user.role === 'uploader') {
+      // Загрузчик видит: свои личные + общие pending_askue для РЭС
       whereClause = {
-    [Op.or]: [
-      { toUserId: req.user.id },
-      { 
-        toUserId: null,
-        resId: req.user.resId,
-        type: 'pending_askue'  // только уведомления АСКУЭ показываем всем
-      }
-    ]
-  };
-}
+        [Op.or]: [
+          { toUserId: req.user.id },  // личные
+          { 
+            toUserId: null,
+            resId: req.user.resId,
+            type: 'pending_askue'  // общие АСКУЭ для РЭС
+          }
+        ]
+      };
+      
+    } else {
+      // Для остальных ролей (если есть)
+      whereClause = { toUserId: req.user.id };
+    }
     
     const notifications = await Notification.findAll({
       where: whereClause,
@@ -1174,7 +1184,7 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         { model: User, as: 'toUser' },
         ResUnit,
         NetworkStructure,
-        NotificationRead // Добавляем прочтения
+        NotificationRead
       ],
       order: [['createdAt', 'DESC']],
       limit: 100
@@ -1188,7 +1198,7 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       
       return {
         ...notif.toJSON(),
-        isRead: isRead // Персональный статус прочтения
+        isRead: isRead
       };
     });
     
