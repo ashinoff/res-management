@@ -1144,13 +1144,16 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
     const { resId } = req.query;
     let whereClause = {};
     
-    // ИСПРАВЛЕНО: правильная логика для каждой роли
     if (req.user.role === 'admin') {
-      // Админ видит ВСЕ уведомления (или фильтр по РЭС)
-      whereClause = resId ? { resId: parseInt(resId) } : {};
+      // ИСПРАВЛЕНО: Админ видит ВСЕ уведомления нужного РЭС
+      // независимо от toUserId (старые И новые)
+      if (resId) {
+        whereClause = { resId: parseInt(resId) };
+      } else {
+        whereClause = {};  // Все уведомления
+      }
       
     } else if (req.user.role === 'res_responsible') {
-      // РЭС видит уведомления для своего РЭС
       whereClause = {
         resId: req.user.resId,
         [Op.or]: [
@@ -1160,20 +1163,18 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       };
       
     } else if (req.user.role === 'uploader') {
-      // Загрузчик видит: свои личные + общие pending_askue для РЭС
       whereClause = {
         [Op.or]: [
-          { toUserId: req.user.id },  // личные
+          { toUserId: req.user.id },
           { 
             toUserId: null,
             resId: req.user.resId,
-            type: 'pending_askue'  // общие АСКУЭ для РЭС
+            type: 'pending_askue'
           }
         ]
       };
       
     } else {
-      // Для остальных ролей (если есть)
       whereClause = { toUserId: req.user.id };
     }
     
@@ -1190,7 +1191,6 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       limit: 100
     });
     
-    // Добавляем информацию о прочтении для текущего пользователя
     const notificationsWithReadStatus = notifications.map(notif => {
       const isRead = notif.NotificationReads?.some(read => 
         read.userId === req.user.id
