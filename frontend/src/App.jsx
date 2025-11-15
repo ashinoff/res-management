@@ -5900,17 +5900,21 @@ function DatabaseMaintenance() {
   const [cleanupPassword, setCleanupPassword] = useState('');
   const [cleaning, setCleaning] = useState(false);
   
-  const runHealthCheck = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/api/admin/database-health');
-      setHealthCheck(response.data);
-    } catch (error) {
-      alert('Ошибка проверки БД: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ✅ ДОБАВЬ ЭТО
+    console.log('=== DATABASE HEALTH CHECK RESPONSE ===');
+    console.log('Full response:', response.data);
+    console.log('Stats:', response.data.stats);
+    console.log('staleNotifications:', response.data.stats?.staleNotifications);
+    console.log('missingNotifications:', response.data.stats?.missingNotifications);
+    console.log('======================================');
+    
+    setHealthCheck(response.data);
+  } catch (error) {
+    alert('Ошибка проверки БД: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
   
   const handleCleanup = async () => {
     setCleaning(true);
@@ -6044,61 +6048,65 @@ function DatabaseMaintenance() {
       )}
       
       {healthCheck && !loading && (
-        <div className="db-results">
-          {/* Общая статистика */}
-          <div className="db-summary-grid">
-            <div className="db-summary-card total">
-              <div className="summary-icon">📊</div>
-              <div className="summary-content">
-                <h4>Всего проблем</h4>
-                <p className="summary-value">{healthCheck.stats.totalIssues}</p>
-              </div>
-            </div>
-            
-            <div className="db-summary-card error">
-              <div className="summary-icon">🔴</div>
-              <div className="summary-content">
-                <h4>Критических</h4>
-                <p className="summary-value">{healthCheck.stats.byType.error}</p>
-              </div>
-            </div>
-            
-            <div className="db-summary-card warning">
-              <div className="summary-icon">⚠️</div>
-              <div className="summary-content">
-                <h4>Предупреждений</h4>
-                <p className="summary-value">{healthCheck.stats.byType.warning}</p>
-              </div>
-            </div>
-            
-            <div className="db-summary-card info">
-              <div className="summary-icon">ℹ️</div>
-              <div className="summary-content">
-                <h4>Информация</h4>
-                <p className="summary-value">{healthCheck.stats.byType.info}</p>
-              </div>
-            </div>
-              
-              {healthCheck.stats.staleNotifications > 0 && (
-                <div className="db-summary-card warning">
-                  <div className="summary-icon">🔔</div>
-                  <div className="summary-content">
-                    <h4>Неактуальных уведомлений</h4>
-                    <p className="summary-value">{healthCheck.stats.staleNotifications}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ✅ ВСТАВЬ СЮДА - ПОСЛЕ БЛОКА staleNotifications, ПЕРЕД ЗАКРЫВАЮЩИМ </div> */}
-      {healthCheck.stats.missingNotifications > 0 && (
-        <div className="db-summary-card error">
-          <div className="summary-icon">📢</div>
-          <div className="summary-content">
-            <h4>Отсутствующих уведомлений</h4>
-            <p className="summary-value">{healthCheck.stats.missingNotifications}</p>
-          </div>
+  <>
+    {/* Общая статистика */}
+    <div className="db-summary-grid">
+      <div className="db-summary-card total">
+        <div className="summary-icon">📊</div>
+        <div className="summary-content">
+          <h4>Всего проблем</h4>
+          <p className="summary-value">{healthCheck.stats.totalIssues}</p>
         </div>
-      )}
+      </div>
+      
+      <div className="db-summary-card error">
+        <div className="summary-icon">🔴</div>
+        <div className="summary-content">
+          <h4>Критических</h4>
+          <p className="summary-value">{healthCheck.stats.byType.error}</p>
+        </div>
+      </div>
+      
+      <div className="db-summary-card warning">
+        <div className="summary-icon">⚠️</div>
+        <div className="summary-content">
+          <h4>Предупреждений</h4>
+          <p className="summary-value">{healthCheck.stats.byType.warning}</p>
+        </div>
+      </div>
+      
+      <div className="db-summary-card info">
+        <div className="summary-icon">ℹ️</div>
+        <div className="summary-content">
+          <h4>Информация</h4>
+          <p className="summary-value">{healthCheck.stats.byType.info}</p>
+        </div>
+      </div>
+      
+      {/* ✅ ВСЕГДА показываем - зеленые если 0, красные если > 0 */}
+      <div className={`db-summary-card ${
+        (healthCheck.stats.staleNotifications || 0) > 0 ? 'warning' : 'success'
+      }`}>
+        <div className="summary-icon">
+          {(healthCheck.stats.staleNotifications || 0) > 0 ? '🔔' : '✅'}
+        </div>
+        <div className="summary-content">
+          <h4>Неактуальных уведомлений</h4>
+          <p className="summary-value">{healthCheck.stats.staleNotifications || 0}</p>
+        </div>
+      </div>
+      
+      <div className={`db-summary-card ${
+        (healthCheck.stats.missingNotifications || 0) > 0 ? 'error' : 'success'
+      }`}>
+        <div className="summary-icon">
+          {(healthCheck.stats.missingNotifications || 0) > 0 ? '📢' : '✅'}
+        </div>
+        <div className="summary-content">
+          <h4>Отсутствующих уведомлений</h4>
+          <p className="summary-value">{healthCheck.stats.missingNotifications || 0}</p>
+        </div>
+      </div>
             </div>
           
           
