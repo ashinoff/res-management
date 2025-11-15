@@ -6310,7 +6310,7 @@ function DatabaseMaintenance() {
             <span>⏱️</span>
             Последняя проверка: {new Date(healthCheck.checkedAt).toLocaleString('ru-RU')}
           </div>
-        </div>
+        </>
       )}
       
       {/* Модальное окно очистки */}
