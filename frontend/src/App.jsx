@@ -2266,46 +2266,49 @@ function Reports() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   
+  // ✅ НОВОЕ: определяем нужны ли даты для этого типа отчета
+  const needsDateFilter = () => {
+    return reportType === 'completed' || reportType === 'problem_vl';
+  };
+  
   useEffect(() => {
     loadReports();
   }, [reportType, dateFrom, dateTo, selectedRes]);
 
   const loadReports = async () => {
-  setLoading(true);
-  try {
-    let response;
-    
-    if (reportType === 'problem_vl') {
-      response = await api.get('/api/reports/problem-vl', {
-        params: { 
-          dateFrom, 
-          dateTo,
-          resId: user.role === 'admin' ? selectedRes : user.resId // Используем selectedRes для админа
-        }
-      });
-    } else {
-      response = await api.get('/api/reports/detailed', {
-        params: {
-          type: reportType,
-          dateFrom,
-          dateTo,
-          resId: user.role === 'admin' ? selectedRes : user.resId // Используем selectedRes для админа
-        }
-      });
+    setLoading(true);
+    try {
+      let response;
+      
+      // ✅ ИСПРАВЛЕНО: передаем даты только для completed и problem_vl
+      const params = {
+        type: reportType,
+        resId: user.role === 'admin' ? selectedRes : user.resId
+      };
+      
+      // Добавляем даты только если нужно
+      if (needsDateFilter()) {
+        params.dateFrom = dateFrom;
+        params.dateTo = dateTo;
+      }
+      
+      if (reportType === 'problem_vl') {
+        response = await api.get('/api/reports/problem-vl', { params });
+      } else {
+        response = await api.get('/api/reports/detailed', { params });
+      }
+      
+      setReportData(response.data);
+    } catch (error) {
+      console.error('Error loading reports:', error);
+      setReportData([]);
+    } finally {
+      setLoading(false);
     }
-    
-    setReportData(response.data);
-  } catch (error) {
-    console.error('Error loading reports:', error);
-    setReportData([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
   
   // Функция для открытия просмотра файлов
   const viewAttachments = (attachments) => {
-    
     console.log('Viewing attachments:', attachments);
     
     if (attachments && attachments.length > 0) {
@@ -2315,122 +2318,122 @@ function Reports() {
     }
   };
   
-  // Обновленная функция exportToExcel в компоненте Reports
+  // ✅ ИСПРАВЛЕННАЯ функция exportToExcel
   const exportToExcel = () => {
-  if (filteredData.length === 0) {
-    alert('Нет данных для экспорта');
-    return;
-  }
-
-  // Подготавливаем данные для экспорта
-  const exportData = filteredData.map(item => {
-    const base = {
-      'РЭС': item.resName || '',
-      'ТП': item.tpName || '',
-      'ВЛ': item.vlName || '',
-      'Позиция': item.position === 'start' ? 'Начало' : 
-                 item.position === 'middle' ? 'Середина' : 'Конец',
-      'Номер ПУ': item.puNumber || ''
-    };
-
-    // Добавляем специфичные поля в зависимости от типа отчета
-    if (reportType === 'problem_vl') {
-      return {
-        ...base,
-        'Количество неудачных проверок': item.failureCount || 0,
-        'Дата первого обращения': formatDate(item.firstReportDate),
-        'Дата последней проверки': formatDate(item.lastErrorDate),
-        'Последняя ошибка': item.lastErrorDetails || '',
-        'Статус проблемы': item.status || ''
-      };
-    } else if (reportType === 'pending_work') {
-      return {
-        ...base,
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate)
-      };
-    } else if (reportType === 'pending_askue') {
-      return {
-        ...base,
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate),
-        'Комментарий РЭС': item.resComment || '',
-        'Дата завершения мероприятий': formatDate(item.workCompletedDate)
-      };
-    } else if (reportType === 'completed') {
-      return {
-        ...base,
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate),
-        'Комментарий РЭС': item.resComment || '',
-        'Дата завершения мероприятий': formatDate(item.workCompletedDate),
-        'Дата перепроверки': formatDate(item.recheckDate),
-        'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
-      };
+    if (filteredData.length === 0) {
+      alert('Нет данных для экспорта');
+      return;
     }
-  });
 
-  // Создаем новую книгу Excel
-  const wb = XLSX.utils.book_new();
-  
-  // Создаем лист с данными
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  
-  // Устанавливаем ширину колонок в зависимости от типа отчета
-  let columnWidths = [
-    { wch: 20 }, // РЭС
-    { wch: 15 }, // ТП
-    { wch: 15 }, // ВЛ
-    { wch: 12 }, // Позиция
-    { wch: 15 }, // Номер ПУ
-  ];
-  
-  if (reportType === 'problem_vl') {
-    columnWidths.push(
-      { wch: 25 }, // Количество неудачных проверок
-      { wch: 20 }, // Дата первого обращения
-      { wch: 20 }, // Дата последней проверки
-      { wch: 50 }, // Последняя ошибка
-      { wch: 15 }  // Статус проблемы
-    );
-  } else if (reportType === 'pending_work') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }  // Дата обнаружения
-    );
-  } else if (reportType === 'pending_askue') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }, // Дата обнаружения
-      { wch: 40 }, // Комментарий РЭС
-      { wch: 25 }  // Дата завершения мероприятий
-    );
-  } else if (reportType === 'completed') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }, // Дата обнаружения
-      { wch: 40 }, // Комментарий РЭС
-      { wch: 25 }, // Дата завершения мероприятий
-      { wch: 18 }, // Дата перепроверки
-      { wch: 15 }  // Результат
-    );
-  }
-  
-  ws['!cols'] = columnWidths;
-  
-  // Добавляем лист в книгу
-  const sheetName = getReportTitle();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  
-  // Генерируем имя файла
-  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-  
-  // Сохраняем файл
-  XLSX.writeFile(wb, fileName);
-  
-  // Показываем уведомление
-  alert(`Отчет успешно экспортирован в файл: ${fileName}`);
-};
+    // Подготавливаем данные для экспорта
+    const exportData = filteredData.map(item => {
+      const base = {
+        'РЭС': item.resName || '',
+        'ТП': item.tpName || '',
+        'ВЛ': item.vlName || '',
+        'Позиция': item.position === 'start' ? 'Начало' : 
+                   item.position === 'middle' ? 'Середина' : 'Конец',
+        'Номер ПУ': item.puNumber || ''
+      };
+
+      // ✅ ДОБАВЛЕНО: Обработка проблемных ВЛ
+      if (reportType === 'problem_vl') {
+        return {
+          ...base,
+          'Количество неудачных проверок': item.failureCount || 0,
+          'Дата первого обращения': formatDate(item.firstReportDate),
+          'Дата последней проверки': formatDate(item.lastErrorDate),
+          'Последняя ошибка': item.lastErrorDetails || '',
+          'Статус проблемы': item.status || ''
+        };
+      } else if (reportType === 'pending_work') {
+        return {
+          ...base,
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate)
+        };
+      } else if (reportType === 'pending_askue') {
+        return {
+          ...base,
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate),
+          'Комментарий РЭС': item.resComment || '',
+          'Дата завершения мероприятий': formatDate(item.workCompletedDate)
+        };
+      } else if (reportType === 'completed') {
+        return {
+          ...base,
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate),
+          'Комментарий РЭС': item.resComment || '',
+          'Дата завершения мероприятий': formatDate(item.workCompletedDate),
+          'Дата перепроверки': formatDate(item.recheckDate),
+          'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
+        };
+      }
+    });
+
+    // Создаем новую книгу Excel
+    const wb = XLSX.utils.book_new();
+    
+    // Создаем лист с данными
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // ✅ ИСПРАВЛЕНО: Динамическая ширина колонок в зависимости от типа
+    let columnWidths = [
+      { wch: 20 }, // РЭС
+      { wch: 15 }, // ТП
+      { wch: 15 }, // ВЛ
+      { wch: 12 }, // Позиция
+      { wch: 15 }, // Номер ПУ
+    ];
+    
+    if (reportType === 'problem_vl') {
+      columnWidths.push(
+        { wch: 25 }, // Количество неудачных проверок
+        { wch: 20 }, // Дата первого обращения
+        { wch: 20 }, // Дата последней проверки
+        { wch: 50 }, // Последняя ошибка
+        { wch: 15 }  // Статус проблемы
+      );
+    } else if (reportType === 'pending_work') {
+      columnWidths.push(
+        { wch: 50 }, // Ошибка
+        { wch: 18 }  // Дата обнаружения
+      );
+    } else if (reportType === 'pending_askue') {
+      columnWidths.push(
+        { wch: 50 }, // Ошибка
+        { wch: 18 }, // Дата обнаружения
+        { wch: 40 }, // Комментарий РЭС
+        { wch: 25 }  // Дата завершения мероприятий
+      );
+    } else if (reportType === 'completed') {
+      columnWidths.push(
+        { wch: 50 }, // Ошибка
+        { wch: 18 }, // Дата обнаружения
+        { wch: 40 }, // Комментарий РЭС
+        { wch: 25 }, // Дата завершения мероприятий
+        { wch: 18 }, // Дата перепроверки
+        { wch: 15 }  // Результат
+      );
+    }
+    
+    ws['!cols'] = columnWidths;
+    
+    // Добавляем лист в книгу
+    const sheetName = getReportTitle();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    
+    // Генерируем имя файла
+    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    
+    // Сохраняем файл
+    XLSX.writeFile(wb, fileName);
+    
+    // Показываем уведомление
+    alert(`✅ Отчет успешно экспортирован в файл: ${fileName}`);
+  };
 
   // Вспомогательная функция для форматирования даты
   const formatDate = (dateString) => {
@@ -2456,7 +2459,7 @@ function Reports() {
         return 'Проблемные ВЛ (2+ неудачных проверки)';
       default:
         return 'Отчет';
-      }
+    }
   };
 
   // Фильтрация по ТП с мемоизацией
@@ -2473,10 +2476,10 @@ function Reports() {
       <h2>Отчеты по проверкам</h2>
 
       {user.role !== 'admin' && (
-      <div className="res-indicator">
-        <span>Показаны данные для: <strong>{user.resName}</strong></span>
-      </div>
-    )}
+        <div className="res-indicator">
+          <span>Показаны данные для: <strong>{user.resName}</strong></span>
+        </div>
+      )}
       
       <div className="report-controls">
         <div className="control-group">
@@ -2489,23 +2492,28 @@ function Reports() {
           </select>
         </div>
         
-        <div className="control-group">
-          <label>Период с:</label>
-          <input 
-            type="date" 
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-        </div>
-        
-        <div className="control-group">
-          <label>по:</label>
-          <input 
-            type="date" 
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-        </div>
+        {/* ✅ ИСПРАВЛЕНО: Показываем даты только для completed и problem_vl */}
+        {needsDateFilter() && (
+          <>
+            <div className="control-group">
+              <label>Период с:</label>
+              <input 
+                type="date" 
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            
+            <div className="control-group">
+              <label>по:</label>
+              <input 
+                type="date" 
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+          </>
+        )}
         
         <div className="control-group">
           <input 
@@ -2525,151 +2533,157 @@ function Reports() {
       <div className="report-summary">
         <h3>{getReportTitle()}</h3>
         <p>Найдено записей: {filteredData.length}</p>
+        {/* ✅ ДОБАВЛЕНО: Подсказка для пользователя */}
+        {!needsDateFilter() && (
+          <p className="info-hint">
+            ℹ️ Отчет показывает текущее состояние на момент формирования
+          </p>
+        )}
       </div>
       
-     <div className="report-table-wrapper" style={{ position: 'relative' }}>
-      {loading && <LoadingSpinner type="overlay" message="Обновление данных..." />}
+      <div className="report-table-wrapper" style={{ position: 'relative' }}>
+        {loading && <LoadingSpinner type="overlay" message="Обновление данных..." />}
   
-  <div className={`report-table ${loading ? 'loading' : ''}`}>
-    <table>
-      <thead>
-        <tr>
-          <th>РЭС</th>
-          <th>ТП</th>
-          <th>ВЛ</th>
-          <th>Позиция</th>
-          <th>Номер ПУ</th>
-          
-          {/* Разные колонки для разных типов отчетов */}
-          {reportType === 'problem_vl' ? (
-            <>
-              <th>Кол-во ошибок</th>
-              <th>Первое обращение</th>
-              <th>Последняя проверка</th>
-              <th>Последняя ошибка</th>
-              <th>Статус</th>
-            </>
-          ) : reportType === 'pending_work' ? (
-            <>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-            </>
-          ) : reportType === 'pending_askue' ? (
-            <>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-              <th>Комментарий РЭС</th>
-              <th>Дата завершения мероприятий</th>
-            </>
-          ) : reportType === 'completed' ? (
-            <>
-              <th>Ошибка</th>
-              <th>Дата обнаружения</th>
-              <th>Комментарий РЭС</th>
-              <th>Дата завершения мероприятий</th>
-              <th>Дата перепроверки</th>
-              <th>Результат</th>
-              <th>Файлы</th>
-            </>
-          ) : null}
-        </tr>
-      </thead>
-      <tbody>
-        {filteredData.map((item, idx) => (
-          <tr key={idx}>
-            <td>{item.resName}</td>
-            <td>{item.tpName}</td>
-            <td>{item.vlName}</td>
-            <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
-            <td>{item.puNumber}</td>
-            
-            {/* Данные для проблемных ВЛ */}
-            {reportType === 'problem_vl' ? (
-              <>
-                <td>
-                  <span className="failure-count-badge">{item.failureCount}</span>
-                </td>
-                <td>{new Date(item.firstReportDate).toLocaleDateString('ru-RU')}</td>
-                <td>{new Date(item.lastErrorDate).toLocaleDateString('ru-RU')}</td>
-                <td className="error-cell">{item.lastErrorDetails}</td>
-                <td>
-                  <span className={`status-badge ${
-                    item.status === 'Активная' ? 'status-active' : 
-                    item.status === 'Решена' ? 'status-resolved' : 
-                    'status-dismissed'
-                  }`}>
-                    {item.status}
-                  </span>
-                </td>
-              </>
-            
-            /* Данные для ожидающих мероприятий */
-            ) : reportType === 'pending_work' ? (
-              <>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-              </>
-            
-            /* Данные для ожидающих АСКУЭ */
-            ) : reportType === 'pending_askue' ? (
-              <>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-                <td>{item.resComment}</td>
-                <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-              </>
-            
-            /* Данные для завершенных проверок */
-            ) : reportType === 'completed' ? (
-              <>
-                <td className="error-cell">{item.errorDetails}</td>
-                <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
-                <td>{item.resComment}</td>
-                <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
-                <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
-                <td className="status-cell">
-                  <span 
-                    className={item.recheckResult === 'ok' ? 'status-ok clickable' : 'status-error clickable'}
-                    onClick={() => {
-                      setSelectedComment({
-                        comment: item.resComment,
-                        tpName: item.tpName,
-                        vlName: item.vlName,
-                        puNumber: item.puNumber,
-                        result: item.recheckResult
-                      });
-                      setShowCommentModal(true);
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    title="Нажмите для просмотра комментария"
-                  >
-                    {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-                  </span>
-                </td>
-                <td>
-                  {item.attachments && item.attachments.length > 0 ? (
-                    <button 
-                      className="btn-view-files"
-                      onClick={() => viewAttachments(item.attachments)}
-                    >
-                      📎 {item.attachments.length} файл(ов)
-                    </button>
-                  ) : (
-                    <span className="no-files">—</span>
-                  )}
-                </td>
-              </>
-            ) : null}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
+        <div className={`report-table ${loading ? 'loading' : ''}`}>
+          <table>
+            <thead>
+              <tr>
+                <th>РЭС</th>
+                <th>ТП</th>
+                <th>ВЛ</th>
+                <th>Позиция</th>
+                <th>Номер ПУ</th>
+                
+                {/* Разные колонки для разных типов отчетов */}
+                {reportType === 'problem_vl' ? (
+                  <>
+                    <th>Кол-во ошибок</th>
+                    <th>Первое обращение</th>
+                    <th>Последняя проверка</th>
+                    <th>Последняя ошибка</th>
+                    <th>Статус</th>
+                  </>
+                ) : reportType === 'pending_work' ? (
+                  <>
+                    <th>Ошибка</th>
+                    <th>Дата обнаружения</th>
+                  </>
+                ) : reportType === 'pending_askue' ? (
+                  <>
+                    <th>Ошибка</th>
+                    <th>Дата обнаружения</th>
+                    <th>Комментарий РЭС</th>
+                    <th>Дата завершения мероприятий</th>
+                  </>
+                ) : reportType === 'completed' ? (
+                  <>
+                    <th>Ошибка</th>
+                    <th>Дата обнаружения</th>
+                    <th>Комментарий РЭС</th>
+                    <th>Дата завершения мероприятий</th>
+                    <th>Дата перепроверки</th>
+                    <th>Результат</th>
+                    <th>Файлы</th>
+                  </>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.map((item, idx) => (
+                <tr key={idx}>
+                  <td>{item.resName}</td>
+                  <td>{item.tpName}</td>
+                  <td>{item.vlName}</td>
+                  <td>{item.position === 'start' ? 'Начало' : item.position === 'middle' ? 'Середина' : 'Конец'}</td>
+                  <td>{item.puNumber}</td>
+                  
+                  {/* Данные для проблемных ВЛ */}
+                  {reportType === 'problem_vl' ? (
+                    <>
+                      <td>
+                        <span className="failure-count-badge">{item.failureCount}</span>
+                      </td>
+                      <td>{new Date(item.firstReportDate).toLocaleDateString('ru-RU')}</td>
+                      <td>{new Date(item.lastErrorDate).toLocaleDateString('ru-RU')}</td>
+                      <td className="error-cell">{item.lastErrorDetails}</td>
+                      <td>
+                        <span className={`status-badge ${
+                          item.status === 'Активная' ? 'status-active' : 
+                          item.status === 'Решена' ? 'status-resolved' : 
+                          'status-dismissed'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </td>
+                    </>
+                  
+                  /* Данные для ожидающих мероприятий */
+                  ) : reportType === 'pending_work' ? (
+                    <>
+                      <td className="error-cell">{item.errorDetails}</td>
+                      <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                    </>
+                  
+                  /* Данные для ожидающих АСКУЭ */
+                  ) : reportType === 'pending_askue' ? (
+                    <>
+                      <td className="error-cell">{item.errorDetails}</td>
+                      <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                      <td>{item.resComment}</td>
+                      <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                    </>
+                  
+                  /* Данные для завершенных проверок */
+                  ) : reportType === 'completed' ? (
+                    <>
+                      <td className="error-cell">{item.errorDetails}</td>
+                      <td>{new Date(item.errorDate).toLocaleDateString('ru-RU')}</td>
+                      <td>{item.resComment}</td>
+                      <td>{new Date(item.workCompletedDate).toLocaleDateString('ru-RU')}</td>
+                      <td>{new Date(item.recheckDate).toLocaleDateString('ru-RU')}</td>
+                      <td className="status-cell">
+                        <span 
+                          className={item.recheckResult === 'ok' ? 'status-ok clickable' : 'status-error clickable'}
+                          onClick={() => {
+                            setSelectedComment({
+                              comment: item.resComment,
+                              tpName: item.tpName,
+                              vlName: item.vlName,
+                              puNumber: item.puNumber,
+                              result: item.recheckResult
+                            });
+                            setShowCommentModal(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                          title="Нажмите для просмотра комментария"
+                        >
+                          {item.recheckResult === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+                        </span>
+                      </td>
+                      <td>
+                        {item.attachments && item.attachments.length > 0 ? (
+                          <button 
+                            className="btn-view-files"
+                            onClick={() => viewAttachments(item.attachments)}
+                          >
+                            📎 {item.attachments.length} файл(ов)
+                          </button>
+                        ) : (
+                          <span className="no-files">—</span>
+                        )}
+                      </td>
+                    </>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       
       {filteredData.length === 0 && (
         <div className="no-data">
-          <p>Нет данных для отображения за выбранный период</p>
+          <p>Нет данных для отображения {needsDateFilter() ? 'за выбранный период' : 'на данный момент'}</p>
         </div>
       )}
       
@@ -2683,44 +2697,43 @@ function Reports() {
         />
       )}
     
-{/* Модальное окно для комментария */}
-{showCommentModal && selectedComment && (
-  <div className="modal-backdrop" onClick={() => setShowCommentModal(false)}>
-    <div className="modal-content comment-modal" onClick={e => e.stopPropagation()}>
-      <div className="modal-header">
-        <h3>Комментарий РЭС</h3>
-        <button className="close-btn" onClick={() => setShowCommentModal(false)}>✕</button>
-      </div>
-      
-      <div className="modal-body">
-        <div className="comment-info">
-          <p><strong>ТП:</strong> {selectedComment.tpName}</p>
-          <p><strong>ВЛ:</strong> {selectedComment.vlName}</p>
-          <p><strong>ПУ №:</strong> {selectedComment.puNumber}</p>
-          <p><strong>Результат:</strong> 
-            <span className={selectedComment.result === 'ok' ? 'status-ok' : 'status-error'}>
-              {selectedComment.result === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
-            </span>
-          </p>
+      {/* Модальное окно для комментария */}
+      {showCommentModal && selectedComment && (
+        <div className="modal-backdrop" onClick={() => setShowCommentModal(false)}>
+          <div className="modal-content comment-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Комментарий РЭС</h3>
+              <button className="close-btn" onClick={() => setShowCommentModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="comment-info">
+                <p><strong>ТП:</strong> {selectedComment.tpName}</p>
+                <p><strong>ВЛ:</strong> {selectedComment.vlName}</p>
+                <p><strong>ПУ №:</strong> {selectedComment.puNumber}</p>
+                <p><strong>Результат:</strong> 
+                  <span className={selectedComment.result === 'ok' ? 'status-ok' : 'status-error'}>
+                    {selectedComment.result === 'ok' ? '✅ Исправлено' : '❌ Не исправлено'}
+                  </span>
+                </p>
+              </div>
+              
+              <div className="comment-content">
+                <h4>Выполненные работы:</h4>
+                <p>{selectedComment.comment}</p>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button className="action-btn" onClick={() => setShowCommentModal(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
         </div>
-        
-        <div className="comment-content">
-          <h4>Выполненные работы:</h4>
-          <p>{selectedComment.comment}</p>
-        </div>
-      </div>
-      
-      <div className="modal-footer">
-        <button className="action-btn" onClick={() => setShowCommentModal(false)}>
-          Закрыть
-        </button>
-      </div>
+      )}
     </div>
-  </div>
-)}
-</div>
   );
-
 }
 
 // =====================================================
