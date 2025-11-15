@@ -4566,6 +4566,174 @@ app.get('/api/analytics/detailed',
     }
 });
 
+// =====================================================
+// API ДЛЯ ДИАГНОСТИКИ ДАННЫХ (НОВОЕ)
+// =====================================================
+
+// Получить полную диагностику по РЭС
+app.get('/api/admin/diagnose/:resId', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const resId = parseInt(req.params.resId);
+      
+      // 1. Структура сети
+      const structures = await NetworkStructure.findAll({
+        where: { resId },
+        include: [
+          ResUnit,
+          {
+            model: PuStatus,
+            required: false
+          }
+        ],
+        order: [['tpName', 'ASC'], ['vlName', 'ASC']]
+      });
+      
+      // 2. Уведомления
+      const notifications = await Notification.findAll({
+        where: {
+          networkStructureId: {
+            [Op.in]: structures.map(s => s.id)
+          }
+        },
+        include: [
+          {
+            model: NetworkStructure,
+            include: [ResUnit]
+          },
+          { model: User, as: 'fromUser' },
+          { model: User, as: 'toUser' }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // 3. Находим несоответствия
+      const mismatches = [];
+      
+      notifications.forEach(notif => {
+        if (notif.NetworkStructure) {
+          const structureResId = notif.NetworkStructure.resId;
+          const notifResId = notif.resId;
+          
+          if (structureResId !== notifResId) {
+            mismatches.push({
+              notificationId: notif.id,
+              type: notif.type,
+              message: notif.message,
+              notifResId: notifResId,
+              structureResId: structureResId,
+              notifResName: notif.ResUnit?.name,
+              structureResName: notif.NetworkStructure.ResUnit?.name,
+              tpName: notif.NetworkStructure.tpName,
+              vlName: notif.NetworkStructure.vlName,
+              createdAt: notif.createdAt
+            });
+          }
+        }
+      });
+      
+      // 4. Статистика
+      const stats = {
+        totalStructures: structures.length,
+        totalNotifications: notifications.length,
+        mismatches: mismatches.length,
+        notificationsByType: {
+          error: notifications.filter(n => n.type === 'error').length,
+          pending_askue: notifications.filter(n => n.type === 'pending_askue').length,
+          success: notifications.filter(n => n.type === 'success').length,
+          problem_vl: notifications.filter(n => n.type === 'problem_vl').length
+        }
+      };
+      
+      res.json({
+        structures,
+        notifications,
+        mismatches,
+        stats
+      });
+      
+    } catch (error) {
+      console.error('Diagnose error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Исправить конкретное уведомление
+app.put('/api/admin/fix-notification/:id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { newResId, password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      const notification = await Notification.findByPk(req.params.id);
+      
+      if (!notification) {
+        return res.status(404).json({ error: 'Уведомление не найдено' });
+      }
+      
+      const oldResId = notification.resId;
+      
+      await notification.update({ resId: newResId });
+      
+      res.json({
+        success: true,
+        message: `ResId изменен: ${oldResId} → ${newResId}`,
+        notification
+      });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
+// Автоисправление по структуре (для одного уведомления)
+app.post('/api/admin/auto-fix-notification/:id', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      if (password !== DELETE_PASSWORD) {
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      const notification = await Notification.findByPk(req.params.id, {
+        include: [NetworkStructure]
+      });
+      
+      if (!notification) {
+        return res.status(404).json({ error: 'Уведомление не найдено' });
+      }
+      
+      if (!notification.NetworkStructure) {
+        return res.status(400).json({ error: 'Нет привязки к структуре' });
+      }
+      
+      const correctResId = notification.NetworkStructure.resId;
+      const oldResId = notification.resId;
+      
+      await notification.update({ resId: correctResId });
+      
+      res.json({
+        success: true,
+        message: `Автоисправление: ${oldResId} → ${correctResId}`,
+        oldResId,
+        newResId: correctResId
+      });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // Новый эндпоинт для аналитики
 app.get('/api/analytics/summary', 
   authenticateToken, 
