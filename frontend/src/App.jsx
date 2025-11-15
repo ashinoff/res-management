@@ -2320,120 +2320,136 @@ function Reports() {
   
   // ✅ ИСПРАВЛЕННАЯ функция exportToExcel
   const exportToExcel = () => {
-    if (filteredData.length === 0) {
-      alert('Нет данных для экспорта');
-      return;
-    }
+  if (filteredData.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
 
-    // Подготавливаем данные для экспорта
-    const exportData = filteredData.map(item => {
-      const base = {
-        'РЭС': item.resName || '',
-        'ТП': item.tpName || '',
-        'ВЛ': item.vlName || '',
+  console.log('=== EXPORT DEBUG ===');
+  console.log('Report type:', reportType);
+  console.log('Filtered data:', filteredData);
+  console.log('First item:', filteredData[0]);
+  
+  // Подготавливаем данные для экспорта
+  const exportData = filteredData.map(item => {
+    const base = {
+      'РЭС': item.resName || '',
+      'ТП': item.tpName || '',
+      'ВЛ': item.vlName || '',
+      'Позиция': item.position, // ✅ ИСПРАВЛЕНО - просто берем как есть, преобразование уже в бэке
+      'Номер ПУ': item.puNumber || ''
+    };
+
+    // ✅ ИСПРАВЛЕНО: Обработка проблемных ВЛ
+    if (reportType === 'problem_vl') {
+      return {
+        ...base,
+        'Количество неудачных проверок': item.failureCount || 0,
+        'Дата первого обращения': item.firstReportDate ? 
+          new Date(item.firstReportDate).toLocaleDateString('ru-RU') : '',
+        'Дата последней проверки': item.lastErrorDate ? 
+          new Date(item.lastErrorDate).toLocaleDateString('ru-RU') : '',
+        'Последняя ошибка': item.lastErrorDetails || '',
+        'Статус проблемы': item.status || ''
+      };
+    } else if (reportType === 'pending_work') {
+      return {
+        ...base,
         'Позиция': item.position === 'start' ? 'Начало' : 
                    item.position === 'middle' ? 'Середина' : 'Конец',
-        'Номер ПУ': item.puNumber || ''
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate)
       };
-
-      // ✅ ДОБАВЛЕНО: Обработка проблемных ВЛ
-      if (reportType === 'problem_vl') {
-        return {
-          ...base,
-          'Количество неудачных проверок': item.failureCount || 0,
-          'Дата первого обращения': formatDate(item.firstReportDate),
-          'Дата последней проверки': formatDate(item.lastErrorDate),
-          'Последняя ошибка': item.lastErrorDetails || '',
-          'Статус проблемы': item.status || ''
-        };
-      } else if (reportType === 'pending_work') {
-        return {
-          ...base,
-          'Ошибка': item.errorDetails || '',
-          'Дата обнаружения': formatDate(item.errorDate)
-        };
-      } else if (reportType === 'pending_askue') {
-        return {
-          ...base,
-          'Ошибка': item.errorDetails || '',
-          'Дата обнаружения': formatDate(item.errorDate),
-          'Комментарий РЭС': item.resComment || '',
-          'Дата завершения мероприятий': formatDate(item.workCompletedDate)
-        };
-      } else if (reportType === 'completed') {
-        return {
-          ...base,
-          'Ошибка': item.errorDetails || '',
-          'Дата обнаружения': formatDate(item.errorDate),
-          'Комментарий РЭС': item.resComment || '',
-          'Дата завершения мероприятий': formatDate(item.workCompletedDate),
-          'Дата перепроверки': formatDate(item.recheckDate),
-          'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
-        };
-      }
-    });
-
-    // Создаем новую книгу Excel
-    const wb = XLSX.utils.book_new();
-    
-    // Создаем лист с данными
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    // ✅ ИСПРАВЛЕНО: Динамическая ширина колонок в зависимости от типа
-    let columnWidths = [
-      { wch: 20 }, // РЭС
-      { wch: 15 }, // ТП
-      { wch: 15 }, // ВЛ
-      { wch: 12 }, // Позиция
-      { wch: 15 }, // Номер ПУ
-    ];
-    
-    if (reportType === 'problem_vl') {
-      columnWidths.push(
-        { wch: 25 }, // Количество неудачных проверок
-        { wch: 20 }, // Дата первого обращения
-        { wch: 20 }, // Дата последней проверки
-        { wch: 50 }, // Последняя ошибка
-        { wch: 15 }  // Статус проблемы
-      );
-    } else if (reportType === 'pending_work') {
-      columnWidths.push(
-        { wch: 50 }, // Ошибка
-        { wch: 18 }  // Дата обнаружения
-      );
     } else if (reportType === 'pending_askue') {
-      columnWidths.push(
-        { wch: 50 }, // Ошибка
-        { wch: 18 }, // Дата обнаружения
-        { wch: 40 }, // Комментарий РЭС
-        { wch: 25 }  // Дата завершения мероприятий
-      );
+      return {
+        ...base,
+        'Позиция': item.position === 'start' ? 'Начало' : 
+                   item.position === 'middle' ? 'Середина' : 'Конец',
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate),
+        'Комментарий РЭС': item.resComment || '',
+        'Дата завершения мероприятий': formatDate(item.workCompletedDate)
+      };
     } else if (reportType === 'completed') {
-      columnWidths.push(
-        { wch: 50 }, // Ошибка
-        { wch: 18 }, // Дата обнаружения
-        { wch: 40 }, // Комментарий РЭС
-        { wch: 25 }, // Дата завершения мероприятий
-        { wch: 18 }, // Дата перепроверки
-        { wch: 15 }  // Результат
-      );
+      return {
+        ...base,
+        'Позиция': item.position === 'start' ? 'Начало' : 
+                   item.position === 'middle' ? 'Середина' : 'Конец',
+        'Ошибка': item.errorDetails || '',
+        'Дата обнаружения': formatDate(item.errorDate),
+        'Комментарий РЭС': item.resComment || '',
+        'Дата завершения мероприятий': formatDate(item.workCompletedDate),
+        'Дата перепроверки': formatDate(item.recheckDate),
+        'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
+      };
     }
-    
-    ws['!cols'] = columnWidths;
-    
-    // Добавляем лист в книгу
-    const sheetName = getReportTitle();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    
-    // Генерируем имя файла
-    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-    
-    // Сохраняем файл
-    XLSX.writeFile(wb, fileName);
-    
-    // Показываем уведомление
-    alert(`✅ Отчет успешно экспортирован в файл: ${fileName}`);
-  };
+  });
+
+  console.log('Export data prepared:', exportData);
+
+  // Создаем новую книгу Excel
+  const wb = XLSX.utils.book_new();
+  
+  // Создаем лист с данными
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  
+  // Устанавливаем ширину колонок
+  let columnWidths = [
+    { wch: 20 }, // РЭС
+    { wch: 15 }, // ТП
+    { wch: 15 }, // ВЛ
+    { wch: 12 }, // Позиция
+    { wch: 15 }, // Номер ПУ
+  ];
+  
+  if (reportType === 'problem_vl') {
+    columnWidths.push(
+      { wch: 30 }, // Количество неудачных проверок
+      { wch: 20 }, // Дата первого обращения
+      { wch: 20 }, // Дата последней проверки
+      { wch: 60 }, // Последняя ошибка
+      { wch: 15 }  // Статус проблемы
+    );
+  } else if (reportType === 'pending_work') {
+    columnWidths.push(
+      { wch: 50 }, // Ошибка
+      { wch: 18 }  // Дата обнаружения
+    );
+  } else if (reportType === 'pending_askue') {
+    columnWidths.push(
+      { wch: 50 }, // Ошибка
+      { wch: 18 }, // Дата обнаружения
+      { wch: 40 }, // Комментарий РЭС
+      { wch: 25 }  // Дата завершения мероприятий
+    );
+  } else if (reportType === 'completed') {
+    columnWidths.push(
+      { wch: 50 }, // Ошибка
+      { wch: 18 }, // Дата обнаружения
+      { wch: 40 }, // Комментарий РЭС
+      { wch: 25 }, // Дата завершения мероприятий
+      { wch: 18 }, // Дата перепроверки
+      { wch: 15 }  // Результат
+    );
+  }
+  
+  ws['!cols'] = columnWidths;
+  
+  // Добавляем лист в книгу
+  const sheetName = getReportTitle();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  
+  // Генерируем имя файла
+  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+  
+  console.log('Saving file:', fileName);
+  
+  // Сохраняем файл
+  XLSX.writeFile(wb, fileName);
+  
+  // Показываем уведомление
+  alert(`✅ Отчет успешно экспортирован!\n\nФайл: ${fileName}\nЗаписей: ${exportData.length}`);
+};
 
   // Вспомогательная функция для форматирования даты
   const formatDate = (dateString) => {
