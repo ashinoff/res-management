@@ -3069,6 +3069,13 @@ function Settings() {
         >
           Пользователи
         </button>
+        {/* ✅ ДОБАВЬ ЭТУ ВКЛАДКУ */}
+        <button 
+          className={activeTab === 'diagnose' ? 'active' : ''}
+          onClick={() => setActiveTab('diagnose')}
+        >
+          🔍 Диагностика данных
+        </button>
         <button 
           className={activeTab === 'maintenance' ? 'active' : ''}
           onClick={() => setActiveTab('maintenance')}
@@ -3088,9 +3095,11 @@ function Settings() {
           База данных
         </button>
       </div>
+      
       <div className="settings-content">
         {activeTab === 'structure' && <StructureSettings />}
         {activeTab === 'users' && <UserSettings />}
+        {activeTab === 'diagnose' && <DiagnoseData />}  {/* ✅ НОВЫЙ */}
         {activeTab === 'maintenance' && <MaintenanceSettings />}
         {activeTab === 'files' && <FileManagement />}
         {activeTab === 'database' && <DatabaseMaintenance />}
@@ -3268,6 +3277,435 @@ function FileManagement() {
     </div>
   );
 }
+
+function DiagnoseData() {
+  const [selectedRes, setSelectedRes] = useState('');
+  const [resList, setResList] = useState([]);
+  const [diagData, setDiagData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showFixModal, setShowFixModal] = useState(false);
+  const [fixingNotif, setFixingNotif] = useState(null);
+  const [fixPassword, setFixPassword] = useState('');
+  const [newResId, setNewResId] = useState('');
+  const [activeView, setActiveView] = useState('mismatches'); // mismatches, all, structures
+  
+  useEffect(() => {
+    loadResList();
+  }, []);
+  
+  const loadResList = async () => {
+    try {
+      const response = await api.get('/api/res/list');
+      setResList(response.data);
+    } catch (error) {
+      console.error('Error loading RES list:', error);
+    }
+  };
+  
+  const loadDiagnostics = async () => {
+    if (!selectedRes) {
+      alert('Выберите РЭС');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await api.get(`/api/admin/diagnose/${selectedRes}`);
+      setDiagData(response.data);
+    } catch (error) {
+      alert('Ошибка диагностики: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleAutoFix = async (notifId) => {
+    if (!confirm('Автоматически исправить resId согласно структуре?')) return;
+    
+    const password = prompt('Введите пароль администратора:');
+    if (!password) return;
+    
+    try {
+      const response = await api.post(`/api/admin/auto-fix-notification/${notifId}`, {
+        password
+      });
+      
+      alert(`✅ ${response.data.message}`);
+      loadDiagnostics(); // Перезагрузить
+      
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  const handleManualFix = async () => {
+    try {
+      const response = await api.put(`/api/admin/fix-notification/${fixingNotif.id}`, {
+        newResId: parseInt(newResId),
+        password: fixPassword
+      });
+      
+      alert(`✅ ${response.data.message}`);
+      setShowFixModal(false);
+      setFixPassword('');
+      setNewResId('');
+      setFixingNotif(null);
+      loadDiagnostics();
+      
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
+  return (
+    <div className="diagnose-container">
+      <div className="diagnose-header">
+        <div className="diagnose-title">
+          <div className="diagnose-icon">🔍</div>
+          <div>
+            <h3>Диагностика и исправление данных</h3>
+            <p>Проверка соответствия resId в уведомлениях и структуре сети</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="diagnose-controls">
+        <div className="control-group">
+          <label>Выберите РЭС для диагностики:</label>
+          <select 
+            value={selectedRes}
+            onChange={(e) => setSelectedRes(e.target.value)}
+          >
+            <option value="">-- Выберите РЭС --</option>
+            {resList.map(res => (
+              <option key={res.id} value={res.id}>{res.name}</option>
+            ))}
+          </select>
+        </div>
+        
+        <button 
+          onClick={loadDiagnostics}
+          disabled={!selectedRes || loading}
+          className="btn-diagnose"
+        >
+          {loading ? (
+            <>
+              <div className="loading-spinner-small"></div>
+              Диагностика...
+            </>
+          ) : (
+            <>
+              <span>🔍</span>
+              Запустить диагностику
+            </>
+          )}
+        </button>
+      </div>
+      
+      {diagData && (
+        <>
+          {/* Статистика */}
+          <div className="diagnose-stats">
+            <div className="stat-card">
+              <div className="stat-icon">📊</div>
+              <div className="stat-content">
+                <h4>Структуры</h4>
+                <p className="stat-value">{diagData.stats.totalStructures}</p>
+              </div>
+            </div>
+            
+            <div className="stat-card">
+              <div className="stat-icon">🔔</div>
+              <div className="stat-content">
+                <h4>Уведомления</h4>
+                <p className="stat-value">{diagData.stats.totalNotifications}</p>
+              </div>
+            </div>
+            
+            <div className={`stat-card ${diagData.stats.mismatches > 0 ? 'error' : 'success'}`}>
+              <div className="stat-icon">{diagData.stats.mismatches > 0 ? '⚠️' : '✅'}</div>
+              <div className="stat-content">
+                <h4>Несоответствия</h4>
+                <p className="stat-value">{diagData.stats.mismatches}</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Вкладки просмотра */}
+          <div className="diagnose-tabs">
+            <button 
+              className={activeView === 'mismatches' ? 'active' : ''}
+              onClick={() => setActiveView('mismatches')}
+            >
+              ⚠️ Несоответствия ({diagData.stats.mismatches})
+            </button>
+            <button 
+              className={activeView === 'all' ? 'active' : ''}
+              onClick={() => setActiveView('all')}
+            >
+              📋 Все уведомления ({diagData.stats.totalNotifications})
+            </button>
+            <button 
+              className={activeView === 'structures' ? 'active' : ''}
+              onClick={() => setActiveView('structures')}
+            >
+              🏗️ Структура сети ({diagData.stats.totalStructures})
+            </button>
+          </div>
+          
+          {/* Контент */}
+          <div className="diagnose-content">
+            {/* НЕСООТВЕТСТВИЯ */}
+            {activeView === 'mismatches' && (
+              <div className="mismatches-view">
+                {diagData.mismatches.length === 0 ? (
+                  <div className="no-issues">
+                    <div className="success-icon">✨</div>
+                    <h4>Несоответствий не найдено!</h4>
+                    <p>Все resId в уведомлениях соответствуют структуре сети</p>
+                  </div>
+                ) : (
+                  <div className="mismatches-list">
+                    {diagData.mismatches.map((mismatch, idx) => (
+                      <div key={idx} className="mismatch-card">
+                        <div className="mismatch-header">
+                          <div className="mismatch-type">
+                            <span className="type-badge">{mismatch.type}</span>
+                            <span className="date-badge">
+                              {new Date(mismatch.createdAt).toLocaleDateString('ru-RU')}
+                            </span>
+                          </div>
+                          <div className="mismatch-location">
+                            <strong>{mismatch.tpName}</strong> - {mismatch.vlName}
+                          </div>
+                        </div>
+                        
+                        <div className="mismatch-comparison">
+                          <div className="comparison-item wrong">
+                            <div className="comparison-label">❌ ResId в уведомлении:</div>
+                            <div className="comparison-value">
+                              {mismatch.notifResId} ({mismatch.notifResName})
+                            </div>
+                          </div>
+                          
+                          <div className="comparison-arrow">→</div>
+                          
+                          <div className="comparison-item correct">
+                            <div className="comparison-label">✅ ResId в структуре:</div>
+                            <div className="comparison-value">
+                              {mismatch.structureResId} ({mismatch.structureResName})
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="mismatch-actions">
+                          <button 
+                            className="btn-auto-fix"
+                            onClick={() => handleAutoFix(mismatch.notificationId)}
+                          >
+                            <span>🔧</span>
+                            Автоисправление
+                          </button>
+                          
+                          <button 
+                            className="btn-manual-fix"
+                            onClick={() => {
+                              setFixingNotif(mismatch);
+                              setNewResId(mismatch.structureResId);
+                              setShowFixModal(true);
+                            }}
+                          >
+                            <span>✏️</span>
+                            Ручное исправление
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* ВСЕ УВЕДОМЛЕНИЯ */}
+            {activeView === 'all' && (
+              <div className="all-notifications-view">
+                <table className="diagnose-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Тип</th>
+                      <th>ResId</th>
+                      <th>РЭС</th>
+                      <th>ТП - ВЛ</th>
+                      <th>Дата</th>
+                      <th>Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diagData.notifications.map(notif => {
+                      const isCorrect = !notif.NetworkStructure || 
+                        (notif.resId === notif.NetworkStructure.resId);
+                      
+                      return (
+                        <tr key={notif.id} className={isCorrect ? '' : 'mismatch-row'}>
+                          <td>{notif.id}</td>
+                          <td>
+                            <span className={`type-badge ${notif.type}`}>
+                              {notif.type}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{notif.resId}</strong>
+                            {!isCorrect && (
+                              <span className="wrong-icon" title="Несоответствие!">⚠️</span>
+                            )}
+                          </td>
+                          <td>{notif.ResUnit?.name || '—'}</td>
+                          <td>
+                            {notif.NetworkStructure ? 
+                              `${notif.NetworkStructure.tpName} - ${notif.NetworkStructure.vlName}` : 
+                              '—'}
+                          </td>
+                          <td>{new Date(notif.createdAt).toLocaleDateString('ru-RU')}</td>
+                          <td>
+                            {isCorrect ? (
+                              <span className="status-ok">✅ OK</span>
+                            ) : (
+                              <span className="status-error">❌ Несоответствие</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            {/* СТРУКТУРА СЕТИ */}
+            {activeView === 'structures' && (
+              <div className="structures-view">
+                <table className="diagnose-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>ResId</th>
+                      <th>РЭС</th>
+                      <th>ТП</th>
+                      <th>ВЛ</th>
+                      <th>Начало</th>
+                      <th>Середина</th>
+                      <th>Конец</th>
+                      <th>Уведомления</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diagData.structures.map(struct => {
+                      const notifCount = diagData.notifications.filter(
+                        n => n.networkStructureId === struct.id
+                      ).length;
+                      
+                      return (
+                        <tr key={struct.id}>
+                          <td>{struct.id}</td>
+                          <td><strong>{struct.resId}</strong></td>
+                          <td>{struct.ResUnit?.name}</td>
+                          <td>{struct.tpName}</td>
+                          <td>{struct.vlName}</td>
+                          <td>{struct.startPu || '—'}</td>
+                          <td>{struct.middlePu || '—'}</td>
+                          <td>{struct.endPu || '—'}</td>
+                          <td>
+                            {notifCount > 0 ? (
+                              <span className="notif-count">{notifCount}</span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      
+      {/* Модальное окно ручного исправления */}
+      {showFixModal && fixingNotif && (
+        <div className="modal-backdrop" onClick={() => setShowFixModal(false)}>
+          <div className="modal-content fix-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Ручное исправление ResId</h3>
+              <button className="close-btn" onClick={() => setShowFixModal(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="fix-info">
+                <p><strong>Уведомление #{fixingNotif.notificationId}</strong></p>
+                <p><strong>ТП - ВЛ:</strong> {fixingNotif.tpName} - {fixingNotif.vlName}</p>
+              </div>
+              
+              <div className="form-group">
+                <label>Текущий ResId:</label>
+                <input 
+                  type="text" 
+                  value={fixingNotif.notifResId} 
+                  disabled 
+                  className="disabled-input"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Новый ResId:</label>
+                <select 
+                  value={newResId}
+                  onChange={(e) => setNewResId(e.target.value)}
+                >
+                  {resList.map(res => (
+                    <option key={res.id} value={res.id}>
+                      {res.id} - {res.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label>Пароль администратора:</label>
+                <input
+                  type="password"
+                  value={fixPassword}
+                  onChange={(e) => setFixPassword(e.target.value)}
+                  placeholder="Введите пароль"
+                  autoFocus
+                />
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="cancel-btn" 
+                onClick={() => setShowFixModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="primary-btn" 
+                onClick={handleManualFix}
+                disabled={!fixPassword || !newResId}
+              >
+                ✅ Применить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Подкомпонент настроек структуры
 function StructureSettings() {
   const [file, setFile] = useState(null);
@@ -3383,6 +3821,8 @@ function StructureSettings() {
     </div>
   );
 }
+
+
 
 // Подкомпонент управления пользователями
 function UserSettings() {
