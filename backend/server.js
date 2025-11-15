@@ -4773,6 +4773,102 @@ app.post('/api/admin/auto-fix-notification/:id',
     }
 });
 
+// Массовое автоисправление ВСЕХ несоответствий для РЭС
+app.post('/api/admin/auto-fix-all/:resId', 
+  authenticateToken, 
+  checkRole(['admin']), 
+  async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const { password } = req.body;
+      const resId = parseInt(req.params.resId);
+      
+      console.log('=== MASS AUTO-FIX ===');
+      console.log('ResId:', resId);
+      console.log('Password provided:', !!password);
+      
+      if (password !== DELETE_PASSWORD) {
+        await transaction.rollback();
+        return res.status(403).json({ error: 'Неверный пароль' });
+      }
+      
+      // Находим все структуры этого РЭС
+      const structures = await NetworkStructure.findAll({
+        where: { resId },
+        transaction
+      });
+      
+      console.log(`Found ${structures.length} structures for RES ${resId}`);
+      
+      // Находим все уведомления с привязкой к этим структурам
+      const notifications = await Notification.findAll({
+        where: {
+          networkStructureId: {
+            [Op.in]: structures.map(s => s.id)
+          }
+        },
+        include: [{
+          model: NetworkStructure,
+          required: true
+        }],
+        transaction
+      });
+      
+      console.log(`Found ${notifications.length} notifications`);
+      
+      let fixed = 0;
+      let alreadyCorrect = 0;
+      const fixedDetails = [];
+      
+      for (const notif of notifications) {
+        const correctResId = notif.NetworkStructure.resId;
+        
+        if (notif.resId !== correctResId) {
+          const oldResId = notif.resId;
+          
+          await notif.update({
+            resId: correctResId
+          }, { transaction });
+          
+          fixedDetails.push({
+            notificationId: notif.id,
+            oldResId,
+            newResId: correctResId,
+            tpName: notif.NetworkStructure.tpName,
+            vlName: notif.NetworkStructure.vlName
+          });
+          
+          fixed++;
+          console.log(`✅ Fixed notification ${notif.id}: ${oldResId} → ${correctResId}`);
+        } else {
+          alreadyCorrect++;
+        }
+      }
+      
+      await transaction.commit();
+      
+      console.log(`=== MASS AUTO-FIX COMPLETE ===`);
+      console.log(`Fixed: ${fixed}, Already correct: ${alreadyCorrect}`);
+      
+      res.json({
+        success: true,
+        message: `Массовое исправление завершено!`,
+        stats: {
+          total: notifications.length,
+          fixed,
+          alreadyCorrect
+        },
+        fixedDetails
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      console.error('❌ Mass auto-fix error:', error);
+      res.status(500).json({ error: error.message });
+    }
+});
+
 // Новый эндпоинт для аналитики
 app.get('/api/analytics/summary', 
   authenticateToken, 
