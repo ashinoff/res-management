@@ -3269,6 +3269,80 @@ try {
 } catch (err) {
   console.error('Error in check 9:', err);
 }
+
+      // 10. ✅ НОВОЕ: Проверка отсутствующих уведомлений
+try {
+  console.log('Check 10: missing_notifications - START');
+  
+  // Находим все ПУ с ошибками
+  const errorPuStatuses = await PuStatus.findAll({
+    where: {
+      status: 'checked_error',
+      errorDetails: {
+        [Op.not]: null
+      }
+    },
+    include: [{
+      model: NetworkStructure,
+      include: [ResUnit]
+    }]
+  });
+  
+  console.log(`Found ${errorPuStatuses.length} PU with errors`);
+  
+  const missingNotifications = [];
+  
+  for (const puStatus of errorPuStatuses) {
+    if (!puStatus.NetworkStructure) {
+      console.log(`Skipping PU ${puStatus.puNumber} - no structure`);
+      continue;
+    }
+    
+    // Проверяем есть ли уведомление для этого ПУ
+    const existingNotification = await Notification.findOne({
+      where: {
+        type: 'error',
+        message: {
+          [Op.like]: `%"puNumber":"${puStatus.puNumber}"%`
+        }
+      }
+    });
+    
+    if (!existingNotification) {
+      // Уведомления нет - это проблема!
+      missingNotifications.push({
+        puNumber: puStatus.puNumber,
+        puStatusId: puStatus.id,
+        networkStructureId: puStatus.networkStructureId,
+        position: puStatus.position,
+        status: puStatus.status,
+        errorDetails: puStatus.errorDetails,
+        lastCheck: puStatus.lastCheck,
+        tpName: puStatus.NetworkStructure.tpName,
+        vlName: puStatus.NetworkStructure.vlName,
+        resId: puStatus.NetworkStructure.resId,
+        resName: puStatus.NetworkStructure.ResUnit?.name
+      });
+      
+      console.log(`⚠️ Missing notification for PU ${puStatus.puNumber}`);
+    }
+  }
+  
+  if (missingNotifications.length > 0) {
+    issues.push({
+      type: 'missing_notifications',
+      severity: 'error',
+      count: missingNotifications.length,
+      description: 'Найдены ПУ с ошибками без уведомлений',
+      items: missingNotifications
+    });
+  }
+  
+  console.log('Check 10: missing_notifications - OK, found:', missingNotifications.length);
+} catch (err) {
+  console.error('Error in check 10:', err);
+}
+      
       // Итоговая статистика
       const stats = {
   totalIssues: issues.length,
@@ -3278,6 +3352,7 @@ try {
     info: issues.filter(i => i.severity === 'info').length
   },
   staleNotifications: issues.find(i => i.type === 'stale_notifications')?.count || 0, // ✅ ДОБАВЛЕНО
+  missingNotifications: issues.find(i => i.type === 'missing_notifications')?.count || 0,
   totalRecords: {
     networkStructures: await NetworkStructure.count(),
     puStatuses: await PuStatus.count(),
@@ -3499,6 +3574,73 @@ app.post('/api/admin/database-cleanup',
   }
   
   console.log(`Cleaned stale_notifications: ${cleaned}`);
+  break;
+
+    case 'missing_notifications':
+  // ✅ НОВОЕ: Создаем отсутствующие уведомления
+  console.log('Creating missing notifications...');
+  
+  const errorPuStatuses = await PuStatus.findAll({
+    where: {
+      status: 'checked_error',
+      errorDetails: {
+        [Op.not]: null
+      }
+    },
+    include: [{
+      model: NetworkStructure,
+      include: [ResUnit]
+    }],
+    transaction
+  });
+  
+  console.log(`Found ${errorPuStatuses.length} PU with errors`);
+  
+  for (const puStatus of errorPuStatuses) {
+    if (!puStatus.NetworkStructure) continue;
+    
+    // Проверяем есть ли уже уведомление
+    const existingNotification = await Notification.findOne({
+      where: {
+        type: 'error',
+        message: {
+          [Op.like]: `%"puNumber":"${puStatus.puNumber}"%`
+        }
+      },
+      transaction
+    });
+    
+    if (!existingNotification) {
+      // Создаем недостающее уведомление
+      const errorData = {
+        puNumber: puStatus.puNumber,
+        position: puStatus.position,
+        tpName: puStatus.NetworkStructure.tpName,
+        vlName: puStatus.NetworkStructure.vlName,
+        resName: puStatus.NetworkStructure.ResUnit?.name,
+        errorDetails: puStatus.errorDetails,
+        details: null,
+        restoredFrom: 'database_health_check', // Метка что восстановлено
+        restoredAt: new Date()
+      };
+      
+      await Notification.create({
+        fromUserId: 1, // Системное уведомление
+        toUserId: null,
+        resId: puStatus.NetworkStructure.resId,
+        networkStructureId: puStatus.networkStructureId,
+        puStatusId: puStatus.id,
+        type: 'error',
+        message: JSON.stringify(errorData),
+        isRead: false
+      }, { transaction });
+      
+      cleaned++;
+      console.log(`✅ Created missing notification for PU ${puStatus.puNumber}`);
+    }
+  }
+  
+  console.log(`Created missing_notifications: ${cleaned}`);
   break;
           
         default:
