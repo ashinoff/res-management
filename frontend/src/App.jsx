@@ -3320,42 +3320,58 @@ function DiagnoseData() {
   };
   
   const handleAutoFix = async (notifId) => {
-    if (!confirm('Автоматически исправить resId согласно структуре?')) return;
+  // ✅ ИСПОЛЬЗУЕМ МОДАЛЬНОЕ ОКНО ВМЕСТО PROMPT
+  const password = prompt('Введите пароль администратора:');
+  if (!password) return;
+  
+  try {
+    console.log('🔧 Auto-fixing notification:', notifId);
     
-    const password = prompt('Введите пароль администратора:');
-    if (!password) return;
+    const response = await api.post(`/api/admin/auto-fix-notification/${notifId}`, {
+      password
+    });
     
-    try {
-      const response = await api.post(`/api/admin/auto-fix-notification/${notifId}`, {
-        password
-      });
-      
-      alert(`✅ ${response.data.message}`);
-      loadDiagnostics(); // Перезагрузить
-      
-    } catch (error) {
-      alert('Ошибка: ' + (error.response?.data?.error || error.message));
-    }
-  };
+    console.log('✅ Response:', response.data);
+    
+    alert(`✅ ${response.data.message}`);
+    
+    // Перезагружаем диагностику
+    await loadDiagnostics();
+    
+  } catch (error) {
+    console.error('❌ Auto-fix error:', error);
+    alert('Ошибка: ' + (error.response?.data?.error || error.message));
+  }
+};
   
   const handleManualFix = async () => {
-    try {
-      const response = await api.put(`/api/admin/fix-notification/${fixingNotif.id}`, {
-        newResId: parseInt(newResId),
-        password: fixPassword
-      });
-      
-      alert(`✅ ${response.data.message}`);
-      setShowFixModal(false);
-      setFixPassword('');
-      setNewResId('');
-      setFixingNotif(null);
-      loadDiagnostics();
-      
-    } catch (error) {
-      alert('Ошибка: ' + (error.response?.data?.error || error.message));
-    }
-  };
+  try {
+    console.log('✏️ Manual fixing notification:', fixingNotif.notificationId);
+    console.log('New resId:', newResId);
+    console.log('Password:', fixPassword ? 'provided' : 'empty');
+    
+    const response = await api.put(`/api/admin/fix-notification/${fixingNotif.notificationId}`, {
+      newResId: parseInt(newResId),
+      password: fixPassword
+    });
+    
+    console.log('✅ Response:', response.data);
+    
+    alert(`✅ ${response.data.message}`);
+    
+    setShowFixModal(false);
+    setFixPassword('');
+    setNewResId('');
+    setFixingNotif(null);
+    
+    // Перезагружаем диагностику
+    await loadDiagnostics();
+    
+  } catch (error) {
+    console.error('❌ Manual fix error:', error);
+    alert('Ошибка: ' + (error.response?.data?.error || error.message));
+  }
+};
   
   return (
     <div className="diagnose-container">
