@@ -1306,12 +1306,11 @@ const askueMessage = {
   completedAt: new Date()
 };
 
-// ИСПРАВЛЕНО: создаем ОДНО уведомление БЕЗ привязки к конкретному пользователю
-// Все загрузчики РЭС увидят это уведомление
+// ✅ ИСПРАВЛЕНО: используем resId уведомления (из структуры)
 await Notification.create({
   fromUserId: req.user.id,
-  toUserId: null,  // ← NULL = все загрузчики этого РЭС увидят
-  resId: notification.resId,
+  toUserId: null,
+  resId: notification.resId,  // ✅ Берем из исходного уведомления!
   networkStructureId: notification.networkStructureId,
   type: 'pending_askue',
   message: JSON.stringify(askueMessage),
@@ -2948,23 +2947,23 @@ async function createNotifications(fromUserId, resId, errors) {
       vlName: networkStructure.vlName,
       resName: networkStructure.ResUnit.name,
       errorDetails: errorInfo.error,
-      details: errorInfo.details  // Важно для определения фаз!
+      details: errorInfo.details
     };
     
     console.log('Creating notification with data:', errorData);
     
-    // СОЗДАЕМ ТОЛЬКО ОДНО УВЕДОМЛЕНИЕ БЕЗ ПРИВЯЗКИ К КОНКРЕТНОМУ ПОЛЬЗОВАТЕЛЮ!
+    // ✅ ИСПРАВЛЕНО: используем resId ИЗ СТРУКТУРЫ СЕТИ!
     try {
       const notification = await Notification.create({
         fromUserId,
-        toUserId: null, // НЕ привязываем к конкретному пользователю!
-        resId,
+        toUserId: null,
+        resId: networkStructure.resId,  // ✅ ИЗ СТРУКТУРЫ!
         networkStructureId: networkStructure.id,
         type: 'error',
         message: JSON.stringify(errorData),
         isRead: false
       });
-      console.log(`Notification created for RES ${resId}`);
+      console.log(`✅ Notification created for RES ${networkStructure.resId} (from structure)`);
     } catch (err) {
       console.error(`Failed to create notification:`, err);
     }
