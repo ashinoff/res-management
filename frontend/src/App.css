@@ -6547,3 +6547,15 @@ padding: 16px 12px;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+.db-summary-card.success {
+  border-left-color: #52c41a;
+  background: linear-gradient(135deg, #f6ffed 0%, #ffffff 100%);
+}
+
+.db-summary-card.success .summary-icon {
+  color: #52c41a;
+}
+
+.db-summary-card.success .summary-value {
+  color: #52c41a;
+}
