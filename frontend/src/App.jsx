@@ -6117,63 +6117,108 @@ function DatabaseMaintenance() {
             <div className="db-issues-section">
               <h4>🔍 Обнаруженные проблемы</h4>
               <div className="db-issues-list">
-                {healthCheck.issues.map((issue, idx) => {
-                  const cleanupInfo = getCleanupDescription(issue.type);
-                  return (
-                    <div 
-                      key={idx} 
-                      className={`db-issue-card severity-${issue.severity}`}
-                      style={{borderLeftColor: getSeverityColor(issue.severity)}}
-                    >
-                      <div className="issue-header">
-                        <div className="issue-title-row">
-                          <span className="issue-type-icon">{cleanupInfo.icon}</span>
-                          <span className="issue-severity-icon">{getSeverityIcon(issue.severity)}</span>
-                          <h5>{issue.description}</h5>
-                        </div>
-                        <span className="issue-count-badge">{issue.count} записей</span>
-                      </div>
-                      
-                      {issue.items && issue.items.length > 0 && (
-                        <details className="issue-details">
-                          <summary>
-                            <span>📋</span>
-                            Показать примеры (первые 10)
-                          </summary>
-                          <ul className="issue-items-list">
-                            {issue.items.slice(0, 10).map((item, i) => (
-                              <li key={i}>
-                                {typeof item === 'object' ? 
-                                  `ПУ: ${item.puNumber} (встречается ${item.count} раз)` : 
-                                  item
-                                }
-                              </li>
-                            ))}
-                            {issue.items.length > 10 && (
-                              <li className="more-items">... и еще {issue.items.length - 10}</li>
-                            )}
-                          </ul>
-                        </details>
-                      )}
-                      
-                      {['orphaned_pu_status', 'duplicate_pu_statuses', 'old_unread_notifications', 
-                        'orphaned_notifications', 'checks_without_res', 'broken_file_references', 
-                        'stale_problem_vl'].includes(issue.type) && (
-                        <button 
-                          className="btn-cleanup"
-                          onClick={() => {
-                            setCleanupType(issue.type);
-                            setShowCleanupModal(true);
-                          }}
-                        >
-                          <span>🧹</span>
-                          Очистить
-                        </button>
-                      )}
+  {healthCheck.issues.map((issue, idx) => {
+    const cleanupInfo = getCleanupDescription(issue.type);
+    return (
+      <div 
+        key={idx} 
+        className={`db-issue-card severity-${issue.severity}`}
+        style={{borderLeftColor: getSeverityColor(issue.severity)}}
+      >
+        <div className="issue-header">
+          <div className="issue-title-row">
+            <span className="issue-type-icon">{cleanupInfo.icon}</span>
+            <span className="issue-severity-icon">{getSeverityIcon(issue.severity)}</span>
+            <h5>{issue.description}</h5>
+          </div>
+          <span className="issue-count-badge">{issue.count} записей</span>
+        </div>
+        
+        {/* ✅ ДОБАВЬ ЭТО ПОСЛЕ issue-header, ПЕРЕД старым details: */}
+        
+        {/* Специальное отображение для неактуальных уведомлений */}
+        {issue.type === 'stale_notifications' && issue.items && issue.items.length > 0 && (
+          <details className="issue-details">
+            <summary>
+              <span>📋</span>
+              Показать неактуальные уведомления (первые 10)
+            </summary>
+            <div className="stale-notifs-list">
+              {issue.items.slice(0, 10).map((item, i) => (
+                <div key={i} className="stale-notif-card">
+                  <div className="stale-notif-header">
+                    <div>
+                      <strong>ПУ #{item.puNumber}</strong>
+                      <span className="notif-type-badge">{item.type === 'error' ? '❌ Ошибка' : '⏳ АСКУЭ'}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <span className={`stale-status ${item.currentStatus === 'checked_ok' ? 'ok' : 'not-found'}`}>
+                      {item.currentStatus === 'checked_ok' ? '✅ Проверен' : '❌ Не найден'}
+                    </span>
+                  </div>
+                  <div className="stale-notif-info">
+                    <p><strong>📍 Местоположение:</strong> {item.tpName} - {item.vlName}</p>
+                    <p><strong>🏢 РЭС:</strong> {item.resName}</p>
+                    <p><strong>📅 Уведомление создано:</strong> {new Date(item.notifCreated).toLocaleString('ru-RU')}</p>
+                    {item.lastCheck && (
+                      <p><strong>✅ Последняя успешная проверка:</strong> {new Date(item.lastCheck).toLocaleString('ru-RU')}</p>
+                    )}
+                  </div>
+                  <div className="stale-reason">
+                    💡 <strong>Причина:</strong> {item.reason}
+                  </div>
+                </div>
+              ))}
+              {issue.items.length > 10 && (
+                <div className="more-items">
+                  ... и еще {issue.items.length - 10} неактуальных уведомлений
+                </div>
+              )}
+            </div>
+          </details>
+        )}
+        
+        {/* Старое отображение для остальных типов */}
+        {issue.type !== 'stale_notifications' && issue.items && issue.items.length > 0 && (
+          <details className="issue-details">
+            <summary>
+              <span>📋</span>
+              Показать примеры (первые 10)
+            </summary>
+            <ul className="issue-items-list">
+              {issue.items.slice(0, 10).map((item, i) => (
+                <li key={i}>
+                  {typeof item === 'object' ? 
+                    `ПУ: ${item.puNumber} (встречается ${item.count} раз)` : 
+                    item
+                  }
+                </li>
+              ))}
+              {issue.items.length > 10 && (
+                <li className="more-items">... и еще {issue.items.length - 10}</li>
+              )}
+            </ul>
+          </details>
+        )}
+        
+        {/* Кнопка очистки */}
+        {['orphaned_pu_status', 'duplicate_pu_statuses', 'old_unread_notifications', 
+          'orphaned_notifications', 'checks_without_res', 'broken_file_references', 
+          'stale_problem_vl', 'stale_notifications'].includes(issue.type) && (
+          <button 
+            className="btn-cleanup"
+            onClick={() => {
+              setCleanupType(issue.type);
+              setShowCleanupModal(true);
+            }}
+          >
+            <span>🧹</span>
+            Очистить
+          </button>
+        )}
+      </div>
+    );
+  })}
+</div>
             </div>
           )}
           
