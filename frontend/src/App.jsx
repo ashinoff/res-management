@@ -5899,6 +5899,11 @@ function DatabaseMaintenance() {
   const [cleanupType, setCleanupType] = useState('');
   const [cleanupPassword, setCleanupPassword] = useState('');
   const [cleaning, setCleaning] = useState(false);
+
+    const runHealthCheck = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/api/admin/database-health');
   
   // ✅ ДОБАВЬ ЭТО
     console.log('=== DATABASE HEALTH CHECK RESPONSE ===');
