@@ -4668,27 +4668,41 @@ app.put('/api/admin/fix-notification/:id',
     try {
       const { newResId, password } = req.body;
       
+      console.log('=== FIX NOTIFICATION ===');
+      console.log('Notification ID:', req.params.id);
+      console.log('New ResId:', newResId);
+      console.log('Password provided:', !!password);
+      
       if (password !== DELETE_PASSWORD) {
+        console.log('❌ Wrong password');
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
       const notification = await Notification.findByPk(req.params.id);
       
       if (!notification) {
+        console.log('❌ Notification not found');
         return res.status(404).json({ error: 'Уведомление не найдено' });
       }
       
       const oldResId = notification.resId;
+      console.log(`Changing resId: ${oldResId} → ${newResId}`);
       
-      await notification.update({ resId: newResId });
+      await notification.update({ resId: parseInt(newResId) });
+      
+      // Проверяем что обновилось
+      await notification.reload();
+      console.log(`✅ Updated! New resId in DB: ${notification.resId}`);
       
       res.json({
         success: true,
-        message: `ResId изменен: ${oldResId} → ${newResId}`,
-        notification
+        message: `ResId изменен: ${oldResId} → ${notification.resId}`,
+        oldResId,
+        newResId: notification.resId
       });
       
     } catch (error) {
+      console.error('❌ Fix notification error:', error);
       res.status(500).json({ error: error.message });
     }
 });
@@ -4701,35 +4715,60 @@ app.post('/api/admin/auto-fix-notification/:id',
     try {
       const { password } = req.body;
       
+      console.log('=== AUTO-FIX NOTIFICATION ===');
+      console.log('Notification ID:', req.params.id);
+      console.log('Password provided:', !!password);
+      
       if (password !== DELETE_PASSWORD) {
+        console.log('❌ Wrong password');
         return res.status(403).json({ error: 'Неверный пароль' });
       }
       
-      const notification = await Notification.findByPk(req.params.id, {
-        include: [NetworkStructure]
-      });
+      // Сначала находим уведомление
+      const notification = await Notification.findByPk(req.params.id);
       
       if (!notification) {
+        console.log('❌ Notification not found');
         return res.status(404).json({ error: 'Уведомление не найдено' });
       }
       
-      if (!notification.NetworkStructure) {
+      console.log('Found notification with networkStructureId:', notification.networkStructureId);
+      
+      if (!notification.networkStructureId) {
+        console.log('❌ No networkStructureId');
         return res.status(400).json({ error: 'Нет привязки к структуре' });
       }
       
-      const correctResId = notification.NetworkStructure.resId;
+      // Теперь находим структуру отдельно
+      const structure = await NetworkStructure.findByPk(notification.networkStructureId, {
+        include: [ResUnit]
+      });
+      
+      if (!structure) {
+        console.log('❌ Structure not found');
+        return res.status(400).json({ error: 'Структура не найдена' });
+      }
+      
+      const correctResId = structure.resId;
       const oldResId = notification.resId;
+      
+      console.log(`Auto-fixing: ${oldResId} → ${correctResId} (from structure)`);
       
       await notification.update({ resId: correctResId });
       
+      // Проверяем что обновилось
+      await notification.reload();
+      console.log(`✅ Auto-fixed! New resId in DB: ${notification.resId}`);
+      
       res.json({
         success: true,
-        message: `Автоисправление: ${oldResId} → ${correctResId}`,
+        message: `Автоисправление: ${oldResId} → ${notification.resId}`,
         oldResId,
-        newResId: correctResId
+        newResId: notification.resId
       });
       
     } catch (error) {
+      console.error('❌ Auto-fix error:', error);
       res.status(500).json({ error: error.message });
     }
 });
