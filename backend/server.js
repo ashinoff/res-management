@@ -3192,24 +3192,101 @@ app.get('/api/admin/database-health',
       } catch (err) {
         console.error('Error in check 8:', err);
       }
+
+      // 9. ✅ НОВОЕ: Проверка неактуальных уведомлений (ПУ зеленые, но уведомления висят)
+try {
+  console.log('Check 9: stale_notifications - START');
+  
+  // Получаем все уведомления об ошибках и ожидающие АСКУЭ
+  const allErrorNotifs = await Notification.findAll({
+    where: {
+      type: ['error', 'pending_askue']
+    }
+  });
+  
+  console.log(`Found ${allErrorNotifs.length} error/askue notifications to check`);
+  
+  const staleNotifs = [];
+  
+  // Проверяем каждое уведомление
+  for (const notif of allErrorNotifs) {
+    try {
+      const data = JSON.parse(notif.message);
+      const puNumber = data.puNumber;
       
+      if (!puNumber) continue;
+      
+      // Ищем статус этого ПУ в структуре
+      const puStatus = await PuStatus.findOne({
+        where: { puNumber }
+      });
+      
+      // Проверяем актуальность уведомления
+      if (!puStatus) {
+        // Случай 1: ПУ вообще не существует в структуре
+        staleNotifs.push({
+          notificationId: notif.id,
+          type: notif.type,
+          puNumber,
+          tpName: data.tpName,
+          vlName: data.vlName,
+          resName: data.resName,
+          currentStatus: 'not_found',
+          notifCreated: notif.createdAt,
+          reason: 'ПУ не найден в структуре сети'
+        });
+      } else if (puStatus.status === 'checked_ok') {
+        // Случай 2: ПУ зеленый, а уведомление висит (самый важный!)
+        staleNotifs.push({
+          notificationId: notif.id,
+          type: notif.type,
+          puNumber,
+          tpName: data.tpName,
+          vlName: data.vlName,
+          resName: data.resName,
+          currentStatus: 'checked_ok',
+          notifCreated: notif.createdAt,
+          lastCheck: puStatus.lastCheck,
+          reason: 'ПУ уже проверен без ошибок'
+        });
+      }
+    } catch (e) {
+      console.error('Error checking notification:', e);
+    }
+  }
+  
+  if (staleNotifs.length > 0) {
+    issues.push({
+      type: 'stale_notifications',
+      severity: 'warning',
+      count: staleNotifs.length,
+      description: 'Найдены неактуальные уведомления (ПУ уже зеленые или не существуют)',
+      items: staleNotifs.slice(0, 10) // Показываем первые 10 для предпросмотра
+    });
+  }
+  
+  console.log('Check 9: stale_notifications - OK, found:', staleNotifs.length);
+} catch (err) {
+  console.error('Error in check 9:', err);
+}
       // Итоговая статистика
       const stats = {
-        totalIssues: issues.length,
-        byType: {
-          error: issues.filter(i => i.severity === 'error').length,
-          warning: issues.filter(i => i.severity === 'warning').length,
-          info: issues.filter(i => i.severity === 'info').length
-        },
-        totalRecords: {
-          networkStructures: await NetworkStructure.count(),
-          puStatuses: await PuStatus.count(),
-          notifications: await Notification.count(),
-          checkHistory: await CheckHistory.count(),
-          uploadHistory: await UploadHistory.count(),
-          users: await User.count()
-        }
-      };
+  totalIssues: issues.length,
+  byType: {
+    error: issues.filter(i => i.severity === 'error').length,
+    warning: issues.filter(i => i.severity === 'warning').length,
+    info: issues.filter(i => i.severity === 'info').length
+  },
+  staleNotifications: issues.find(i => i.type === 'stale_notifications')?.count || 0, // ✅ ДОБАВЛЕНО
+  totalRecords: {
+    networkStructures: await NetworkStructure.count(),
+    puStatuses: await PuStatus.count(),
+    notifications: await Notification.count(),
+    checkHistory: await CheckHistory.count(),
+    uploadHistory: await UploadHistory.count(),
+    users: await User.count()
+  }
+};
       
       console.log('Database health check completed!');
       console.log('Total issues found:', issues.length);
@@ -3753,195 +3830,6 @@ app.delete('/api/admin/files/:public_id',
     }
 });
 
-// API для проверки целостности базы данных
-app.get('/api/admin/database-health', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  async (req, res) => {
-    try {
-      const issues = [];
-      
-      // 1. Проверка ПУ без структуры сети
-      const orphanedPuStatuses = await PuStatus.findAll({
-        where: {
-          networkStructureId: null
-        }
-      });
-      
-      if (orphanedPuStatuses.length > 0) {
-        issues.push({
-          type: 'orphaned_pu_status',
-          severity: 'warning',
-          count: orphanedPuStatuses.length,
-          description: 'Найдены статусы ПУ без привязки к структуре сети',
-          items: orphanedPuStatuses.map(p => p.puNumber)
-        });
-      }
-      
-           
-      // 3. Проверка уведомлений без связей
-      const orphanedNotifications = await Notification.findAll({
-        where: {
-          [Op.or]: [
-            {
-              networkStructureId: {
-                [Op.not]: null
-              },
-              '$NetworkStructure.id$': null
-            }
-          ]
-        },
-        include: [{
-          model: NetworkStructure,
-          required: false
-        }]
-      });
-      
-      if (orphanedNotifications.length > 0) {
-        issues.push({
-          type: 'orphaned_notifications',
-          severity: 'warning',
-          count: orphanedNotifications.length,
-          description: 'Найдены уведомления со ссылками на несуществующие структуры'
-        });
-      }
-      
-      // 4. Проверка истории проверок без РЭС
-      const checksWithoutRes = await CheckHistory.count({
-        where: {
-          resId: null
-        }
-      });
-      
-      if (checksWithoutRes > 0) {
-        issues.push({
-          type: 'checks_without_res',
-          severity: 'warning',
-          count: checksWithoutRes,
-          description: 'Найдены записи истории без привязки к РЭС'
-        });
-      }
-      
-      // 5. Проверка старых неактивных данных
-      const oldDate = new Date();
-      oldDate.setFullYear(oldDate.getFullYear() - 1); // Год назад
-      
-      const oldNotifications = await Notification.count({
-        where: {
-          createdAt: {
-            [Op.lt]: oldDate
-          },
-          isRead: false
-        }
-      });
-      
-      if (oldNotifications > 0) {
-        issues.push({
-          type: 'old_unread_notifications',
-          severity: 'info',
-          count: oldNotifications,
-          description: 'Найдены непрочитанные уведомления старше года'
-        });
-      }
-      
-      // 6. Проверка битых файлов в CheckHistory
-      const checksWithBrokenFiles = await CheckHistory.findAll({
-        where: {
-          attachments: {
-            [Op.not]: null,
-            [Op.ne]: []
-          }
-        }
-      });
-      
-      let brokenFilesCount = 0;
-      for (const check of checksWithBrokenFiles) {
-        if (check.attachments && Array.isArray(check.attachments)) {
-          for (const file of check.attachments) {
-            if (!file.url || !file.public_id) {
-              brokenFilesCount++;
-            }
-          }
-        }
-      }
-      
-      if (brokenFilesCount > 0) {
-        issues.push({
-          type: 'broken_file_references',
-          severity: 'warning',
-          count: brokenFilesCount,
-          description: 'Найдены записи с некорректными ссылками на файлы'
-        });
-      }
-      
-      // 7. Проверка пользователей без РЭС (кроме админов)
-      const usersWithoutRes = await User.count({
-        where: {
-          role: {
-            [Op.ne]: 'admin'
-          },
-          resId: null
-        }
-      });
-      
-      if (usersWithoutRes > 0) {
-        issues.push({
-          type: 'users_without_res',
-          severity: 'error',
-          count: usersWithoutRes,
-          description: 'Найдены не-админы без привязки к РЭС'
-        });
-      }
-      
-      // 8. Проверка проблемных ВЛ со статусом active но без recent activity
-      const oldProblemVLs = await ProblemVL.count({
-        where: {
-          status: 'active',
-          lastErrorDate: {
-            [Op.lt]: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 дней
-          }
-        }
-      });
-      
-      if (oldProblemVLs > 0) {
-        issues.push({
-          type: 'stale_problem_vl',
-          severity: 'info',
-          count: oldProblemVLs,
-          description: 'Найдены активные проблемные ВЛ без активности более 90 дней'
-        });
-      }
-      
-      // Итоговая статистика
-      const stats = {
-        totalIssues: issues.length,
-        byType: {
-          error: issues.filter(i => i.severity === 'error').length,
-          warning: issues.filter(i => i.severity === 'warning').length,
-          info: issues.filter(i => i.severity === 'info').length
-        },
-        totalRecords: {
-          networkStructures: await NetworkStructure.count(),
-          puStatuses: await PuStatus.count(),
-          notifications: await Notification.count(),
-          checkHistory: await CheckHistory.count(),
-          uploadHistory: await UploadHistory.count(),
-          users: await User.count()
-        }
-      };
-      
-      res.json({
-        success: true,
-        stats,
-        issues,
-        checkedAt: new Date()
-      });
-      
-    } catch (error) {
-      console.error('Database health check error:', error);
-      res.status(500).json({ error: error.message });
-    }
-});
 
 // Запуск сервера
 initializeDatabase().then(() => {
