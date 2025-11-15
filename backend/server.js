@@ -3384,6 +3384,45 @@ app.post('/api/admin/database-cleanup',
           );
           console.log(`Cleaned stale_problem_vl: ${cleaned}`);
           break;
+
+          case 'stale_notifications':
+  // ✅ НОВОЕ: Очистка неактуальных уведомлений
+  console.log('Cleaning stale notifications...');
+  
+  const allErrorNotifs = await Notification.findAll({
+    where: {
+      type: ['error', 'pending_askue']
+    },
+    transaction
+  });
+  
+  console.log(`Found ${allErrorNotifs.length} error/askue notifications to check`);
+  
+  for (const notif of allErrorNotifs) {
+    try {
+      const data = JSON.parse(notif.message);
+      const puNumber = data.puNumber;
+      
+      if (!puNumber) continue;
+      
+      const puStatus = await PuStatus.findOne({
+        where: { puNumber },
+        transaction
+      });
+      
+      // Удаляем если ПУ зеленый или не существует
+      if (!puStatus || puStatus.status === 'checked_ok') {
+        await notif.destroy({ transaction });
+        cleaned++;
+        console.log(`Deleted stale notification for PU ${puNumber} (${puStatus ? 'checked_ok' : 'not_found'})`);
+      }
+    } catch (e) {
+      console.error('Error cleaning stale notification:', e);
+    }
+  }
+  
+  console.log(`Cleaned stale_notifications: ${cleaned}`);
+  break;
           
         default:
           await transaction.rollback();
@@ -3900,84 +3939,6 @@ app.get('/api/admin/database-health',
       
     } catch (error) {
       console.error('Database health check error:', error);
-      res.status(500).json({ error: error.message });
-    }
-});
-
-// API для очистки определенного типа "мусора"
-app.post('/api/admin/database-cleanup', 
-  authenticateToken, 
-  checkRole(['admin']), 
-  async (req, res) => {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      const { cleanupType, password } = req.body;
-      
-      if (password !== DELETE_PASSWORD) {
-        return res.status(403).json({ error: 'Неверный пароль' });
-      }
-      
-      let cleaned = 0;
-      
-      switch (cleanupType) {
-        case 'orphaned_pu_status':
-          // Удаляем статусы ПУ без структуры
-          cleaned = await PuStatus.destroy({
-            where: {
-              networkStructureId: null
-            },
-            transaction
-          });
-          break;
-          
-        case 'old_unread_notifications':
-          // Удаляем старые непрочитанные уведомления
-          const oldDate = new Date();
-          oldDate.setFullYear(oldDate.getFullYear() - 1);
-          
-          cleaned = await Notification.destroy({
-            where: {
-              createdAt: {
-                [Op.lt]: oldDate
-              },
-              isRead: false
-            },
-            transaction
-          });
-          break;
-          
-        case 'orphaned_notifications':
-          // Находим и удаляем уведомления с несуществующими связями
-          const orphaned = await sequelize.query(`
-            DELETE FROM "Notifications" n
-            WHERE n."networkStructureId" IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM "NetworkStructures" ns 
-              WHERE ns.id = n."networkStructureId"
-            )
-          `, { transaction });
-          
-          cleaned = orphaned[1].rowCount || 0;
-          break;
-          
-        default:
-          await transaction.rollback();
-          return res.status(400).json({ error: 'Неизвестный тип очистки' });
-      }
-      
-      await transaction.commit();
-      
-      res.json({
-        success: true,
-        message: `Очищено записей: ${cleaned}`,
-        cleanupType,
-        cleaned
-      });
-      
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Database cleanup error:', error);
       res.status(500).json({ error: error.message });
     }
 });
@@ -4634,11 +4595,93 @@ app.get('/api/admin/diagnose/:resId',
         }
       });
       
-      // 4. Статистика
+      // ✅ 4. НОВОЕ: Проверка неактуальных уведомлений
+      const staleNotifications = [];
+      
+      const errorNotifications = await Notification.findAll({
+        where: {
+          type: ['error', 'pending_askue']
+        }
+      });
+      
+      for (const notif of errorNotifications) {
+        try {
+          const data = JSON.parse(notif.message);
+          const puNumber = data.puNumber;
+          
+          if (!puNumber) continue;
+          
+          // Проверяем статус ПУ
+          const puStatus = await PuStatus.findOne({
+            where: { puNumber }
+          });
+          
+          if (puStatus) {
+            // Если ПУ зеленый, а уведомление висит - это устаревшее
+            if (puStatus.status === 'checked_ok') {
+              staleNotifications.push({
+                notificationId: notif.id,
+                type: notif.type,
+                puNumber,
+                tpName: data.tpName,
+                vlName: data.vlName,
+                resName: data.resName,
+                currentStatus: 'checked_ok',
+                notifCreated: notif.createdAt,
+                lastCheck: puStatus.lastCheck,
+                reason: 'ПУ уже проверен без ошибок'
+              });
+            }
+          } else {
+            // ПУ вообще не существует
+            staleNotifications.push({
+              notificationId: notif.id,
+              type: notif.type,
+              puNumber,
+              tpName: data.tpName,
+              vlName: data.vlName,
+              resName: data.resName,
+              currentStatus: 'not_found',
+              notifCreated: notif.createdAt,
+              reason: 'ПУ не найден в структуре'
+            });
+          }
+        } catch (e) {
+          console.error('Error checking notification:', e);
+        }
+      }
+      
+      // 5. Формируем список проблем
+      const issues = [];
+      
+      // Несоответствия resId
+      if (mismatches.length > 0) {
+        issues.push({
+          type: 'resid_mismatch',
+          severity: 'error',
+          count: mismatches.length,
+          description: 'Несоответствия resId между уведомлениями и структурой',
+          items: mismatches
+        });
+      }
+      
+      // ✅ НОВОЕ: Неактуальные уведомления
+      if (staleNotifications.length > 0) {
+        issues.push({
+          type: 'stale_notifications',
+          severity: 'warning',
+          count: staleNotifications.length,
+          description: 'Найдены неактуальные уведомления',
+          items: staleNotifications
+        });
+      }
+      
+      // 6. Итоговая статистика
       const stats = {
         totalStructures: structures.length,
         totalNotifications: notifications.length,
         mismatches: mismatches.length,
+        staleNotifications: staleNotifications.length, // ✅ НОВОЕ
         notificationsByType: {
           error: notifications.filter(n => n.type === 'error').length,
           pending_askue: notifications.filter(n => n.type === 'pending_askue').length,
@@ -4651,6 +4694,8 @@ app.get('/api/admin/diagnose/:resId',
         structures,
         notifications,
         mismatches,
+        staleNotifications, // ✅ НОВОЕ
+        issues,
         stats
       });
       
