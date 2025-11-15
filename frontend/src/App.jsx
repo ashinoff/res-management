@@ -6073,6 +6073,16 @@ function DatabaseMaintenance() {
                 <p className="summary-value">{healthCheck.stats.byType.info}</p>
               </div>
             </div>
+              {healthCheck.stats.staleNotifications > 0 && (
+    <div className="db-summary-card warning">
+      <div className="summary-icon">🔔</div>
+      <div className="summary-content">
+        <h4>Неактуальных уведомлений</h4>
+        <p className="summary-value">{healthCheck.stats.staleNotifications}</p>
+      </div>
+    </div>
+  )}
+</div>
           </div>
           
           {/* Статистика записей */}
