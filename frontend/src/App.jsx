@@ -5993,6 +5993,11 @@ function DatabaseMaintenance() {
       title: 'Неактуальные уведомления',
       desc: 'Удалить уведомления для ПУ, которые уже проверены без ошибок',
       icon: '🔔'
+    },
+        'missing_notifications': {
+      title: 'Отсутствующие уведомления',
+      desc: 'Создать уведомления для ПУ с ошибками, у которых нет уведомлений',
+      icon: '📢'
     }
     };
     return descriptions[type] || { title: 'Неизвестная операция', desc: '', icon: '❓' };
@@ -6083,6 +6088,17 @@ function DatabaseMaintenance() {
                   </div>
                 </div>
               )}
+
+              {/* ✅ ВСТАВЬ СЮДА - ПОСЛЕ БЛОКА staleNotifications, ПЕРЕД ЗАКРЫВАЮЩИМ </div> */}
+      {healthCheck.stats.missingNotifications > 0 && (
+        <div className="db-summary-card error">
+          <div className="summary-icon">📢</div>
+          <div className="summary-content">
+            <h4>Отсутствующих уведомлений</h4>
+            <p className="summary-value">{healthCheck.stats.missingNotifications}</p>
+          </div>
+        </div>
+      )}
             </div>
           
           
@@ -6187,7 +6203,51 @@ function DatabaseMaintenance() {
             </div>
           </details>
         )}
-        
+
+        {/* Специальное отображение для отсутствующих уведомлений */}
+{issue.type === 'missing_notifications' && issue.items && issue.items.length > 0 && (
+  <details className="issue-details">
+    <summary>
+      <span>📋</span>
+      Показать ПУ без уведомлений (первые 10)
+    </summary>
+    <div className="missing-notifs-list">
+      {issue.items.slice(0, 10).map((item, i) => (
+        <div key={i} className="missing-notif-card">
+          <div className="missing-notif-header">
+            <div>
+              <strong>ПУ #{item.puNumber}</strong>
+              <span className="status-badge status-error">❌ Ошибка</span>
+            </div>
+            <span className="missing-badge">
+              📢 Нет уведомления
+            </span>
+          </div>
+          <div className="missing-notif-info">
+            <p><strong>📍 Местоположение:</strong> {item.tpName} - {item.vlName}</p>
+            <p><strong>🏢 РЭС:</strong> {item.resName}</p>
+            <p><strong>🔴 Статус ПУ:</strong> {item.status}</p>
+            <p><strong>📅 Последняя проверка:</strong> {
+              item.lastCheck 
+                ? new Date(item.lastCheck).toLocaleString('ru-RU')
+                : 'Неизвестно'
+            }</p>
+          </div>
+          <div className="missing-error-preview">
+            <strong>⚠️ Ошибка в статусе:</strong>
+            <pre>{item.errorDetails?.substring(0, 200)}...</pre>
+          </div>
+        </div>
+      ))}
+      {issue.items.length > 10 && (
+        <div className="more-items">
+          ... и еще {issue.items.length - 10} ПУ без уведомлений
+        </div>
+      )}
+    </div>
+  </details>
+)}
+          
         {/* Старое отображение для остальных типов */}
         {issue.type !== 'stale_notifications' && issue.items && issue.items.length > 0 && (
           <details className="issue-details">
@@ -6214,7 +6274,7 @@ function DatabaseMaintenance() {
         {/* Кнопка очистки */}
         {['orphaned_pu_status', 'duplicate_pu_statuses', 'old_unread_notifications', 
           'orphaned_notifications', 'checks_without_res', 'broken_file_references', 
-          'stale_problem_vl', 'stale_notifications'].includes(issue.type) && (
+          'stale_problem_vl', 'stale_notifications', 'missing_notifications'].includes(issue.type) && (
           <button 
             className="btn-cleanup"
             onClick={() => {
