@@ -2320,135 +2320,157 @@ function Reports() {
   
   // ✅ ИСПРАВЛЕННАЯ функция exportToExcel
   const exportToExcel = () => {
-  if (filteredData.length === 0) {
-    alert('Нет данных для экспорта');
-    return;
-  }
-
-  console.log('=== EXPORT DEBUG ===');
-  console.log('Report type:', reportType);
-  console.log('Filtered data:', filteredData);
-  console.log('First item:', filteredData[0]);
-  
-  // Подготавливаем данные для экспорта
-  const exportData = filteredData.map(item => {
-    const base = {
-      'РЭС': item.resName || '',
-      'ТП': item.tpName || '',
-      'ВЛ': item.vlName || '',
-      'Позиция': item.position, // ✅ ИСПРАВЛЕНО - просто берем как есть, преобразование уже в бэке
-      'Номер ПУ': item.puNumber || ''
-    };
-
-    // ✅ ИСПРАВЛЕНО: Обработка проблемных ВЛ
-    if (reportType === 'problem_vl') {
-      return {
-        ...base,
-        'Количество неудачных проверок': item.failureCount || 0,
-        'Дата первого обращения': item.firstReportDate ? 
-          new Date(item.firstReportDate).toLocaleDateString('ru-RU') : '',
-        'Дата последней проверки': item.lastErrorDate ? 
-          new Date(item.lastErrorDate).toLocaleDateString('ru-RU') : '',
-        'Последняя ошибка': item.lastErrorDetails || '',
-        'Статус проблемы': item.status || ''
-      };
-    } else if (reportType === 'pending_work') {
-      return {
-        ...base,
-        'Позиция': item.position === 'start' ? 'Начало' : 
-                   item.position === 'middle' ? 'Середина' : 'Конец',
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate)
-      };
-    } else if (reportType === 'pending_askue') {
-      return {
-        ...base,
-        'Позиция': item.position === 'start' ? 'Начало' : 
-                   item.position === 'middle' ? 'Середина' : 'Конец',
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate),
-        'Комментарий РЭС': item.resComment || '',
-        'Дата завершения мероприятий': formatDate(item.workCompletedDate)
-      };
-    } else if (reportType === 'completed') {
-      return {
-        ...base,
-        'Позиция': item.position === 'start' ? 'Начало' : 
-                   item.position === 'middle' ? 'Середина' : 'Конец',
-        'Ошибка': item.errorDetails || '',
-        'Дата обнаружения': formatDate(item.errorDate),
-        'Комментарий РЭС': item.resComment || '',
-        'Дата завершения мероприятий': formatDate(item.workCompletedDate),
-        'Дата перепроверки': formatDate(item.recheckDate),
-        'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
-      };
+  try {
+    console.log('=== EXPORT START ===');
+    console.log('Report type:', reportType);
+    console.log('Filtered data length:', filteredData.length);
+    console.log('First item:', filteredData[0]);
+    
+    if (filteredData.length === 0) {
+      alert('Нет данных для экспорта');
+      return;
     }
-  });
 
-  console.log('Export data prepared:', exportData);
+    // Подготавливаем данные для экспорта
+    const exportData = filteredData.map((item, index) => {
+      console.log(`Processing item ${index}:`, item);
+      
+      // ВАЖНО: Для problem_vl данные уже приходят с преобразованными полями из бэкенда!
+      if (reportType === 'problem_vl') {
+        return {
+          'РЭС': item.resName || '',
+          'ТП': item.tpName || '',
+          'ВЛ': item.vlName || '',
+          'Позиция': item.position || '', // УЖЕ преобразовано на бэкенде
+          'Номер ПУ': item.puNumber || '',
+          'Количество неудачных проверок': item.failureCount || 0,
+          'Дата первого обращения': item.firstReportDate ? 
+            new Date(item.firstReportDate).toLocaleDateString('ru-RU') : '',
+          'Дата последней проверки': item.lastErrorDate ? 
+            new Date(item.lastErrorDate).toLocaleDateString('ru-RU') : '',
+          'Последняя ошибка': item.lastErrorDetails || '',
+          'Статус проблемы': item.status || ''
+        };
+      } else if (reportType === 'pending_work') {
+        return {
+          'РЭС': item.resName || '',
+          'ТП': item.tpName || '',
+          'ВЛ': item.vlName || '',
+          'Позиция': item.position === 'start' ? 'Начало' : 
+                     item.position === 'middle' ? 'Середина' : 'Конец',
+          'Номер ПУ': item.puNumber || '',
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate)
+        };
+      } else if (reportType === 'pending_askue') {
+        return {
+          'РЭС': item.resName || '',
+          'ТП': item.tpName || '',
+          'ВЛ': item.vlName || '',
+          'Позиция': item.position === 'start' ? 'Начало' : 
+                     item.position === 'middle' ? 'Середина' : 'Конец',
+          'Номер ПУ': item.puNumber || '',
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate),
+          'Комментарий РЭС': item.resComment || '',
+          'Дата завершения мероприятий': formatDate(item.workCompletedDate)
+        };
+      } else if (reportType === 'completed') {
+        return {
+          'РЭС': item.resName || '',
+          'ТП': item.tpName || '',
+          'ВЛ': item.vlName || '',
+          'Позиция': item.position === 'start' ? 'Начало' : 
+                     item.position === 'middle' ? 'Середина' : 'Конец',
+          'Номер ПУ': item.puNumber || '',
+          'Ошибка': item.errorDetails || '',
+          'Дата обнаружения': formatDate(item.errorDate),
+          'Комментарий РЭС': item.resComment || '',
+          'Дата завершения мероприятий': formatDate(item.workCompletedDate),
+          'Дата перепроверки': formatDate(item.recheckDate),
+          'Результат': item.recheckResult === 'ok' ? 'Исправлено' : 'Не исправлено'
+        };
+      }
+    });
 
-  // Создаем новую книгу Excel
-  const wb = XLSX.utils.book_new();
-  
-  // Создаем лист с данными
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  
-  // Устанавливаем ширину колонок
-  let columnWidths = [
-    { wch: 20 }, // РЭС
-    { wch: 15 }, // ТП
-    { wch: 15 }, // ВЛ
-    { wch: 12 }, // Позиция
-    { wch: 15 }, // Номер ПУ
-  ];
-  
-  if (reportType === 'problem_vl') {
-    columnWidths.push(
-      { wch: 30 }, // Количество неудачных проверок
-      { wch: 20 }, // Дата первого обращения
-      { wch: 20 }, // Дата последней проверки
-      { wch: 60 }, // Последняя ошибка
-      { wch: 15 }  // Статус проблемы
-    );
-  } else if (reportType === 'pending_work') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }  // Дата обнаружения
-    );
-  } else if (reportType === 'pending_askue') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }, // Дата обнаружения
-      { wch: 40 }, // Комментарий РЭС
-      { wch: 25 }  // Дата завершения мероприятий
-    );
-  } else if (reportType === 'completed') {
-    columnWidths.push(
-      { wch: 50 }, // Ошибка
-      { wch: 18 }, // Дата обнаружения
-      { wch: 40 }, // Комментарий РЭС
-      { wch: 25 }, // Дата завершения мероприятий
-      { wch: 18 }, // Дата перепроверки
-      { wch: 15 }  // Результат
-    );
+    console.log('Export data prepared:', exportData);
+    console.log('Export data length:', exportData.length);
+
+    // Проверяем наличие библиотеки XLSX
+    if (typeof XLSX === 'undefined') {
+      console.error('XLSX library not found!');
+      alert('❌ Ошибка: библиотека XLSX не загружена. Обновите страницу.');
+      return;
+    }
+
+    // Создаем новую книгу Excel
+    const wb = XLSX.utils.book_new();
+    
+    // Создаем лист с данными
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Устанавливаем ширину колонок в зависимости от типа отчета
+    let columnWidths;
+    
+    if (reportType === 'problem_vl') {
+      columnWidths = [
+        { wch: 20 }, // РЭС
+        { wch: 15 }, // ТП
+        { wch: 15 }, // ВЛ
+        { wch: 12 }, // Позиция
+        { wch: 15 }, // Номер ПУ
+        { wch: 30 }, // Количество неудачных проверок
+        { wch: 20 }, // Дата первого обращения
+        { wch: 20 }, // Дата последней проверки
+        { wch: 60 }, // Последняя ошибка
+        { wch: 15 }  // Статус проблемы
+      ];
+    } else if (reportType === 'pending_work') {
+      columnWidths = [
+        { wch: 20 }, // РЭС
+        { wch: 15 }, // ТП
+        { wch: 15 }, // ВЛ
+        { wch: 12 }, // Позиция
+        { wch: 15 }, // Номер ПУ
+        { wch: 50 }, // Ошибка
+        { wch: 18 }  // Дата обнаружения
+      ];
+    } else if (reportType === 'pending_askue') {
+      columnWidths = [
+        { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
+        { wch: 50 }, { wch: 18 }, { wch: 40 }, { wch: 25 }
+      ];
+    } else if (reportType === 'completed') {
+      columnWidths = [
+        { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
+        { wch: 50 }, { wch: 18 }, { wch: 40 }, { wch: 25 }, { wch: 18 }, { wch: 15 }
+      ];
+    }
+    
+    ws['!cols'] = columnWidths;
+    
+    // Добавляем лист в книгу
+    const sheetName = getReportTitle();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    
+    // Генерируем имя файла
+    const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
+    
+    console.log('Saving file:', fileName);
+    
+    // Сохраняем файл
+    XLSX.writeFile(wb, fileName);
+    
+    console.log('=== EXPORT SUCCESS ===');
+    
+    // Показываем уведомление
+    alert(`✅ Отчет успешно экспортирован!\n\nФайл: ${fileName}\nЗаписей: ${exportData.length}`);
+    
+  } catch (error) {
+    console.error('❌ EXPORT ERROR:', error);
+    console.error('Error stack:', error.stack);
+    alert(`❌ Ошибка экспорта: ${error.message}\n\nПроверьте консоль браузера (F12) для деталей.`);
   }
-  
-  ws['!cols'] = columnWidths;
-  
-  // Добавляем лист в книгу
-  const sheetName = getReportTitle();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  
-  // Генерируем имя файла
-  const fileName = `Отчет_${sheetName}_${new Date().toLocaleDateString('ru-RU').split('.').join('-')}.xlsx`;
-  
-  console.log('Saving file:', fileName);
-  
-  // Сохраняем файл
-  XLSX.writeFile(wb, fileName);
-  
-  // Показываем уведомление
-  alert(`✅ Отчет успешно экспортирован!\n\nФайл: ${fileName}\nЗаписей: ${exportData.length}`);
 };
 
   // Вспомогательная функция для форматирования даты
