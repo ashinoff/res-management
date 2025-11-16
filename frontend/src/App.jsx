@@ -1388,6 +1388,7 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkDeletePassword, setBulkDeletePassword] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [deleteRelatedDocs, setDeleteRelatedDocs] = useState(false);
   
  // Оптимизированная функция загрузки
 const loadNotifications = useCallback(async () => {
@@ -1543,23 +1544,33 @@ const loadNotifications = useCallback(async () => {
   };
 
   const handleBulkDelete = async () => {
-    try {
-      await api.post('/api/notifications/delete-bulk', {
-        ids: selectedNotificationIds,
-        password: bulkDeletePassword
-      });
-      
-      alert(`Удалено уведомлений: ${selectedNotificationIds.length}`);
-      setShowBulkDeleteModal(false);
-      setBulkDeletePassword('');
-      setSelectedNotificationIds([]);
-      setSearchTp('');
-      await loadNotifications();
-      
-    } catch (error) {
-      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+  try {
+    const response = await api.post('/api/notifications/delete-bulk', {
+      ids: selectedNotificationIds,
+      password: bulkDeletePassword,
+      deleteDocuments: deleteRelatedDocs // ✅ Передаём опцию
+    });
+    
+    // Показываем детальный результат
+    alert(response.data.message);
+    
+    setShowBulkDeleteModal(false);
+    setBulkDeletePassword('');
+    setDeleteRelatedDocs(false); // ✅ Сбрасываем
+    setSelectedNotificationIds([]);
+    setSearchTp('');
+    
+    await loadNotifications();
+    
+    // ✅ Если удаляли документы - обновляем и их
+    if (deleteRelatedDocs) {
+      window.dispatchEvent(new CustomEvent('documentsUpdated'));
     }
-  };
+    
+  } catch (error) {
+    alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+  }
+};
 
   // Функция загрузки файла прямо из уведомления АСКУЭ
   const handleFileUpload = async (puNumber, notificationData) => {
@@ -4949,43 +4960,99 @@ function UploadedDocuments() {
       )}
 
       {/* Модальное окно массового удаления */}
-      {showBulkDeleteModal && (
-        <div className="modal-backdrop" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>
-          <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Подтверждение удаления</h3>
-              <button className="close-btn" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p>Вы собираетесь удалить {selectedIds.length} записей.</p>
-              <p>Все связанные файлы также будут удалены.</p>
-              <p className="warning">⚠️ Это действие нельзя отменить!</p>
-              <div className="form-group">
-                <label>Введите пароль администратора:</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  placeholder="Пароль"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => {setShowBulkDeleteModal(false); setDeletePassword('');}}>
-                Отмена
-              </button>
-              <button 
-                className="danger-btn" 
-                onClick={handleBulkDelete}
-                disabled={!deletePassword}
-              >
-                Удалить выбранные
-              </button>
-            </div>
+     {showBulkDeleteModal && (
+  <div className="modal-backdrop" onClick={() => {
+    setShowBulkDeleteModal(false); 
+    setBulkDeletePassword('');
+    setDeleteRelatedDocs(false); // ✅ Сбрасываем чекбокс
+  }}>
+    <div className="modal-content delete-modal enhanced-delete-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>⚠️ Подтверждение удаления</h3>
+        <button className="close-btn" onClick={() => {
+          setShowBulkDeleteModal(false); 
+          setBulkDeletePassword('');
+          setDeleteRelatedDocs(false);
+        }}>✕</button>
+      </div>
+      
+      <div className="modal-body">
+        <div className="delete-summary">
+          <div className="delete-icon">🗑️</div>
+          <div>
+            <p className="delete-title">Вы собираетесь удалить <strong>{selectedNotificationIds.length}</strong> уведомлений</p>
           </div>
         </div>
-      )}
+        
+        {/* ✅ НОВОЕ: Предупреждение о документах */}
+        <div className="warning-box documents-warning">
+          <div className="warning-header">
+            <span className="warning-icon">📄</span>
+            <strong>Связанные документы</strong>
+          </div>
+          <p>Некоторые уведомления могут иметь прикреплённые документы в истории проверок.</p>
+          
+          {/* ✅ ЧЕКБОКС ДЛЯ УДАЛЕНИЯ ДОКУМЕНТОВ */}
+          <label className="delete-docs-checkbox">
+            <input
+              type="checkbox"
+              checked={deleteRelatedDocs}
+              onChange={(e) => setDeleteRelatedDocs(e.target.checked)}
+            />
+            <span className="checkbox-label">
+              <strong>Также удалить связанные документы и файлы</strong>
+              <small>Будут удалены все записи CheckHistory и прикреплённые файлы для этих ПУ</small>
+            </span>
+          </label>
+          
+          {deleteRelatedDocs && (
+            <div className="delete-docs-warning">
+              <span>⚠️</span>
+              <p>Внимание! Будут удалены:</p>
+              <ul>
+                <li>Все файлы (фото, документы) из Cloudinary</li>
+                <li>Записи истории проверок</li>
+                <li>Комментарии РЭС</li>
+              </ul>
+            </div>
+          )}
+        </div>
+        
+        <p className="warning">⚠️ Это действие нельзя отменить!</p>
+        
+        <div className="form-group">
+          <label>Введите пароль администратора:</label>
+          <input
+            type="password"
+            value={bulkDeletePassword}
+            onChange={(e) => setBulkDeletePassword(e.target.value)}
+            placeholder="Пароль"
+            autoFocus
+            autoComplete="new-password"
+            name={`delete-password-${Date.now()}`}
+          />
+        </div>
+      </div>
+      
+      <div className="modal-footer">
+        <button className="cancel-btn" onClick={() => {
+          setShowBulkDeleteModal(false); 
+          setBulkDeletePassword('');
+          setDeleteRelatedDocs(false);
+        }}>
+          Отмена
+        </button>
+        <button 
+          className="danger-btn" 
+          onClick={handleBulkDelete}
+          disabled={!bulkDeletePassword}
+        >
+          {deleteRelatedDocs ? '🗑️ Удалить всё' : '🗑️ Удалить уведомления'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Модальное окно удаления записи */}
       {showDeleteRecordModal && (
