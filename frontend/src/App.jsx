@@ -4854,22 +4854,13 @@ function UploadedDocuments() {
         </div>
         
         {user.role === 'admin' && selectedIds.length > 0 && (
-    <div className="selected-actions">
-      <button 
-        className="clear-history-selected-btn"
-        onClick={handleClearTpHistory}
-      >
-        🧹 Очистить историю выбранных ({selectedIds.length})
-      </button>
-      
-      <button 
-        className="delete-selected-btn"
-        onClick={() => setShowDeleteModal(true)}
-      >
-        🗑️ Удалить выбранные ({selectedIds.length})
-      </button>
-    </div>
-  )}
+  <button 
+    className="delete-selected-btn"
+    onClick={() => setShowBulkDeleteModal(true)}
+  >
+    🗑️ Удалить выбранные ({selectedIds.length})
+  </button>
+)}
 </div>
       
       <div className="documents-table">
