@@ -2494,10 +2494,11 @@ function Reports() {
       case 'completed':
         return 'Завершенные проверки';
       case 'problem_vl':
-        return 'Проблемные ВЛ (2+ неудачных проверки)';
+        return 'Проблемные ВЛ';
       default:
         return 'Отчет';
     }
+      return title.length > 31 ? title.substring(0, 28) + '...' : title;
   };
 
   // Фильтрация по ТП с мемоизацией
