@@ -4951,19 +4951,17 @@ function UploadedDocuments() {
       )}
 
       {/* Модальное окно массового удаления */}
-     {showBulkDeleteModal && (
+{showBulkDeleteModal && (
   <div className="modal-backdrop" onClick={() => {
     setShowBulkDeleteModal(false); 
-    setBulkDeletePassword('');
-    setDeleteRelatedDocs(false); // ✅ Сбрасываем чекбокс
+    setDeletePassword('');
   }}>
-    <div className="modal-content delete-modal enhanced-delete-modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-content delete-modal" onClick={e => e.stopPropagation()}>
       <div className="modal-header">
         <h3>⚠️ Подтверждение удаления</h3>
         <button className="close-btn" onClick={() => {
           setShowBulkDeleteModal(false); 
-          setBulkDeletePassword('');
-          setDeleteRelatedDocs(false);
+          setDeletePassword('');
         }}>✕</button>
       </div>
       
@@ -4971,52 +4969,20 @@ function UploadedDocuments() {
         <div className="delete-summary">
           <div className="delete-icon">🗑️</div>
           <div>
-            <p className="delete-title">Вы собираетесь удалить <strong>{selectedNotificationIds.length}</strong> уведомлений</p>
+            {/* ✅ ИСПРАВЛЕНО: selectedIds вместо selectedNotificationIds */}
+            <p className="delete-title">Вы собираетесь удалить <strong>{selectedIds.length}</strong> записей с документами</p>
           </div>
-        </div>
-        
-        {/* ✅ НОВОЕ: Предупреждение о документах */}
-        <div className="warning-box documents-warning">
-          <div className="warning-header">
-            <span className="warning-icon">📄</span>
-            <strong>Связанные документы</strong>
-          </div>
-          <p>Некоторые уведомления могут иметь прикреплённые документы в истории проверок.</p>
-          
-          {/* ✅ ЧЕКБОКС ДЛЯ УДАЛЕНИЯ ДОКУМЕНТОВ */}
-          <label className="delete-docs-checkbox">
-            <input
-              type="checkbox"
-              checked={deleteRelatedDocs}
-              onChange={(e) => setDeleteRelatedDocs(e.target.checked)}
-            />
-            <span className="checkbox-label">
-              <strong>Также удалить связанные документы и файлы</strong>
-              <small>Будут удалены все записи CheckHistory и прикреплённые файлы для этих ПУ</small>
-            </span>
-          </label>
-          
-          {deleteRelatedDocs && (
-            <div className="delete-docs-warning">
-              <span>⚠️</span>
-              <p>Внимание! Будут удалены:</p>
-              <ul>
-                <li>Все файлы (фото, документы) из Cloudinary</li>
-                <li>Записи истории проверок</li>
-                <li>Комментарии РЭС</li>
-              </ul>
-            </div>
-          )}
         </div>
         
         <p className="warning">⚠️ Это действие нельзя отменить!</p>
+        <p>Будут удалены все файлы и записи истории для выбранных документов.</p>
         
         <div className="form-group">
           <label>Введите пароль администратора:</label>
           <input
             type="password"
-            value={bulkDeletePassword}
-            onChange={(e) => setBulkDeletePassword(e.target.value)}
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
             placeholder="Пароль"
             autoFocus
             autoComplete="new-password"
@@ -5028,17 +4994,16 @@ function UploadedDocuments() {
       <div className="modal-footer">
         <button className="cancel-btn" onClick={() => {
           setShowBulkDeleteModal(false); 
-          setBulkDeletePassword('');
-          setDeleteRelatedDocs(false);
+          setDeletePassword('');
         }}>
           Отмена
         </button>
         <button 
           className="danger-btn" 
           onClick={handleBulkDelete}
-          disabled={!bulkDeletePassword}
+          disabled={!deletePassword}
         >
-          {deleteRelatedDocs ? '🗑️ Удалить всё' : '🗑️ Удалить уведомления'}
+          🗑️ Удалить записи
         </button>
       </div>
     </div>
