@@ -3834,7 +3834,7 @@ app.get('/api/admin/files',
         record.attachments.length > 0
       );
       
-      // Собираем все файлы
+      // Собираем все файлы С СТАТУСОМ ЗАПИСИ
       const files = [];
       recordsWithFiles.forEach(record => {
         if (record.attachments && Array.isArray(record.attachments)) {
@@ -3844,8 +3844,11 @@ app.get('/api/admin/files',
               recordId: record.id,
               resName: record.ResUnit?.name,
               tpName: record.tpName,
+              vlName: record.vlName,  // ✅ ДОБАВЛЕНО
               puNumber: record.puNumber,
-              uploadDate: record.workCompletedDate || record.createdAt
+              uploadDate: record.workCompletedDate || record.createdAt,
+              status: record.status,  // ✅ ДОБАВЛЕНО - статус записи
+              resComment: record.resComment  // ✅ ДОБАВЛЕНО - для tooltip
             });
           });
         }
