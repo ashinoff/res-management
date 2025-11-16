@@ -3170,6 +3170,10 @@ function FileManagement() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   
+  // ✅ НОВОЕ: Фильтры
+  const [searchTp, setSearchTp] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  
   useEffect(() => {
     loadFiles();
   }, []);
@@ -3188,30 +3192,58 @@ function FileManagement() {
   };
   
   const handleDeleteFile = async () => {
-  try {
-    // ИЗМЕНИТЬ ЭТУ СТРОКУ - добавить encodeURIComponent
-    const publicId = selectedFile.public_id || selectedFile.filename;
-    
-    await api.delete(`/api/admin/files/${encodeURIComponent(publicId)}`, {
-      data: { password: deletePassword }
-    });
-    
-    alert('Файл удален успешно');
-    setShowDeleteModal(false);
-    setDeletePassword('');
-    setSelectedFile(null);
-    loadFiles();
-    
-  } catch (error) {
-    console.error('Delete error:', error);
-    alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
-  }
-};
+    try {
+      const publicId = selectedFile.public_id || selectedFile.filename;
+      
+      await api.delete(`/api/admin/files/${encodeURIComponent(publicId)}`, {
+        data: { password: deletePassword }
+      });
+      
+      alert('Файл удален успешно');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      setSelectedFile(null);
+      loadFiles();
+      
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
   
   const getTotalSize = () => {
     const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
     return (totalBytes / 1024 / 1024).toFixed(2);
   };
+  
+  // ✅ НОВОЕ: Функция получения статуса
+  const getStatusInfo = (status) => {
+    switch(status) {
+      case 'completed':
+        return { text: 'Завершено', class: 'status-completed', icon: '✅' };
+      case 'awaiting_recheck':
+        return { text: 'Ожидает перепроверки', class: 'status-awaiting', icon: '⏳' };
+      case 'awaiting_work':
+        return { text: 'Ожидает мероприятий', class: 'status-work', icon: '🔧' };
+      default:
+        return { text: 'Неизвестно', class: 'status-unknown', icon: '❓' };
+    }
+  };
+  
+  // ✅ НОВОЕ: Фильтрация файлов
+  const filteredFiles = files.filter(file => {
+    // Фильтр по ТП
+    if (searchTp && !file.tpName?.toLowerCase().includes(searchTp.toLowerCase())) {
+      return false;
+    }
+    
+    // Фильтр по статусу
+    if (statusFilter && file.status !== statusFilter) {
+      return false;
+    }
+    
+    return true;
+  });
   
   if (loading) return <div className="loading">Загрузка...</div>;
   
@@ -3219,10 +3251,54 @@ function FileManagement() {
     <div className="settings-section">
       <h3>Управление загруженными файлами</h3>
       
+      {/* ✅ НОВОЕ: Фильтры */}
+      <div className="file-filters">
+        <div className="filter-group">
+          <label>🔍 Поиск по ТП:</label>
+          <input
+            type="text"
+            value={searchTp}
+            onChange={(e) => setSearchTp(e.target.value)}
+            placeholder="Введите название ТП..."
+            className="search-input"
+          />
+        </div>
+        
+        <div className="filter-group">
+          <label>📊 Статус:</label>
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="status-filter"
+          >
+            <option value="">Все статусы</option>
+            <option value="completed">✅ Завершено</option>
+            <option value="awaiting_recheck">⏳ Ожидает перепроверки</option>
+            <option value="awaiting_work">🔧 Ожидает мероприятий</option>
+          </select>
+        </div>
+        
+        {(searchTp || statusFilter) && (
+          <button 
+            className="clear-filters-btn"
+            onClick={() => {
+              setSearchTp('');
+              setStatusFilter('');
+            }}
+          >
+            ✕ Очистить фильтры
+          </button>
+        )}
+      </div>
+      
       <div className="file-stats">
         <div className="stat-card">
           <h4>Всего файлов</h4>
           <p className="stat-value">{files.length}</p>
+        </div>
+        <div className="stat-card">
+          <h4>Показано</h4>
+          <p className="stat-value">{filteredFiles.length}</p>
         </div>
         <div className="stat-card">
           <h4>Общий размер</h4>
@@ -3230,52 +3306,76 @@ function FileManagement() {
         </div>
       </div>
       
-      <div className="files-grid">
-        {files.map((file, idx) => (
-          <div key={idx} className="file-card">
-            {(file.url.toLowerCase().endsWith('.jpg') || 
-              file.url.toLowerCase().endsWith('.jpeg') || 
-              file.url.toLowerCase().endsWith('.png') || 
-              file.url.toLowerCase().endsWith('.gif')) ? (
-              <img src={file.url} alt={file.original_name} className="file-thumbnail" />
-            ) : (
-              <div className="file-icon">📄</div>
-            )}
+      {filteredFiles.length === 0 ? (
+        <div className="no-data">
+          <p>
+            {searchTp || statusFilter 
+              ? '🔍 По вашим фильтрам ничего не найдено' 
+              : 'Нет загруженных файлов'}
+          </p>
+        </div>
+      ) : (
+        <div className="files-grid">
+          {filteredFiles.map((file, idx) => {
+            const statusInfo = getStatusInfo(file.status);
             
-            <div className="file-info">
-              <p className="file-name">{file.original_name}</p>
-              <p className="file-meta">
-                РЭС: {file.resName}<br/>
-                ТП: {file.tpName}<br/>
-                ПУ: {file.puNumber}<br/>
-                Дата: {new Date(file.uploadDate).toLocaleDateString('ru-RU')}
-              </p>
-            </div>
-            
-            <div className="file-actions">
-              <a 
-                href={file.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="btn-icon"
-                title="Открыть"
-              >
-                👁️
-              </a>
-              <button 
-                onClick={() => {
-                  setSelectedFile(file);
-                  setShowDeleteModal(true);
-                }}
-                className="btn-icon danger"
-                title="Удалить"
-              >
-                🗑️
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+            return (
+              <div key={idx} className="file-card">
+                {(file.url.toLowerCase().endsWith('.jpg') || 
+                  file.url.toLowerCase().endsWith('.jpeg') || 
+                  file.url.toLowerCase().endsWith('.png') || 
+                  file.url.toLowerCase().endsWith('.gif')) ? (
+                  <img src={file.url} alt={file.original_name} className="file-thumbnail" />
+                ) : (
+                  <div className="file-icon">📄</div>
+                )}
+                
+                <div className="file-info">
+                  <p className="file-name">{file.original_name}</p>
+                  <p className="file-meta">
+                    <strong>РЭС:</strong> {file.resName}<br/>
+                    <strong>ТП:</strong> {file.tpName}<br/>
+                    <strong>ВЛ:</strong> {file.vlName}<br/>
+                    <strong>ПУ:</strong> {file.puNumber}<br/>
+                    <strong>Дата:</strong> {new Date(file.uploadDate).toLocaleDateString('ru-RU')}
+                  </p>
+                  
+                  {/* ✅ НОВОЕ: Статус документа */}
+                  <div 
+                    className={`file-status ${statusInfo.class}`}
+                    title={file.resComment || 'Нет комментария'}
+                  >
+                    <span className="status-icon">{statusInfo.icon}</span>
+                    <span className="status-text">{statusInfo.text}</span>
+                  </div>
+                </div>
+                
+                <div className="file-actions">
+                  <a 
+                    href={file.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="btn-icon"
+                    title="Открыть"
+                  >
+                    👁️
+                  </a>
+                  <button 
+                    onClick={() => {
+                      setSelectedFile(file);
+                      setShowDeleteModal(true);
+                    }}
+                    className="btn-icon danger"
+                    title="Удалить"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       
       {/* Модальное окно удаления */}
       {showDeleteModal && (
