@@ -705,6 +705,44 @@ PuUploadHistory.belongsTo(User, { foreignKey: 'uploadedBy' });
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // =====================================================
 
+// ✅ Извлечение фаз из уведомления для дедупликации
+// Возвращает строку-ключ вида "A", "A_B", "A_B_C" и т.д.
+function getPhaseSignature(notifMessage) {
+  try {
+    const data = typeof notifMessage === 'string' ? JSON.parse(notifMessage) : notifMessage;
+    const phases = [];
+    
+    const details = data.details;
+    const errorText = data.errorDetails || '';
+    
+    // 1. Проверяем структурированные данные
+    if (details && typeof details === 'object') {
+      if (details.overvoltage) {
+        if (details.overvoltage.phase_A && details.overvoltage.phase_A.count > 0) phases.push('A');
+        if (details.overvoltage.phase_B && details.overvoltage.phase_B.count > 0) phases.push('B');
+        if (details.overvoltage.phase_C && details.overvoltage.phase_C.count > 0) phases.push('C');
+      }
+      if (details.undervoltage) {
+        if (details.undervoltage.phase_A && details.undervoltage.phase_A.count > 0 && !phases.includes('A')) phases.push('A');
+        if (details.undervoltage.phase_B && details.undervoltage.phase_B.count > 0 && !phases.includes('B')) phases.push('B');
+        if (details.undervoltage.phase_C && details.undervoltage.phase_C.count > 0 && !phases.includes('C')) phases.push('C');
+      }
+    }
+    
+    // 2. Если не нашли в структуре — ищем в тексте
+    if (phases.length === 0 && errorText) {
+      if (errorText.indexOf('Фаза A') !== -1 || errorText.indexOf('phase_A') !== -1) phases.push('A');
+      if (errorText.indexOf('Фаза B') !== -1 || errorText.indexOf('phase_B') !== -1) phases.push('B');
+      if (errorText.indexOf('Фаза C') !== -1 || errorText.indexOf('phase_C') !== -1) phases.push('C');
+    }
+    
+    // 3. Если фазы не определены — используем "ALL" как общий ключ
+    return phases.length > 0 ? phases.sort().join('_') : 'ALL';
+  } catch {
+    return 'ALL';
+  }
+}
+
 // Хеширование паролей
 User.beforeCreate(async (user) => {
   user.password = await bcrypt.hash(user.password, 10);
@@ -1207,7 +1245,32 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       };
     });
     
-    res.json(notificationsWithReadStatus);
+    // ✅ Дедупликация: для error и pending_askue — 1 ПУ + 1 набор фаз = 1 запись (последняя)
+    const seenKeys = new Set();
+    const deduplicatedNotifications = notificationsWithReadStatus.filter(notif => {
+      if (notif.type !== 'error' && notif.type !== 'pending_askue') {
+        return true; // Остальные типы не трогаем
+      }
+      
+      try {
+        const data = JSON.parse(notif.message);
+        if (!data.puNumber) return true;
+        
+        const phaseKey = getPhaseSignature(notif.message);
+        const key = `${notif.type}_${data.puNumber}_${phaseKey}`;
+        
+        if (seenKeys.has(key)) {
+          return false; // Дубликат — уже видели более свежее (список отсортирован DESC)
+        }
+        
+        seenKeys.add(key);
+        return true;
+      } catch {
+        return true;
+      }
+    });
+    
+    res.json(deduplicatedNotifications);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1607,21 +1670,36 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
           include: [
             { model: ResUnit },
             { model: NetworkStructure }
-          ]
+          ],
+          order: [['createdAt', 'DESC']]
         });
         
-        reportData = pendingWork.map(n => {
-          const data = JSON.parse(n.message);
-          return {
-            resName: n.ResUnit?.name,
-            tpName: data.tpName,
-            vlName: data.vlName,
-            position: data.position,
-            puNumber: data.puNumber,
-            errorDetails: data.errorDetails,
-            errorDate: n.createdAt
-          };
-        });
+        // ✅ Дедупликация: ПУ + набор фаз = 1 запись (последняя)
+        const seenKeysWork = new Set();
+        reportData = pendingWork
+          .filter(n => {
+            try {
+              const data = JSON.parse(n.message);
+              if (!data.puNumber) return true;
+              const phaseKey = getPhaseSignature(n.message);
+              const key = `${data.puNumber}_${phaseKey}`;
+              if (seenKeysWork.has(key)) return false;
+              seenKeysWork.add(key);
+              return true;
+            } catch { return true; }
+          })
+          .map(n => {
+            const data = JSON.parse(n.message);
+            return {
+              resName: n.ResUnit?.name,
+              tpName: data.tpName,
+              vlName: data.vlName,
+              position: data.position,
+              puNumber: data.puNumber,
+              errorDetails: data.errorDetails,
+              errorDate: n.createdAt
+            };
+          });
         break;
         
       case 'pending_askue':
@@ -1634,23 +1712,38 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
           include: [
             { model: ResUnit },
             { model: NetworkStructure }
-          ]
+          ],
+          order: [['createdAt', 'DESC']]
         });
         
-        reportData = pendingAskue.map(n => {
-          const data = JSON.parse(n.message);
-          return {
-            resName: n.ResUnit?.name,
-            tpName: data.tpName,
-            vlName: data.vlName,
-            position: data.position,
-            puNumber: data.puNumber,
-            errorDetails: data.errorDetails || 'Требуется перепроверка',
-            errorDate: n.createdAt,
-            resComment: data.completedComment,
-            workCompletedDate: data.completedAt
-          };
-        });
+        // ✅ Дедупликация: ПУ + набор фаз = 1 запись (последняя)
+        const seenKeysAskue = new Set();
+        reportData = pendingAskue
+          .filter(n => {
+            try {
+              const data = JSON.parse(n.message);
+              if (!data.puNumber) return true;
+              const phaseKey = getPhaseSignature(n.message);
+              const key = `${data.puNumber}_${phaseKey}`;
+              if (seenKeysAskue.has(key)) return false;
+              seenKeysAskue.add(key);
+              return true;
+            } catch { return true; }
+          })
+          .map(n => {
+            const data = JSON.parse(n.message);
+            return {
+              resName: n.ResUnit?.name,
+              tpName: data.tpName,
+              vlName: data.vlName,
+              position: data.position,
+              puNumber: data.puNumber,
+              errorDetails: data.errorDetails || 'Требуется перепроверка',
+              errorDate: n.createdAt,
+              resComment: data.completedComment,
+              workCompletedDate: data.completedAt
+            };
+          });
         break;
         
       case 'completed':
@@ -2227,7 +2320,7 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
     // Получаем все доступные уведомления
     const allNotifications = await Notification.findAll({
       where: whereClause,
-      attributes: ['id', 'type']
+      attributes: ['id', 'type', 'message']
     });
     
     // Получаем прочитанные текущим пользователем
@@ -2243,21 +2336,36 @@ app.get('/api/notifications/counts', authenticateToken, async (req, res) => {
     
     const readIds = new Set(readNotifications.map(r => r.notificationId));
     
-    // Считаем непрочитанные по типам
-    let techPending = 0;
-    let askuePending = 0;
+    // ✅ Считаем уникальные ПУ+фаза по типам (не общее количество уведомлений!)
+    const techKeys = new Set();
+    const askueKeys = new Set();
     
     allNotifications.forEach(notif => {
       if (!readIds.has(notif.id)) {
-        if (notif.type === 'error') techPending++;
-        else if (notif.type === 'pending_askue') askuePending++;
+        try {
+          const data = JSON.parse(notif.message);
+          const puNumber = data.puNumber;
+          
+          if (puNumber) {
+            const phaseKey = getPhaseSignature(notif.message);
+            const key = `${puNumber}_${phaseKey}`;
+            
+            if (notif.type === 'error') techKeys.add(key);
+            else if (notif.type === 'pending_askue') askueKeys.add(key);
+          } else {
+            if (notif.type === 'error') techKeys.add(`id_${notif.id}`);
+            else if (notif.type === 'pending_askue') askueKeys.add(`id_${notif.id}`);
+          }
+        } catch {
+          if (notif.type === 'error') techKeys.add(`id_${notif.id}`);
+          else if (notif.type === 'pending_askue') askueKeys.add(`id_${notif.id}`);
+        }
       }
     });
-    
     res.json({
-      tech_pending: techPending,
-      askue_pending: askuePending,
-      problem_vl: problemVLCount  // Используем подсчет из ProblemVL
+      tech_pending: techKeys.size,
+      askue_pending: askueKeys.size,
+      problem_vl: problemVLCount
     });
   } catch (error) {
     console.error('Error counting notifications:', error);
@@ -2892,8 +3000,13 @@ if (result.has_errors) {
             } else {
               // НЕ ПЕРЕПРОВЕРКА - обычная проверка или повторная проверка
               
-              // ✅ ИСПРАВЛЕНИЕ: Удаляем старые уведомления для этого ПУ ПЕРЕД созданием новых
-              const deletedOldNotifs = await Notification.destroy({
+              // ✅ ИСПРАВЛЕНИЕ: Удаляем старые уведомления для этого ПУ с теми же фазами
+              const newPhaseKey = getPhaseSignature(JSON.stringify({
+                errorDetails: result.summary,
+                details: result.details
+              }));
+              
+              const oldNotifs = await Notification.findAll({
                 where: {
                   type: 'error',
                   message: {
@@ -2901,8 +3014,30 @@ if (result.has_errors) {
                   }
                 }
               });
+              
+              let deletedOldNotifs = 0;
+              for (const oldNotif of oldNotifs) {
+                const oldPhaseKey = getPhaseSignature(oldNotif.message);
+                if (oldPhaseKey === newPhaseKey) {
+                  await oldNotif.destroy();
+                  deletedOldNotifs++;
+                }
+              }
+              
               if (deletedOldNotifs > 0) {
-                console.log(`🧹 Cleaned up ${deletedOldNotifs} old error notifications for PU ${fileName}`);
+                console.log(`🧹 Cleaned up ${deletedOldNotifs} old error notifications for PU ${fileName} (phases: ${newPhaseKey})`);
+              }
+              
+              // Если ошибок НЕТ — удаляем ВСЕ старые error-уведомления для этого ПУ
+              if (!result.has_errors && oldNotifs.length > deletedOldNotifs) {
+                const remaining = oldNotifs.length - deletedOldNotifs;
+                await Notification.destroy({
+                  where: {
+                    type: 'error',
+                    message: { [Op.like]: `%"puNumber":"${fileName}"%` }
+                  }
+                });
+                console.log(`🧹 PU ${fileName} clean — removed ${remaining} remaining error notifications`);
               }
               
               // Обновляем статус ПУ
