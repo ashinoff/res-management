@@ -4066,6 +4066,45 @@ async function initializeDatabase() {
     
     console.log('Database initialization complete');
     
+    // ✅ Удаляем СИРИУС из БД если он существует
+    try {
+      const sirius = await ResUnit.findOne({ where: { name: 'СИРИУС' } });
+      if (sirius) {
+        const siriusId = sirius.id;
+        console.log(`🧹 Found СИРИУС (id=${siriusId}), removing...`);
+        
+        // Находим ID уведомлений СИРИУС для удаления NotificationRead
+        const siriusNotifs = await Notification.findAll({ 
+          where: { resId: siriusId }, 
+          attributes: ['id'] 
+        });
+        const siriusNotifIds = siriusNotifs.map(n => n.id);
+        
+        // Удаляем связанные данные
+        if (siriusNotifIds.length > 0) {
+          await NotificationRead.destroy({ where: { notificationId: { [Op.in]: siriusNotifIds } } });
+        }
+        const deletedNotifs = await Notification.destroy({ where: { resId: siriusId } });
+        const deletedHistory = await CheckHistory.destroy({ where: { resId: siriusId } });
+        const deletedProblemVL = await ProblemVL.destroy({ where: { resId: siriusId } });
+        
+        // Удаляем PuStatus привязанные к структурам СИРИУС
+        const siriusStructures = await NetworkStructure.findAll({ where: { resId: siriusId }, attributes: ['id'] });
+        const siriusStructureIds = siriusStructures.map(s => s.id);
+        if (siriusStructureIds.length > 0) {
+          await PuStatus.destroy({ where: { networkStructureId: { [Op.in]: siriusStructureIds } } });
+        }
+        
+        const deletedStructures = await NetworkStructure.destroy({ where: { resId: siriusId } });
+        const deletedUsers = await User.destroy({ where: { resId: siriusId } });
+        await sirius.destroy();
+        
+        console.log(`✅ СИРИУС removed: ${deletedNotifs} notifs, ${deletedStructures} structures, ${deletedHistory} history, ${deletedProblemVL} problemVL, ${deletedUsers} users`);
+      }
+    } catch (err) {
+      console.error('Error removing СИРИУС:', err.message);
+    }
+    
     // Создаем админа если его нет
     const adminCount = await User.count({ where: { role: 'admin' } });
     if (adminCount === 0) {
