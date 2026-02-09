@@ -1,4 +1,4 @@
-    // =====================================================
+// =====================================================
 // УЛУЧШЕННЫЙ FRONTEND ДЛЯ СИСТЕМЫ УПРАВЛЕНИЯ РЭС
 // Файл: src/App.jsx
 // Версия с исправленными фазами и загрузкой из АСКУЭ
@@ -2346,8 +2346,15 @@ function Reports() {
     const exportData = filteredData.map((item, index) => {
       console.log(`Processing item ${index}:`, item);
       
-      // ВАЖНО: Для problem_vl данные уже приходят с преобразованными полями из бэкенда!
-      if (reportType === 'problem_vl') {
+      if (reportType === 'vl_workload') {
+        return {
+          'РЭС': item.resName || '',
+          'Всего ВЛ': item.totalVl || 0,
+          'ВЛ с проблемами': item.problemVl || 0,
+          'Без проблем': item.okVl || 0,
+          '% проблемных': item.problemPercent || 0
+        };
+      } else if (reportType === 'problem_vl') {
         return {
           'РЭС': item.resName || '',
           'ТП': item.tpName || '',
@@ -2502,6 +2509,8 @@ function Reports() {
         return 'Ожидающие мероприятий';
       case 'pending_askue':
         return 'Ожидающие проверки АСКУЭ';
+      case 'vl_workload':
+        return 'ВЛ в работе у РЭС';
       case 'completed':
         return 'Завершенные проверки';
       case 'problem_vl':
@@ -2537,6 +2546,7 @@ function Reports() {
           <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
             <option value="pending_work">Ожидающие мероприятий</option>
             <option value="pending_askue">Ожидающие проверки АСКУЭ</option>
+            <option value="vl_workload">ВЛ в работе у РЭС</option>
             <option value="completed">Завершенные проверки</option>
             <option value="problem_vl">Проблемные ВЛ (2+ ошибки)</option>
           </select>
@@ -2565,6 +2575,7 @@ function Reports() {
           </>
         )}
         
+        {reportType !== 'vl_workload' && (
         <div className="control-group">
           <input 
             type="text"
@@ -2574,6 +2585,7 @@ function Reports() {
             className="search-input"
           />
         </div>
+        )}
         
         <button className="export-btn" onClick={exportToExcel}>
           📊 Экспорт в Excel
@@ -2598,6 +2610,16 @@ function Reports() {
           <table>
             <thead>
               <tr>
+                {reportType === 'vl_workload' ? (
+                  <>
+                    <th>РЭС</th>
+                    <th>Всего ВЛ</th>
+                    <th>ВЛ с проблемами</th>
+                    <th>Без проблем</th>
+                    <th>% проблемных</th>
+                  </>
+                ) : (
+                <>
                 <th>РЭС</th>
                 <th>ТП</th>
                 <th>ВЛ</th>
@@ -2636,10 +2658,36 @@ function Reports() {
                     <th>Файлы</th>
                   </>
                 ) : null}
+                </>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredData.map((item, idx) => (
+                reportType === 'vl_workload' ? (
+                  <tr key={idx} style={item.isTotal ? { fontWeight: 'bold', borderTop: '2px solid #333', backgroundColor: '#f0f0f0' } : {}}>
+                    <td>{item.resName}</td>
+                    <td>{item.totalVl}</td>
+                    <td style={{ color: item.problemVl > 0 ? '#e53e3e' : 'inherit', fontWeight: item.problemVl > 0 ? 'bold' : 'normal' }}>
+                      {item.problemVl}
+                    </td>
+                    <td style={{ color: '#38a169' }}>{item.okVl}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ 
+                          width: '60px', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden'
+                        }}>
+                          <div style={{ 
+                            width: `${item.problemPercent}%`, height: '100%', 
+                            backgroundColor: item.problemPercent > 50 ? '#e53e3e' : item.problemPercent > 20 ? '#ed8936' : '#38a169',
+                            borderRadius: '4px'
+                          }}></div>
+                        </div>
+                        <span>{item.problemPercent}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
                 <tr key={idx}>
                   <td>{item.resName}</td>
                   <td>{item.tpName}</td>
@@ -2725,6 +2773,7 @@ function Reports() {
                     </>
                   ) : null}
                 </tr>
+                )
               ))}
             </tbody>
           </table>
