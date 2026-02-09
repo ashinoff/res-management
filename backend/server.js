@@ -694,7 +694,6 @@ UploadHistory.belongsTo(User, { foreignKey: 'userId' });
 UploadHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(ResUnit, { foreignKey: 'resId' });
 CheckHistory.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
-CheckHistory.belongsTo(User, { as: 'uploadedByUser', foreignKey: 'resId' });
 ProblemVL.belongsTo(ResUnit, { foreignKey: 'resId' });
 ProblemVL.belongsTo(NetworkStructure, { foreignKey: 'networkStructureId' });
 Notification.hasMany(NotificationRead, { foreignKey: 'notificationId' });
@@ -895,15 +894,9 @@ app.get('/api/network/structure/:resId?', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    // Адлерский РЭС (id=2) также видит СИРИУС (id=8)
     let whereClause = {};
     if (resId) {
-      if (resId == 2 || req.user.resId == 2) {
-        // Если смотрим Адлерский РЭС или пользователь из Адлерского - показываем и СИРИУС
-        whereClause = { resId: { [Op.in]: [2, 8] } };
-      } else {
-        whereClause = { resId };
-      }
+      whereClause = { resId };
     }
     
     const structures = await NetworkStructure.findAll({
@@ -1093,6 +1086,17 @@ app.post('/api/network/upload-full-structure',
           
           processed++;
           
+          // ✅ Находим ID структуры для привязки PuStatus
+          const structure = await NetworkStructure.findOne({
+            where: { 
+              resId: res.id, 
+              tpName: row['ТП'] || '', 
+              vlName: row['Фидер'] || '' 
+            },
+            transaction
+          });
+          const structureId = structure?.id;
+          
           // Создаем статусы для новых ПУ
           const positions = [
             { pu: row['Начало'], pos: 'start' },
@@ -1105,6 +1109,7 @@ app.post('/api/network/upload-full-structure',
               await PuStatus.findOrCreate({
                 where: { puNumber: String(pu) },
                 defaults: {
+                  networkStructureId: structureId,
                   position: pos,
                   status: 'not_checked'
                 },
@@ -1597,8 +1602,7 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
         const pendingWork = await Notification.findAll({
           where: {
             ...whereClause,
-            type: 'error',
-            isRead: false
+            type: 'error'
           },
           include: [
             { model: ResUnit },
@@ -1625,8 +1629,7 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
         const pendingAskue = await Notification.findAll({
           where: {
             ...whereClause,
-            type: 'pending_askue',
-            isRead: false
+            type: 'pending_askue'
           },
           include: [
             { model: ResUnit },
@@ -2889,6 +2892,19 @@ if (result.has_errors) {
             } else {
               // НЕ ПЕРЕПРОВЕРКА - обычная проверка или повторная проверка
               
+              // ✅ ИСПРАВЛЕНИЕ: Удаляем старые уведомления для этого ПУ ПЕРЕД созданием новых
+              const deletedOldNotifs = await Notification.destroy({
+                where: {
+                  type: 'error',
+                  message: {
+                    [Op.like]: `%"puNumber":"${fileName}"%`
+                  }
+                }
+              });
+              if (deletedOldNotifs > 0) {
+                console.log(`🧹 Cleaned up ${deletedOldNotifs} old error notifications for PU ${fileName}`);
+              }
+              
               // Обновляем статус ПУ
               await PuStatus.upsert({
                 puNumber: fileName,
@@ -3821,17 +3837,6 @@ async function initializeDatabase() {
       console.log('RES units created');
     }
     
-    // Создаем СИРИУС
-    try {
-      const [sirius, created] = await ResUnit.findOrCreate({
-        where: { name: 'СИРИУС' },
-        defaults: { name: 'СИРИУС' }
-      });
-      console.log('SIRIUS', created ? 'created' : 'already exists');
-    } catch (err) {
-      console.error('Error creating SIRIUS:', err);
-    }
-    
     console.log('Database initialization complete');
     
     // Создаем админа если его нет
@@ -4510,9 +4515,6 @@ app.get('/api/analytics/detailed',
         order: [['name', 'ASC']]
       });
 
-      // Фильтруем СИРИУС
-      const filteredResList = resList.filter(res => res.name !== 'СИРИУС');
-
       // Условие по дате
       let dateCondition = {};
       if (dateFrom || dateTo) {
@@ -4528,8 +4530,7 @@ app.get('/api/analytics/detailed',
       const detailedData = [];
 
       // Для каждого РЭС
-      for (const res of filteredResList) {
-        // Получаем структуру сети
+      for (const res of resList) {
         const structures = await NetworkStructure.findAll({
           where: { resId: res.id },
           order: [['tpName', 'ASC'], ['vlName', 'ASC']]
@@ -5050,9 +5051,6 @@ app.get('/api/analytics/summary',
         order: [['name', 'ASC']]
       });
 
-      // Фильтруем СИРИУС
-      const filteredResList = resList.filter(res => res.name !== 'СИРИУС');
-
       // Условие по дате
       let dateCondition = {};
       if (dateFrom || dateTo) {
@@ -5067,8 +5065,7 @@ app.get('/api/analytics/summary',
 
       // Собираем статистику для каждого РЭС
       const analytics = await Promise.all(
-        filteredResList.map(async (res) => {
-          // 1. Считаем ТП, ВЛ и ПУ
+        resList.map(async (res) => {
           const structures = await NetworkStructure.findAll({
             where: { resId: res.id }
           });
