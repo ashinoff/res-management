@@ -1771,6 +1771,98 @@ app.get('/api/reports/detailed', authenticateToken, async (req, res) => {
           attachments: h.attachments || []
         }));
         break;
+      
+      case 'vl_workload':
+        // ВЛ в работе у РЭС — аналитика
+        let resWorkloadCondition = {};
+        if (req.user.role === 'admin' && req.query.resId) {
+          resWorkloadCondition.id = parseInt(req.query.resId);
+        } else if (req.user.role !== 'admin') {
+          resWorkloadCondition.id = req.user.resId;
+        }
+        
+        const resListForWorkload = await ResUnit.findAll({
+          where: resWorkloadCondition,
+          order: [['name', 'ASC']]
+        });
+        
+        // Получаем все error-уведомления
+        let errorWhereClause = { type: 'error' };
+        if (req.user.role === 'admin' && req.query.resId) {
+          errorWhereClause.resId = parseInt(req.query.resId);
+        } else if (req.user.role !== 'admin') {
+          errorWhereClause.resId = req.user.resId;
+        }
+        
+        const allErrors = await Notification.findAll({
+          where: errorWhereClause,
+          attributes: ['id', 'message', 'networkStructureId', 'resId', 'createdAt'],
+          order: [['createdAt', 'DESC']]
+        });
+        
+        // Дедупликация по ПУ + фаза
+        const seenKeysVl = new Set();
+        const uniqueErrors = allErrors.filter(notif => {
+          try {
+            const data = JSON.parse(notif.message);
+            if (!data.puNumber) return true;
+            const phaseKey = getPhaseSignature(notif.message);
+            const key = `${data.puNumber}_${phaseKey}`;
+            if (seenKeysVl.has(key)) return false;
+            seenKeysVl.add(key);
+            return true;
+          } catch { return true; }
+        });
+        
+        // Группируем проблемные ВЛ (networkStructureId) по РЭС
+        const problemVlByRes = {};
+        uniqueErrors.forEach(notif => {
+          if (!notif.resId || !notif.networkStructureId) return;
+          if (!problemVlByRes[notif.resId]) {
+            problemVlByRes[notif.resId] = new Set();
+          }
+          problemVlByRes[notif.resId].add(notif.networkStructureId);
+        });
+        
+        // Собираем аналитику
+        let totalAllVl = 0;
+        let totalProblemVl = 0;
+        
+        for (const resUnit of resListForWorkload) {
+          const totalVl = await NetworkStructure.count({
+            where: { resId: resUnit.id }
+          });
+          
+          const problemVlCount = problemVlByRes[resUnit.id] 
+            ? problemVlByRes[resUnit.id].size 
+            : 0;
+          
+          totalAllVl += totalVl;
+          totalProblemVl += problemVlCount;
+          
+          reportData.push({
+            resName: resUnit.name,
+            totalVl,
+            problemVl: problemVlCount,
+            okVl: totalVl - problemVlCount,
+            problemPercent: totalVl > 0 
+              ? Math.round((problemVlCount / totalVl) * 100) 
+              : 0
+          });
+        }
+        
+        // Добавляем итоговую строку
+        reportData.push({
+          resName: 'ИТОГО',
+          totalVl: totalAllVl,
+          problemVl: totalProblemVl,
+          okVl: totalAllVl - totalProblemVl,
+          problemPercent: totalAllVl > 0 
+            ? Math.round((totalProblemVl / totalAllVl) * 100) 
+            : 0,
+          isTotal: true
+        });
+        break;
     }
     
     res.json(reportData);
