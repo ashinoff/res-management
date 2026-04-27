@@ -20,7 +20,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 60000
+  timeout: 120000
 });
 
 // Добавляем токен к каждому запросу
@@ -1500,7 +1500,18 @@ const loadNotifications = useCallback(async () => {
       await loadNotifications();
       
     } catch (error) {
-      alert('Ошибка: ' + (error.response?.data?.error || 'Неизвестная ошибка'));
+      console.error('Complete work error:', error);
+      let msg;
+      if (error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout'))) {
+        msg = 'Превышено время ожидания. Возможно, файлы слишком большие — попробуйте уменьшить их размер или загрузить меньше файлов.';
+      } else if (!error.response) {
+        msg = 'Сервер не отвечает. Проверьте интернет-соединение и попробуйте снова.';
+      } else if (error.response.data?.error) {
+        msg = error.response.data.error;
+      } else {
+        msg = `Ошибка сервера (код ${error.response.status})`;
+      }
+      alert('Ошибка: ' + msg);
     } finally {
     setSubmitting(false); // ДОБАВИТЬ - разблокируем кнопку в любом случае
   }
