@@ -172,7 +172,16 @@ async function uploadToCloudinary(file, type = 'attachment') {
   });
 }
 
-
+// Хелпер для очистки уже загруженных файлов из Cloudinary при ошибке
+async function cleanupCloudinary(publicIds) {
+  if (!publicIds || publicIds.length === 0) return;
+  console.log(`🧹 Cleaning up ${publicIds.length} Cloudinary files...`);
+  await Promise.allSettled(publicIds.map(id =>
+    cloudinary.uploader.destroy(id, {
+      resource_type: id.toLowerCase().endsWith('.pdf') ? 'raw' : 'image'
+    })
+  ));
+}
 
 
 // =====================================================
@@ -1281,141 +1290,133 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
 app.post('/api/notifications/:id/complete-work', 
   authenticateToken, 
   checkRole(['res_responsible']),
-  upload.array('attachments', 5), // Используем обычный multer!
+  upload.array('attachments', 5),
   async (req, res) => {
+    const startTime = Date.now();
     console.log('\n=== COMPLETE WORK START ===');
     console.log('Files received:', req.files?.length || 0);
     
-    const transaction = await sequelize.transaction();
-    const uploadedFiles = []; // Для отслеживания загруженных
+    const uploadedFiles = []; // public_id'ы для cleanup при ошибке
     
     try {
       const { comment, checkFromDate } = req.body;
       
-      // Проверка комментария
+      // 1) ВАЛИДАЦИЯ ДО ВСЕГО ОСТАЛЬНОГО (быстрый отказ без транзакции и без загрузок)
+      if (!comment || typeof comment !== 'string') {
+        return res.status(400).json({ error: 'Комментарий обязателен' });
+      }
       const wordCount = comment.trim().split(/\s+/).filter(w => w.length > 0).length;
       if (wordCount < 5) {
-        await transaction.rollback();
         return res.status(400).json({ error: 'Комментарий должен содержать не менее 5 слов' });
       }
       
-      // Загружаем файлы в Cloudinary
-      const attachments = [];
+      // 2) ЗАГРУЗКА ФАЙЛОВ — ВНЕ ТРАНЗАКЦИИ И ПАРАЛЛЕЛЬНО
+      // Раньше файлы лились последовательно внутри транзакции,
+      // из-за чего БД-коннект висел открытым 1-2 минуты.
+      let attachments = [];
       if (req.files && req.files.length > 0) {
-        console.log(`Uploading ${req.files.length} files to Cloudinary...`);
-        
-        for (const file of req.files) {
-          try {
-            console.log(`Uploading: ${file.originalname} (${file.mimetype})`);
-            const result = await uploadToCloudinary(file, req.body.type);
-            attachments.push(result);
-            uploadedFiles.push(result.public_id); // Сохраняем для cleanup
-            console.log(`✅ Uploaded: ${result.url}`);
-          } catch (uploadError) {
-            console.error(`❌ Failed to upload ${file.originalname}:`, uploadError);
-            throw new Error(`Ошибка загрузки файла ${file.originalname}: ${uploadError.message}`);
-          }
+        console.log(`Uploading ${req.files.length} files to Cloudinary in parallel...`);
+        try {
+          attachments = await Promise.all(
+            req.files.map(file => uploadToCloudinary(file, req.body.type))
+          );
+          uploadedFiles.push(...attachments.map(a => a.public_id));
+          console.log(`✅ All ${attachments.length} files uploaded in ${Date.now() - startTime}ms`);
+        } catch (uploadError) {
+          console.error('❌ Cloudinary upload failed:', uploadError);
+          await cleanupCloudinary(uploadedFiles);
+          return res.status(502).json({ 
+            error: 'Не удалось загрузить файлы на сервер. Попробуйте файлы меньшего размера или проверьте соединение.' 
+          });
         }
-        
-        console.log(`✅ All ${attachments.length} files uploaded successfully`);
       }
       
-      // Находим уведомление
-      const notification = await Notification.findByPk(req.params.id);
-      if (!notification) {
+      // 3) КОРОТКАЯ ТРАНЗАКЦИЯ БД — открывается только сейчас
+      const transaction = await sequelize.transaction();
+      try {
+        const notification = await Notification.findByPk(req.params.id, { transaction });
+        if (!notification) {
+          await transaction.rollback();
+          await cleanupCloudinary(uploadedFiles);
+          return res.status(404).json({ error: 'Уведомление не найдено' });
+        }
+        
+        const errorData = JSON.parse(notification.message);
+        
+        // Создаем запись в CheckHistory
+        await CheckHistory.create({
+          resId: notification.resId,
+          networkStructureId: notification.networkStructureId,
+          puNumber: errorData.puNumber,
+          tpName: errorData.tpName,
+          vlName: errorData.vlName,
+          position: errorData.position,
+          initialError: errorData.errorDetails,
+          initialCheckDate: notification.createdAt,
+          resComment: comment,
+          workCompletedDate: new Date(),
+          checkFromDate: checkFromDate ? new Date(checkFromDate) : new Date(),
+          status: 'awaiting_recheck',
+          attachments: attachments
+        }, { transaction });
+        
+        // Обновляем статус ПУ
+        await PuStatus.update(
+          { status: 'pending_recheck' },
+          { where: { puNumber: errorData.puNumber }, transaction }
+        );
+        
+        // Удаляем старое уведомление
+        await notification.destroy({ transaction });
+        
+        // Создаем уведомление для АСКУЭ
+        const askueMessage = {
+          puNumber: errorData.puNumber,
+          position: errorData.position,
+          tpName: errorData.tpName,
+          vlName: errorData.vlName,
+          resName: errorData.resName,
+          errorDetails: errorData.errorDetails,
+          checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
+          completedComment: comment,
+          completedBy: req.user.id,
+          completedAt: new Date()
+        };
+        
+        await Notification.create({
+          fromUserId: req.user.id,
+          toUserId: null,
+          resId: notification.resId,
+          networkStructureId: notification.networkStructureId,
+          type: 'pending_askue',
+          message: JSON.stringify(askueMessage),
+          isRead: false
+        }, { transaction });
+        
+        await transaction.commit();
+        console.log(`✅ Complete work finished successfully in ${Date.now() - startTime}ms`);
+        
+        return res.json({ 
+          success: true, 
+          message: 'Мероприятия отмечены как выполненные',
+          filesUploaded: attachments.length
+        });
+        
+      } catch (dbError) {
         await transaction.rollback();
-        return res.status(404).json({ error: 'Уведомление не найдено' });
+        console.error('❌ DB error in complete-work:', dbError);
+        await cleanupCloudinary(uploadedFiles);
+        return res.status(500).json({ 
+          error: 'Ошибка сохранения данных: ' + (dbError.message || 'неизвестная ошибка БД')
+        });
       }
-      
-      const errorData = JSON.parse(notification.message);
-      
-      // Создаем запись в CheckHistory
-      await CheckHistory.create({
-        resId: notification.resId,
-        networkStructureId: notification.networkStructureId,
-        puNumber: errorData.puNumber,
-        tpName: errorData.tpName,
-        vlName: errorData.vlName,
-        position: errorData.position,
-        initialError: errorData.errorDetails,
-        initialCheckDate: notification.createdAt,
-        resComment: comment,
-        workCompletedDate: new Date(),
-        checkFromDate: checkFromDate ? new Date(checkFromDate) : new Date(),
-        status: 'awaiting_recheck',
-        attachments: attachments
-      }, { transaction });
-      
-      console.log('✅ CheckHistory created');
-      
-      // Обновляем статус ПУ
-      await PuStatus.update(
-        { status: 'pending_recheck' },
-        { 
-          where: { puNumber: errorData.puNumber },
-          transaction
-        }
-      );
-      
-      // Удаляем старое уведомление
-      await notification.destroy({ transaction });
-      
-     // Создаем уведомление для АСКУЭ
-const askueMessage = {
-  puNumber: errorData.puNumber,
-  position: errorData.position,
-  tpName: errorData.tpName,
-  vlName: errorData.vlName,
-  resName: errorData.resName,
-  errorDetails: errorData.errorDetails,
-  checkFromDate: checkFromDate || new Date().toISOString().split('T')[0],
-  completedComment: comment,
-  completedBy: req.user.id,
-  completedAt: new Date()
-};
-
-// ✅ ИСПРАВЛЕНО: используем resId уведомления (из структуры)
-await Notification.create({
-  fromUserId: req.user.id,
-  toUserId: null,
-  resId: notification.resId,  // ✅ Берем из исходного уведомления!
-  networkStructureId: notification.networkStructureId,
-  type: 'pending_askue',
-  message: JSON.stringify(askueMessage),
-  isRead: false
-}, { transaction });
-
-console.log('✅ Created ONE notification for all ASKUE users');
-      
-      await transaction.commit();
-      
-      console.log('✅ Complete work finished successfully');
-      res.json({ 
-        success: true, 
-        message: 'Мероприятия отмечены как выполненные',
-        filesUploaded: attachments.length
-      });
       
     } catch (error) {
-      await transaction.rollback();
-      
-      // Cleanup: удаляем загруженные файлы из Cloudinary
-      if (uploadedFiles.length > 0) {
-        console.log('❌ Error occurred, cleaning up files...');
-        for (const publicId of uploadedFiles) {
-          try {
-            await cloudinary.uploader.destroy(publicId, { 
-              resource_type: publicId.includes('.pdf') ? 'raw' : 'image' 
-            });
-            console.log(`Deleted: ${publicId}`);
-          } catch (err) {
-            console.error(`Error deleting ${publicId}:`, err.message);
-          }
-        }
-      }
-      
       console.error('❌ Complete work error:', error);
-      res.status(500).json({ error: error.message });
+      await cleanupCloudinary(uploadedFiles);
+      return res.status(500).json({ 
+        error: error.message || 'Внутренняя ошибка сервера' 
+      });
     }
 });
 
