@@ -1193,12 +1193,11 @@ app.post('/api/network/upload-full-structure',
 
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
-    const { resId } = req.query;
+    const { resId, type } = req.query;   // ← добавили type
     let whereClause = {};
     
     if (req.user.role === 'admin') {
-      // ИСПРАВЛЕНО: Админ видит ВСЕ уведомления нужного РЭС
-      // независимо от toUserId (старые И новые)
+      // Админ видит ВСЕ уведомления нужного РЭС
       if (resId) {
         whereClause = { resId: parseInt(resId) };
       } else {
@@ -1230,6 +1229,12 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       whereClause = { toUserId: req.user.id };
     }
     
+    // ← НОВОЕ: фильтруем по типу прямо в БД, чтобы error не вытеснялись
+    //   свежими уведомлениями других типов
+    if (type) {
+      whereClause.type = type;
+    }
+    
     const notifications = await Notification.findAll({
       where: whereClause,
       include: [
@@ -1240,7 +1245,7 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
         NotificationRead
       ],
       order: [['createdAt', 'DESC']],
-      limit: 100
+      limit: 2000   // ← было 100; подняли, чтобы влезли все мероприятия
     });
     
     const notificationsWithReadStatus = notifications.map(notif => {
