@@ -1393,13 +1393,12 @@ function Notifications({ filterType, onSectionChange, selectedRes }) {
  // Оптимизированная функция загрузки
 const loadNotifications = useCallback(async () => {
   try {
-    const params = selectedRes ? `?resId=${selectedRes}` : '';
-    const response = await api.get(`/api/notifications${params}`);
-    // Фильтруем по переданному типу
-    const filtered = response.data.filter(n => {
-      if (filterType) return n.type === filterType;
-      return true;
-    });
+    const params = new URLSearchParams();
+    if (selectedRes) params.set('resId', selectedRes);
+    if (filterType) params.set('type', filterType);   // ← шлём тип на сервер
+    const qs = params.toString();
+    const response = await api.get(`/api/notifications${qs ? `?${qs}` : ''}`);
+    const filtered = response.data.filter(n => (filterType ? n.type === filterType : true));
     setNotifications(filtered);
   } catch (error) {
     console.error('Error loading notifications:', error);
